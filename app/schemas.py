@@ -43,6 +43,7 @@ class Check(CheckBase):
     created_at: datetime
     last_ping: Optional[datetime] = None
     last_start: Optional[datetime] = None
+    last_duration_seconds: Optional[int] = None
     owner_id: Optional[int] = None
     owner_key: Optional[str] = None
 

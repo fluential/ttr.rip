@@ -47,12 +47,13 @@
                     <th scope="col">Owner</th>
                     <th scope="col">Ping URLs</th>
                     <th scope="col">Last Ping</th>
+                    <th scope="col">Last Duration</th>
                     <th scope="col">Expires in</th>
                     <th scope="col">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="7">Loading...</td></tr>
+                <tr><td colspan="8">Loading...</td></tr>
             </tbody>
         </table>
     </figure>
@@ -101,6 +102,20 @@
         return isPast ? `${result} ago` : `in ${result}`;
     }
 
+    function formatDuration(seconds) {
+        if (seconds === null || seconds === undefined || isNaN(seconds)) return 'N/A';
+        if (seconds < 0) return 'N/A';
+
+        if (seconds < 60) {
+            return `${seconds}s`;
+        }
+
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+
+        return `${minutes}m ${secs}s`;
+    }
+
     async function fetchChecks() {
         const response = await fetch('/api/v1/checks', {
             headers: { 'Authorization': `Bearer ${apiToken}` }
@@ -113,7 +128,7 @@
         const statusCounts = { up: 0, down: 0, new: 0 };
 
         if (checks.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="7">No checks found.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="8">No checks found.</td></tr>';
             if (statusSummary) {
                 statusSummary.querySelector('.status-up').textContent = `Up: 0`;
                 statusSummary.querySelector('.status-down').textContent = `Down: 0`;
@@ -144,6 +159,7 @@
             const now = new Date();
             const diffSeconds = (deadline - now) / 1000;
             const expiresIn = formatTimeDifference(diffSeconds);
+            const lastDuration = formatDuration(check.last_duration_seconds);
 
             let currentStatus = check.status;
             // If the check is not already marked as down, and the deadline has passed,
@@ -168,6 +184,7 @@
                 <td><small>${owner}</small></td>
                 <td>${pingUrlsHtml}</td>
                 <td>${lastPing}</td>
+                <td>${lastDuration}</td>
                 <td>${expiresIn}</td>
                 <td>
                     <div class="grid" style="margin-bottom: 0; grid-template-columns: 1fr 1fr; gap: 0.5rem;">

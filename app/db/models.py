@@ -36,6 +36,7 @@ class Check(Base):
     grace_seconds: int = Column(Integer)
     last_ping: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     last_start: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    last_duration_seconds: Optional[int] = Column(Integer, nullable=True)
     owner_id: Optional[int] = Column(Integer, ForeignKey("users.id"), nullable=True)
     owner_key: Optional[str] = Column(String, index=True, nullable=True)
 
