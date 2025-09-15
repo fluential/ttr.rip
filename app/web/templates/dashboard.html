@@ -34,6 +34,15 @@
 </article>
 
 <article>
+    <header>Overall Status</header>
+    <div id="status-summary" class="grid">
+        <div><h3 class="status-up">Up: 0</h3></div>
+        <div><h3 class="status-down">Down: 0</h3></div>
+        <div><h3 class="status-new">New: 0</h3></div>
+    </div>
+</article>
+
+<article>
     <header>Current Checks</header>
     <figure>
         <table role="grid" id="checks-table">
@@ -103,10 +112,18 @@
         });
         const checks = await response.json();
         const tableBody = document.querySelector('#checks-table tbody');
+        const statusSummary = document.getElementById('status-summary');
+        
         tableBody.innerHTML = '';
+        const statusCounts = { up: 0, down: 0, new: 0 };
 
         if (checks.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="6">No checks found. Create one above!</td></tr>';
+            if (statusSummary) {
+                statusSummary.querySelector('.status-up').textContent = `Up: 0`;
+                statusSummary.querySelector('.status-down').textContent = `Down: 0`;
+                statusSummary.querySelector('.status-new').textContent = `New: 0`;
+            }
             return;
         }
 
@@ -127,6 +144,10 @@
             if (currentStatus !== 'down' && diffSeconds < 0) {
                 currentStatus = 'down';
             }
+
+            if (currentStatus === 'up') statusCounts.up++;
+            else if (currentStatus === 'down') statusCounts.down++;
+            else if (currentStatus === 'new') statusCounts.new++;
 
             const statusIcon = {
                 'up': '🟢',
@@ -149,6 +170,12 @@
             `;
             tableBody.appendChild(row);
         });
+
+        if (statusSummary) {
+            statusSummary.querySelector('.status-up').textContent = `Up: ${statusCounts.up}`;
+            statusSummary.querySelector('.status-down').textContent = `Down: ${statusCounts.down}`;
+            statusSummary.querySelector('.status-new').textContent = `New: ${statusCounts.new}`;
+        }
     }
 
     function editCheck(event, id, name, interval, grace) {
