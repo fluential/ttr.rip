@@ -4,8 +4,10 @@ from fastapi import APIRouter, Request, Depends, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.db import base as db_base
+from app.db import models as db_models
 from app import crud, security
 from app.core.config import settings
 
@@ -51,6 +53,21 @@ async def public_dashboard(request: Request, auth_key: str):
     response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # Refresh cookie
     return response
 
+
+@router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
+async def public_integrations(request: Request, check_id: int, db: AsyncSession = Depends(db_base.get_db)):
+    auth_key = request.cookies.get("auth_key")
+    if not auth_key:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    
+    check = await crud.get_check_by_id_and_owner(db, check_id=check_id, principal=auth_key)
+    if not check:
+        return RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+
+    context = {"request": request, "check": check, "auth_key": auth_key, "is_admin": False}
+    return templates.TemplateResponse("integrations.html", context)
+
+
 # --- Admin Routes ---
 
 @admin_router.get("/login", response_class=HTMLResponse)
@@ -88,3 +105,20 @@ async def admin_dashboard(request: Request):
         return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
     
     return templates.TemplateResponse("admin_dashboard.html", {"request": request, "api_token": token})
+
+
+@admin_router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
+async def admin_integrations(request: Request, check_id: int, db: AsyncSession = Depends(db_base.get_db)):
+    token = request.cookies.get("auth_token")
+    if not token:
+        return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
+    
+    # We fetch without owner check; API calls from the page will be authenticated.
+    result = await db.execute(select(db_models.Check).filter(db_models.Check.id == check_id))
+    check = result.scalars().first()
+
+    if not check:
+        return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
+
+    context = {"request": request, "check": check, "api_token": token, "is_admin": True}
+    return templates.TemplateResponse("integrations.html", context)

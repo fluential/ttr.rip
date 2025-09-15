@@ -176,8 +176,9 @@
                 <td>${lastDuration}</td>
                 <td>${expiresIn}</td>
                 <td>
-                    <div class="grid" style="margin-bottom: 0; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
                         <button class="outline" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">✏️</button>
+                        <a href="/admin/check/${check.id}/integrations" role="button" class="outline" title="Integrations">⚙️</a>
                         <button class="secondary outline" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
                     </div>
                 </td>

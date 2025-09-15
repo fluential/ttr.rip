@@ -44,8 +44,21 @@ class Check(CheckBase):
     last_ping: Optional[datetime] = None
     last_start: Optional[datetime] = None
     last_duration_seconds: Optional[int] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    telegram_enabled: bool
     owner_id: Optional[int] = None
     owner_key: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+# Telegram Schemas
+class TelegramSettings(BaseModel):
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    telegram_enabled: bool = False
+
+class TelegramSettingsUpdate(TelegramSettings):
+    pass

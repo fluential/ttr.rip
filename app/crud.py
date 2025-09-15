@@ -28,6 +28,17 @@ async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
     result = await db.execute(select(models.Check).filter(models.Check.uuid == check_uuid))
     return result.scalars().first()
 
+async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: Union[models.User, str]):
+    query = select(models.Check).filter(models.Check.id == check_id)
+    if isinstance(principal, models.User) and not principal.is_admin:
+        query = query.filter(models.Check.owner_id == principal.id)
+    elif not isinstance(principal, models.User):
+        query = query.filter(models.Check.owner_key == principal)
+    # Admin can see any check
+
+    result = await db.execute(query)
+    return result.scalars().first()
+
 async def update_check_ping(db: AsyncSession, check: models.Check):
     now = datetime.now(timezone.utc)
     if check.last_start:
@@ -118,6 +129,26 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         await db.commit()
         await db.refresh(db_check)
     return db_check
+
+
+async def update_check_telegram_settings(db: AsyncSession, check_id: int, settings_data: schemas.TelegramSettingsUpdate, principal: Union[models.User, str]):
+    query = select(models.Check).filter(models.Check.id == check_id)
+    if isinstance(principal, models.User) and not principal.is_admin:
+        query = query.filter(models.Check.owner_id == principal.id)
+    elif not isinstance(principal, models.User):
+        query = query.filter(models.Check.owner_key == principal)
+    # For admin, no owner filter is applied.
+
+    result = await db.execute(query)
+    db_check = result.scalars().first()
+    if db_check:
+        update_data = settings_data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_check, key, value)
+        await db.commit()
+        await db.refresh(db_check)
+    return db_check
+
 
 async def delete_check(db: AsyncSession, check_id: int, principal: Union[models.User, str]):
     query = select(models.Check).filter(models.Check.id == check_id)

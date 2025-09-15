@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<hgroup>
+    <h1>Integrations</h1>
+    <h2>Manage notifications for check: <strong>{{ check.name }}</strong></h2>
+</hgroup>
+
+<article>
+    <header>Telegram Notifications</header>
+    <p>
+        Get an alert via Telegram when this check goes down.
+        <!-- TODO: This section should be protected by "Login with Telegram" -->
+    </p>
+    <form id="telegram-settings-form">
+        <label for="telegram_enabled">
+            <input type="checkbox" id="telegram_enabled" name="telegram_enabled" role="switch" {% if check.telegram_enabled %}checked{% endif %}>
+            Enable Telegram Notifications
+        </label>
+
+        <div class="grid">
+            <label for="telegram_bot_token">
+                Bot Token
+                <input type="password" id="telegram_bot_token" name="telegram_bot_token" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" value="{{ check.telegram_bot_token or '' }}">
+            </label>
+            <label for="telegram_chat_id">
+                Chat ID
+                <input type="text" id="telegram_chat_id" name="telegram_chat_id" placeholder="-1001234567890 or @channel_name" value="{{ check.telegram_chat_id or '' }}">
+            </label>
+        </div>
+        <footer class="grid">
+            <button type="submit">Save Settings</button>
+            <a href="{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}" role="button" class="secondary outline">Back to Dashboard</a>
+        </footer>
+    </form>
+    <div id="form-message" style="margin-top: 1rem;"></div>
+</article>
+
+<script>
+    const checkId = {{ check.id }};
+    const isAdmin = {{ 'true' if is_admin else 'false' }};
+    const apiToken = "{{ api_token if is_admin else '' }}";
+    const authKey = "{{ auth_key if not is_admin else '' }}";
+
+    async function handleFormSubmit(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formMessage = document.getElementById('form-message');
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        submitButton.setAttribute('aria-busy', 'true');
+        submitButton.disabled = true;
+        formMessage.textContent = 'Saving...';
+        formMessage.style.color = 'inherit';
+
+        const data = {
+            telegram_bot_token: form.querySelector('#telegram_bot_token').value,
+            telegram_chat_id: form.querySelector('#telegram_chat_id').value,
+            telegram_enabled: form.querySelector('#telegram_enabled').checked
+        };
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (isAdmin) {
+            headers['Authorization'] = `Bearer ${apiToken}`;
+        } else {
+            headers['X-Auth-Key'] = authKey;
+        }
+
+        const response = await fetch(`/api/v1/checks/${checkId}/telegram`, {
+            method: 'PUT',
+            headers: headers,
+            body: JSON.stringify(data)
+        });
+
+        submitButton.removeAttribute('aria-busy');
+        submitButton.disabled = false;
+
+        if (response.ok) {
+            formMessage.textContent = 'Settings saved successfully!';
+            formMessage.style.color = 'var(--pico-color-green-500)';
+        } else {
+            const error = await response.json();
+            formMessage.textContent = `Failed to save settings: ${error.detail || 'Unknown error'}`;
+            formMessage.style.color = 'var(--pico-color-red-500)';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('telegram-settings-form').addEventListener('submit', handleFormSubmit);
+    });
+</script>
+{% endblock %}

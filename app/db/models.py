@@ -37,6 +37,9 @@ class Check(Base):
     last_ping: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     last_start: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     last_duration_seconds: Optional[int] = Column(Integer, nullable=True)
+    telegram_bot_token: Optional[str] = Column(String, nullable=True)
+    telegram_chat_id: Optional[str] = Column(String, nullable=True)
+    telegram_enabled: bool = Column(Boolean, default=False, nullable=False)
     owner_id: Optional[int] = Column(Integer, ForeignKey("users.id"), nullable=True)
     owner_key: Optional[str] = Column(String, index=True, nullable=True)
 

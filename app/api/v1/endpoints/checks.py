@@ -35,6 +35,18 @@ async def update_check(
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
 
+@router.put("/{check_id}/telegram", response_model=schemas.Check)
+async def update_check_telegram_settings(
+    check_id: int,
+    settings: schemas.TelegramSettingsUpdate,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+):
+    updated_check = await crud.update_check_telegram_settings(db=db, check_id=check_id, settings_data=settings, principal=principal)
+    if not updated_check:
+        raise HTTPException(status_code=404, detail="Check not found")
+    return updated_check
+
 @router.delete("/{check_id}", response_model=schemas.Check)
 async def delete_check(
     check_id: int,
