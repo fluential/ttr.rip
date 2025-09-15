@@ -24,6 +24,8 @@ async def check_jobs():
                     reference_time = check.last_ping if check.last_ping else check.created_at
                     
                     if reference_time:
+                        if reference_time.tzinfo is None:
+                            reference_time = reference_time.replace(tzinfo=timezone.utc)
                         deadline = reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
                         if now > deadline:
                             if check.status != "down":

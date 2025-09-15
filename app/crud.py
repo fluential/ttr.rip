@@ -43,10 +43,16 @@ async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: 
 async def update_check_ping(db: AsyncSession, check: models.Check):
     now = datetime.now(timezone.utc)
     if check.last_start:
-        duration = now - check.last_start
+        last_start = check.last_start
+        if last_start.tzinfo is None:
+            last_start = last_start.replace(tzinfo=timezone.utc)
+        duration = now - last_start
         check.last_duration_seconds = int(duration.total_seconds())
     elif check.last_ping:
-        duration = now - check.last_ping
+        last_ping = check.last_ping
+        if last_ping.tzinfo is None:
+            last_ping = last_ping.replace(tzinfo=timezone.utc)
+        duration = now - last_ping
         check.last_duration_seconds = int(duration.total_seconds())
     else:
         check.last_duration_seconds = None
@@ -132,6 +138,8 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         # Re-evaluate status after update
         now = datetime.now(timezone.utc)
         reference_time = db_check.last_ping if db_check.last_ping else db_check.created_at
+        if reference_time.tzinfo is None:
+            reference_time = reference_time.replace(tzinfo=timezone.utc)
         deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
 
         if now > deadline:
