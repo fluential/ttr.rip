@@ -96,3 +96,33 @@ details#new-check-section[open] > summary {
     font-size: 0.95rem;
     vertical-align: middle;
 }
+
+/* Navigation Bar */
+nav {
+    background: linear-gradient(to bottom, #1a1a1a, var(--hacker-bg));
+    padding: 0.5rem 1rem !important;
+    border-bottom: 2px solid var(--hacker-green);
+    margin-bottom: 2rem;
+}
+
+[data-theme="light"] nav {
+    background: linear-gradient(to bottom, #f0f0f0, #ffffff);
+    border-bottom: 2px solid var(--primary);
+}
+
+nav ul li a, nav ul li select {
+    transition: all 0.2s ease-in-out;
+    border: 1px solid var(--form-element-border-color);
+    padding: 5px 10px;
+}
+
+nav ul li a:hover, nav ul li select:hover {
+    background-color: var(--primary-focus);
+    color: var(--primary-hover);
+}
+
+nav ul li a#theme-switcher {
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+    border: none;
+}

@@ -111,3 +111,40 @@ details#new-check-section[open] > summary {
     font-size: 0.95rem;
     vertical-align: middle;
 }
+
+/* Navigation Bar */
+nav {
+    background: linear-gradient(90deg, var(--background-color) 0%, #1a0a5c 50%, var(--background-color) 100%);
+    padding: 0.5rem 1rem !important;
+    border-bottom: 2px solid var(--primary);
+    margin-bottom: 2rem;
+    box-shadow: 0 0 15px var(--primary-focus);
+}
+
+[data-theme="light"] nav {
+    background: linear-gradient(90deg, #ffffff 0%, #d0d0ff 50%, #ffffff 100%);
+    border-bottom: 2px solid var(--primary);
+}
+
+nav ul li a, nav ul li select {
+    border: 1px solid transparent;
+    transition: all 0.3s ease;
+    clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+    background-color: var(--card-background-color);
+    padding: 5px 15px;
+}
+
+nav ul li a:hover, nav ul li select:hover {
+    background-color: var(--primary-focus);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    text-shadow: 0 0 5px var(--accent-shadow);
+    clip-path: polygon(0 0, 90% 0, 100% 100%, 10% 100%);
+}
+
+nav ul li a#theme-switcher {
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+    clip-path: none;
+    background-color: transparent;
+}
