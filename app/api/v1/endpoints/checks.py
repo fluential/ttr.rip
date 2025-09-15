@@ -10,7 +10,7 @@ from app.db import models as db_models
 
 router = APIRouter()
 
-@router.get("/", response_model=schemas.CheckPage)
+@router.get("", response_model=schemas.CheckPage)
 async def read_checks(
     db: AsyncSession = Depends(db_base.get_db),
     principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
@@ -42,7 +42,7 @@ async def read_checks(
         pages=pages
     )
 
-@router.post("/", response_model=schemas.Check, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=schemas.Check, status_code=status.HTTP_201_CREATED)
 async def create_check(
     check: schemas.CheckCreate,
     db: AsyncSession = Depends(db_base.get_db),
