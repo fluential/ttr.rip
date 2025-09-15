@@ -66,6 +66,10 @@ h1, h2, h3, h4, h5, h6, strong {
     text-shadow: none;
 }
 
+article {
+    padding: 1.5rem 1rem;
+}
+
 /* Navigation Bar */
 nav {
     background: var(--card-background-color);

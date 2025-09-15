@@ -58,6 +58,7 @@ article, details, input, select, textarea, button {
 
 article {
     border: 1px solid var(--primary);
+    padding: 1.5rem 1rem;
 }
 
 article > header, details#new-check-section > summary {
