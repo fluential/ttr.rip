@@ -126,3 +126,13 @@ nav ul li a#theme-switcher {
     padding: 0 0.5rem;
     border: none;
 }
+
+/* Action buttons in tables */
+.action-button {
+    padding: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}

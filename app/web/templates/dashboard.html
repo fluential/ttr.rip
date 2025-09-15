@@ -204,9 +204,9 @@
                 <td>${expiresIn}</td>
                 <td>
                     <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
-                        <button class="outline" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">✏️</button>
-                        <button class="outline" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
-                        <button class="secondary outline" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
+                        <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">✏️</button>
+                        <button class="outline action-button" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
+                        <button class="secondary outline action-button" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
                     </div>
                 </td>
             `;
