@@ -28,6 +28,13 @@
 </details>
 
 <article>
+    <header>System Status</header>
+    <div id="system-status-summary">
+        <p>Loading system status...</p>
+    </div>
+</article>
+
+<article>
     <header>Overall Status</header>
     <div id="status-summary" class="grid">
         <div><h3 class="status-up">Up: 0</h3></div>
@@ -138,6 +145,34 @@
         const secs = Math.floor(seconds % 60);
 
         return `${minutes}m ${secs}s`;
+    }
+
+    async function fetchSystemStats() {
+        try {
+            const response = await fetch('/api/v1/admin/stats', {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+            });
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to fetch stats');
+            }
+            const stats = await response.json();
+            const summaryDiv = document.getElementById('system-status-summary');
+
+            summaryDiv.innerHTML = `
+                <div class="grid">
+                    <div><strong>Broker:</strong> ${stats.broker_status}</div>
+                    <div><strong>Workers:</strong> ${stats.workers_online}</div>
+                    <div><strong>Queued:</strong> ${stats.total_queued}</div>
+                    <div><strong>Active:</strong> ${stats.total_active}</div>
+                    <div><strong>Reserved:</strong> ${stats.total_reserved}</div>
+                </div>
+            `;
+        } catch (error) {
+            console.error("Error fetching system stats:", error);
+            const summaryDiv = document.getElementById('system-status-summary');
+            summaryDiv.innerHTML = `<p style="color: var(--pico-color-red-500);">Could not load system status.</p>`;
+        }
     }
 
     async function fetchChecks() {
@@ -322,6 +357,9 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchChecks();
+        fetchSystemStats();
+        setInterval(fetchChecks, 5000);
+        setInterval(fetchSystemStats, 10000);
         document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
     });
 </script>
