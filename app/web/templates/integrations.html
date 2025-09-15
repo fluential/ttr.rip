@@ -37,7 +37,7 @@
         <footer class="grid">
             <button type="submit">Save Settings</button>
             <button type="button" id="test-telegram-btn" class="secondary">Test</button>
-            <a href="{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}" role="button" class="secondary outline">Back to Dashboard</a>
+            <button type="button" class="secondary outline" onclick="window.location.href='{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}'">Back to Dashboard</button>
         </footer>
     </form>
     <div id="form-message" style="margin-top: 1rem;"></div>
