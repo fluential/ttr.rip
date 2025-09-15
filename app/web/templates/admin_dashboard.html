@@ -110,11 +110,6 @@
             const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
             const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
             const owner = check.owner_key || `admin (id: ${check.owner_id})`;
-            const statusIcon = {
-                'up': '🟢',
-                'down': '🔴',
-                'new': '🟡'
-            }[check.status] || '⚪️';
 
             const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
             const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
@@ -122,8 +117,21 @@
             const diffSeconds = (deadline - now) / 1000;
             const expiresIn = formatTimeDifference(diffSeconds);
 
+            let currentStatus = check.status;
+            // If the check is not already marked as down, and the deadline has passed,
+            // update the status on the frontend for immediate feedback.
+            if (currentStatus !== 'down' && diffSeconds < 0) {
+                currentStatus = 'down';
+            }
+
+            const statusIcon = {
+                'up': '🟢',
+                'down': '🔴',
+                'new': '🟡'
+            }[currentStatus] || '⚪️';
+
             row.innerHTML = `
-                <td><span class="status-${check.status}" title="${check.status.toUpperCase()}">${statusIcon} ${check.status.toUpperCase()}</span></td>
+                <td><span class="status-${currentStatus}" title="${currentStatus.toUpperCase()}">${statusIcon} ${currentStatus.toUpperCase()}</span></td>
                 <td>${check.name}</td>
                 <td><small>${owner}</small></td>
                 <td><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer;"></td>
