@@ -6,6 +6,7 @@ from sqlalchemy import (
     String,
     DateTime,
     ForeignKey,
+    Boolean,
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 
