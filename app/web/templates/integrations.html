@@ -11,28 +11,28 @@
     {% if is_telegram_authed %}
     <details open>
         <summary>Integration Status</summary>
-        <div style="padding: 1rem; border-radius: var(--pico-border-radius);
+        <div id="integration-status-container" style="padding: 1rem; border-radius: var(--pico-border-radius);
             {% if check.telegram_last_notification_status == 'ok' %}
                 background-color: var(--pico-color-green-200); color: var(--pico-color-green-900);
             {% elif check.telegram_last_notification_status == 'error' %}
                 background-color: var(--pico-color-red-200); color: var(--pico-color-red-900);
             {% else %}
-                background-color: var(--pico-card-background-color);
+                background-color: var(--pico-card-background-color); color: inherit;
             {% endif %}
         ">
-            <p style="margin-bottom: 0.5rem;">
+            <p style="margin-bottom: 0.5rem;" id="integration-status-text">
                 {% if check.telegram_last_notification_status == 'ok' %}
-                    <strong>Status: OK</strong>
+                    <strong>Status: ✅ OK</strong>
                 {% elif check.telegram_last_notification_status == 'error' %}
-                    <strong>Status: Error</strong>
+                    <strong>Status: ❌ Error</strong>
                 {% else %}
                     <strong>Status: Unknown</strong> (No notification sent yet)
                 {% endif %}
             </p>
-            {% if check.telegram_last_notification_timestamp %}
-                <p style="margin-bottom: 0.5rem;"><strong>Last Attempt:</strong> <span id="last-notification-time">{{ check.telegram_last_notification_timestamp.isoformat() }}</span></p>
-                <p style="margin-bottom: 0;"><strong>Details:</strong> <small>{{ check.telegram_last_notification_message }}</small></p>
-            {% endif %}
+            <div id="integration-status-details" {% if not check.telegram_last_notification_timestamp %}style="display: none;"{% endif %}>
+                <p style="margin-bottom: 0.5rem;"><strong>Last Attempt:</strong> <span id="last-notification-time">{{ check.telegram_last_notification_timestamp.isoformat() if check.telegram_last_notification_timestamp else '' }}</span></p>
+                <p style="margin-bottom: 0;"><strong>Details:</strong> <small id="last-notification-message">{{ check.telegram_last_notification_message or '' }}</small></p>
+            </div>
         </div>
     </details>
     <hr>
@@ -94,6 +94,39 @@
         const isAdmin = {{ 'true' if is_admin else 'false' }};
         const apiToken = "{{ api_token if is_admin else '' }}";
         const authKey = "{{ auth_key if not is_admin else '' }}";
+
+        function updateIntegrationStatusUI(check) {
+            const container = document.getElementById('integration-status-container');
+            const statusTextElem = document.getElementById('integration-status-text');
+            const detailsContainer = document.getElementById('integration-status-details');
+            const timeElem = document.getElementById('last-notification-time');
+            const messageElem = document.getElementById('last-notification-message');
+
+            // Reset styles
+            container.style.backgroundColor = 'var(--pico-card-background-color)';
+            container.style.color = 'inherit';
+
+            if (check.telegram_last_notification_status === 'ok') {
+                container.style.backgroundColor = 'var(--pico-color-green-200)';
+                container.style.color = 'var(--pico-color-green-900)';
+                statusTextElem.innerHTML = '<strong>Status: ✅ OK</strong>';
+            } else if (check.telegram_last_notification_status === 'error') {
+                container.style.backgroundColor = 'var(--pico-color-red-200)';
+                container.style.color = 'var(--pico-color-red-900)';
+                statusTextElem.innerHTML = '<strong>Status: ❌ Error</strong>';
+            } else {
+                statusTextElem.innerHTML = '<strong>Status: Unknown</strong> (No notification sent yet)';
+            }
+
+            if (check.telegram_last_notification_timestamp) {
+                const date = new Date(check.telegram_last_notification_timestamp);
+                timeElem.textContent = date.toLocaleString();
+                messageElem.textContent = check.telegram_last_notification_message;
+                detailsContainer.style.display = 'block';
+            } else {
+                detailsContainer.style.display = 'none';
+            }
+        }
 
         async function handleFormSubmit(event) {
         event.preventDefault();
@@ -168,6 +201,8 @@
         testButton.disabled = false;
 
         if (response.ok) {
+            const updatedCheck = await response.json();
+            updateIntegrationStatusUI(updatedCheck);
             formMessage.textContent = 'Test message sent successfully!';
             formMessage.style.color = 'var(--pico-color-green-500)';
         } else {
