@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Request, Depends, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import base as db_base
+from app import crud, security
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
@@ -10,12 +14,14 @@ async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 @router.post("/login", response_class=HTMLResponse)
-async def handle_login(request: Request, username: str = Form(...), password: str = Form(...)):
-    # This is a simplified web login. It sets a dummy cookie to protect the UI route.
-    # The actual API authentication is handled by a JWT token fetched by the frontend JS.
-    # In a real app, you'd want a more robust session management system.
-    # For this project, we assume a single 'admin' user with a hardcoded password for UI access.
-    if username == "admin" and password == "password":
+async def handle_login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: AsyncSession = Depends(db_base.get_db),
+):
+    user = await crud.get_user_by_username(db, username=username)
+    if user and security.verify_password(password, user.hashed_password):
         response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
         response.set_cookie(key="auth_token", value="dummy_token_for_admin", httponly=True)
         return response
