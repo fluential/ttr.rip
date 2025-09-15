@@ -426,9 +426,17 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchChecks();
-        fetchUserStats();
+    document.addEventListener('DOMContentLoaded', async () => {
+        await Promise.all([fetchChecks(), fetchUserStats()]);
+        
+        const loadTime = performance.now() - window.pageLoadStartTime;
+        const clientTimeElem = document.getElementById('client-load-time');
+        const clientTimeContainer = document.getElementById('client-load-time-container');
+        if (clientTimeElem && clientTimeContainer) {
+            clientTimeElem.textContent = (loadTime / 1000).toFixed(3);
+            clientTimeContainer.style.display = 'inline';
+        }
+
         setInterval(fetchChecks, 5000);
         setInterval(fetchUserStats, 10000);
         document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);

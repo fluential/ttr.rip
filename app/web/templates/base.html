@@ -9,6 +9,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@700&family=Share+Tech+Mono&family=Special+Elite&family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" id="theme-style" href="">
+    <script>
+        // Record the start time as early as possible.
+        window.pageLoadStartTime = performance.now();
+    </script>
 </head>
 <body>
     <main class="container">
@@ -41,7 +45,11 @@
         {% block content %}{% endblock %}
         <footer style="margin-top: 2rem; text-align: center;">
             <small>
-                Generated in {{ "%.4f"|format(process_time) }}s (SQL: {{ sql_queries }} queries in {{ "%.4f"|format(sql_time) }}s).
+                Server: {{ "%.3f"|format(process_time) }}s
+                <span id="client-load-time-container" style="display: none;">
+                    | Client: <span id="client-load-time"></span>s
+                </span>
+                |
                 {% if debug_mode %}
                     <span title="Debug Mode (In-Memory Queue)">⚙️</span>
                 {% elif redis_connected %}
