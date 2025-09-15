@@ -90,37 +90,45 @@
     const pageSize = 25;
 
     function copyUrl(element) {
-        const originalValue = element.value;
-        const isPassword = element.type === 'password';
-
-        if (isPassword) {
-            element.type = 'text';
+        // Store the original value on the element itself to prevent the "Copied!" bug.
+        if (!element.dataset.originalValue) {
+            element.dataset.originalValue = element.value;
         }
+        const valueToCopy = element.dataset.originalValue;
 
-        element.select();
-        navigator.clipboard.writeText(originalValue).then(() => {
+        // Prevent re-triggering if a copy is in progress.
+        if (element.dataset.copying) {
+            return;
+        }
+        element.dataset.copying = 'true';
+
+        const isPasswordField = element.type === 'password';
+
+        navigator.clipboard.writeText(valueToCopy).then(() => {
             element.value = 'Copied!';
             setTimeout(() => {
-                element.value = originalValue;
-                if (isPassword) {
-                    element.type = 'password';
+                if (isPasswordField) {
+                    // This is the auth key field. Show masked version.
+                    element.type = 'text';
+                    element.value = `****************************${valueToCopy.slice(-4)}`;
+                    
+                    const revertToPassword = () => {
+                        element.type = 'password';
+                        element.value = valueToCopy;
+                        delete element.dataset.copying;
+                        element.removeEventListener('blur', revertToPassword);
+                    };
+                    element.addEventListener('blur', revertToPassword, { once: true });
+                } else {
+                    // This is a regular text field (e.g., Ping URL). Just restore original value.
+                    element.value = valueToCopy;
+                    delete element.dataset.copying;
                 }
             }, 1200);
         }).catch(err => {
             console.error('Failed to copy text: ', err);
-            // Fallback for older browsers
-            try {
-                document.execCommand('copy');
-                element.value = 'Copied!';
-                setTimeout(() => {
-                    element.value = originalValue;
-                    if (isPassword) {
-                        element.type = 'password';
-                    }
-                }, 1200);
-            } catch (e) {
-                console.error('Fallback copy failed', e);
-            }
+            element.value = valueToCopy; // Restore on error
+            delete element.dataset.copying;
         });
     }
 

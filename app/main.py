@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Base
-from app.db.base import engine, get_db
+from app.db.base import engine, get_db, sql_query_times
 from app.api.v1.routes import api_router
 from app.web.routes import router as web_router, admin_router
 from app.services import scheduler
@@ -44,11 +44,23 @@ app = FastAPI(lifespan=lifespan, title="ttl.rip")
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
+    sql_query_times.set([]) # Reset for new request
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
+    
+    query_times = sql_query_times.get()
+    total_sql_time = sum(query_times)
+    num_queries = len(query_times)
+
     response.headers["X-Process-Time"] = str(process_time)
+    response.headers["X-SQL-Time"] = str(total_sql_time)
+    response.headers["X-SQL-Queries"] = str(num_queries)
+    
     request.state.process_time = process_time
+    request.state.sql_time = total_sql_time
+    request.state.sql_queries = num_queries
+    
     return response
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")

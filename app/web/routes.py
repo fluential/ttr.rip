@@ -27,6 +27,8 @@ async def home(request: Request):
     context = {
         "request": request,
         "process_time": getattr(request.state, "process_time", 0),
+        "sql_time": getattr(request.state, "sql_time", 0),
+        "sql_queries": getattr(request.state, "sql_queries", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
@@ -60,6 +62,8 @@ async def dashboard(request: Request):
         "request": request,
         "auth_key": auth_key,
         "process_time": getattr(request.state, "process_time", 0),
+        "sql_time": getattr(request.state, "sql_time", 0),
+        "sql_queries": getattr(request.state, "sql_queries", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
@@ -146,6 +150,8 @@ async def public_integrations(
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
         "process_time": getattr(request.state, "process_time", 0),
+        "sql_time": getattr(request.state, "sql_time", 0),
+        "sql_queries": getattr(request.state, "sql_queries", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
@@ -159,6 +165,8 @@ async def login_page(request: Request):
     context = {
         "request": request,
         "process_time": getattr(request.state, "process_time", 0),
+        "sql_time": getattr(request.state, "sql_time", 0),
+        "sql_queries": getattr(request.state, "sql_queries", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
@@ -198,6 +206,8 @@ async def admin_dashboard(request: Request):
         "request": request,
         "api_token": token,
         "process_time": getattr(request.state, "process_time", 0),
+        "sql_time": getattr(request.state, "sql_time", 0),
+        "sql_queries": getattr(request.state, "sql_queries", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
@@ -248,6 +258,8 @@ async def admin_integrations(
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
         "process_time": getattr(request.state, "process_time", 0),
+        "sql_time": getattr(request.state, "sql_time", 0),
+        "sql_queries": getattr(request.state, "sql_queries", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }

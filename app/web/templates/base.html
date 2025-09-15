@@ -41,7 +41,7 @@
         {% block content %}{% endblock %}
         <footer style="margin-top: 2rem; text-align: center;">
             <small>
-                Generated in {{ "%.4f"|format(process_time) }}s.
+                Generated in {{ "%.4f"|format(process_time) }}s (SQL: {{ sql_queries }} queries in {{ "%.4f"|format(sql_time) }}s).
                 {% if debug_mode %}
                     <span title="Debug Mode (In-Memory Queue)">⚙️</span>
                 {% elif redis_connected %}
