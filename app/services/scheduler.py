@@ -4,11 +4,12 @@ from sqlalchemy.future import select
 from app.db.base import AsyncSessionLocal
 from app.db.models import Check
 from app.services import notifications
+from app.core.config import settings
 
 async def check_jobs():
-    print("Scheduler started. Checking for overdue jobs every 60 seconds.")
+    print(f"Scheduler started. Checking for overdue jobs every {settings.SCHEDULER_INTERVAL_SECONDS} seconds.")
     while True:
-        await asyncio.sleep(60)
+        await asyncio.sleep(settings.SCHEDULER_INTERVAL_SECONDS)
         now = datetime.now(timezone.utc)
         
         async with AsyncSessionLocal() as session:

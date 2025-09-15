@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     DEBUG_MODE: bool = False
+    SCHEDULER_INTERVAL_SECONDS: int = 5
 
     # For "Login with Telegram" feature
     TELEGRAM_BOT_NAME: str = ""
