@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,17 +12,40 @@
             <ul>
                 <li><strong>ttl.rip</strong></li>
             </ul>
-            {% if request.cookies.get("auth_token") %}
             <ul>
-                <li><a href="/admin/logout">Admin Logout</a></li>
+                {% if request.cookies.get("auth_token") %}
+                    <li><a href="/admin/logout">Admin Logout</a></li>
+                {% elif request.cookies.get("auth_key") %}
+                    <li><a href="/">Logout</a></li>
+                {% endif %}
+                <li><a href="#" id="theme-switcher" title="Switch theme"></a></li>
             </ul>
-            {% elif request.cookies.get("auth_key") %}
-            <ul>
-                <li><a href="/">Logout</a></li>
-            </ul>
-            {% endif %}
         </nav>
         {% block content %}{% endblock %}
     </main>
+    <script>
+        const themeSwitcher = document.getElementById('theme-switcher');
+        const html = document.documentElement;
+
+        const setTheme = (theme) => {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            if (themeSwitcher) {
+                themeSwitcher.textContent = theme === 'dark' ? '☀️' : '🌙';
+            }
+        };
+
+        if (themeSwitcher) {
+            themeSwitcher.addEventListener('click', (e) => {
+                e.preventDefault();
+                const currentTheme = html.getAttribute('data-theme');
+                setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+            });
+        }
+
+        // Set theme on initial load
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+    </script>
 </body>
 </html>
