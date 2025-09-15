@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 import asyncio
 import logging
-from fastapi import FastAPI, Depends, HTTPException, status
+import time
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up...")
+    app.state.redis_connected = False
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
@@ -29,6 +31,7 @@ async def lifespan(app: FastAPI):
             r = redis.from_url(str(settings.REDIS_URL))
             r.ping()
             logger.info("Successfully connected to Redis for Celery broker.")
+            app.state.redis_connected = True
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
 
@@ -38,6 +41,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, title="ttl.rip")
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    request.state.process_time = process_time
+    return response
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

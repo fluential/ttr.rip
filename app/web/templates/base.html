@@ -39,6 +39,18 @@
             </ul>
         </nav>
         {% block content %}{% endblock %}
+        <footer style="margin-top: 2rem; text-align: center;">
+            <small>
+                Generated in {{ "%.4f"|format(process_time) }}s.
+                {% if debug_mode %}
+                    <span title="Debug Mode (In-Memory Queue)">⚙️</span>
+                {% elif redis_connected %}
+                    <span title="Redis Connected">🟢</span>
+                {% else %}
+                    <span title="Redis Disconnected">🔴</span>
+                {% endif %}
+            </small>
+        </footer>
     </main>
     <script>
         const themeSwitcher = document.getElementById('theme-switcher');

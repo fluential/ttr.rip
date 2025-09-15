@@ -24,7 +24,13 @@ def generate_auth_key() -> str:
 
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    response = templates.TemplateResponse("public_login.html", {"request": request})
+    context = {
+        "request": request,
+        "process_time": getattr(request.state, "process_time", 0),
+        "redis_connected": request.app.state.redis_connected,
+        "debug_mode": settings.DEBUG_MODE,
+    }
+    response = templates.TemplateResponse("public_login.html", context)
     response.delete_cookie("auth_key")
     return response
 
@@ -50,7 +56,13 @@ async def dashboard(request: Request):
     if not auth_key or len(auth_key) != 32:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
-    context = {"request": request, "auth_key": auth_key}
+    context = {
+        "request": request,
+        "auth_key": auth_key,
+        "process_time": getattr(request.state, "process_time", 0),
+        "redis_connected": request.app.state.redis_connected,
+        "debug_mode": settings.DEBUG_MODE,
+    }
     response = templates.TemplateResponse("dashboard.html", context)
     # Refresh cookie on activity
     response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60)
@@ -133,6 +145,9 @@ async def public_integrations(
         "is_telegram_authed": is_telegram_authed,
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
+        "process_time": getattr(request.state, "process_time", 0),
+        "redis_connected": request.app.state.redis_connected,
+        "debug_mode": settings.DEBUG_MODE,
     }
     return templates.TemplateResponse("integrations.html", context)
 
@@ -141,7 +156,13 @@ async def public_integrations(
 
 @admin_router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    context = {
+        "request": request,
+        "process_time": getattr(request.state, "process_time", 0),
+        "redis_connected": request.app.state.redis_connected,
+        "debug_mode": settings.DEBUG_MODE,
+    }
+    return templates.TemplateResponse("login.html", context)
 
 @admin_router.post("/login", response_class=HTMLResponse)
 async def handle_login(
@@ -173,7 +194,14 @@ async def admin_dashboard(request: Request):
     if not token:
         return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
     
-    return templates.TemplateResponse("admin_dashboard.html", {"request": request, "api_token": token})
+    context = {
+        "request": request,
+        "api_token": token,
+        "process_time": getattr(request.state, "process_time", 0),
+        "redis_connected": request.app.state.redis_connected,
+        "debug_mode": settings.DEBUG_MODE,
+    }
+    return templates.TemplateResponse("admin_dashboard.html", context)
 
 
 @admin_router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
@@ -219,5 +247,8 @@ async def admin_integrations(
         "is_telegram_authed": is_telegram_authed,
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
+        "process_time": getattr(request.state, "process_time", 0),
+        "redis_connected": request.app.state.redis_connected,
+        "debug_mode": settings.DEBUG_MODE,
     }
     return templates.TemplateResponse("integrations.html", context)
