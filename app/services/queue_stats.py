@@ -12,10 +12,10 @@ def get_queue_stats():
     if settings.DEBUG_MODE:
         return {
             "broker_status": "DEBUG (Eager)",
-            "workers_online": "N/A",
-            "total_queued": "N/A",
-            "total_active": "N/A",
-            "total_reserved": "N/A",
+            "workers_online": "N/A (Inline)",
+            "total_queued": 0,
+            "total_active": 0,
+            "total_reserved": 0,
         }
 
     try:
