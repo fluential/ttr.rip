@@ -86,8 +86,14 @@
             const row = document.createElement('tr');
             const lastPing = check.last_ping ? new Date(check.last_ping).toLocaleString() : 'Never';
             const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
+            const statusIcon = {
+                'up': '🟢',
+                'down': '🔴',
+                'new': '🟡'
+            }[check.status] || '⚪️';
+
             row.innerHTML = `
-                <td><span class="status-${check.status}">${check.status.toUpperCase()}</span></td>
+                <td><span class="status-${check.status}" title="${check.status.toUpperCase()}">${statusIcon} ${check.status.toUpperCase()}</span></td>
                 <td>${check.name}</td>
                 <td><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer;"></td>
                 <td>${lastPing}</td>

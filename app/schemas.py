@@ -36,6 +36,7 @@ class Check(CheckBase):
     id: int
     uuid: str
     status: str
+    created_at: datetime
     last_ping: Optional[datetime] = None
     owner_id: int
 
