@@ -3,9 +3,12 @@ from datetime import datetime, timezone, timedelta
 from typing import Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+import logging
 from app.db import models
 from app import schemas, security
 from app.services import notifications
+
+logger = logging.getLogger(__name__)
 
 # User CRUD
 async def get_user_by_username(db: AsyncSession, username: str):
@@ -65,6 +68,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check):
     await db.refresh(check)
 
     if previous_status == "down":
+        logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
         message = f"🟢 Check Up: [{check.name}] is back up."
         if check.last_duration_seconds is not None:
             duration_str = notifications.format_duration(check.last_duration_seconds)
