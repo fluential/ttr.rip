@@ -1,9 +1,11 @@
 import httpx
 import logging
+import asyncio
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Check
 from app.worker import send_telegram_notification_task
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +36,9 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, json=payload)
+            response_text = response.text
             response.raise_for_status()
-            logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id})")
+            logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id}). Response: {response_text}")
             check.telegram_last_notification_status = "ok"
             check.telegram_last_notification_message = "Successfully sent."
         except httpx.HTTPStatusError as e:
@@ -55,4 +58,15 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
 
 def schedule_telegram_notification(check_id: int, message: str):
     """Enqueues a task to send a Telegram notification."""
-    send_telegram_notification_task.delay(check_id, message)
+    if settings.DEBUG_MODE:
+        # In debug mode, Celery's eager execution conflicts with the running
+        # asyncio loop. We bypass Celery and schedule the task directly.
+        from app.worker import _send_telegram_notification
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_send_telegram_notification(check_id, message))
+        except RuntimeError:
+            # This should not happen when called from the scheduler, but as a fallback.
+            logger.error("Failed to schedule direct telegram notification: no running event loop.")
+    else:
+        send_telegram_notification_task.delay(check_id, message)
