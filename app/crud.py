@@ -65,7 +65,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check):
     await db.refresh(check)
 
     if previous_status == "down":
-        message = f"[{check.name}] Up: is back up."
+        message = f"🟢 Check Up: [{check.name}] is back up."
         if check.last_duration_seconds is not None:
             duration_str = notifications.format_duration(check.last_duration_seconds)
             message += f" Last run took {duration_str}."
@@ -87,7 +87,7 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
     await db.refresh(check)
 
     if previous_status != "down":
-        message = f"[{check.name}] Down"
+        message = f"🔴 Check Failed: [{check.name}] reported a failure."
         await notifications.send_telegram_notification(check, message)
 
     return check
