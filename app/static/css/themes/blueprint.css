@@ -1,0 +1,82 @@
+/* Blueprint Theme */
+
+/* Light Mode Variables */
+:root {
+    --primary: #0D2B45; /* Dark Slate Blue */
+    --primary-hover: #1D5C63;
+    --primary-focus: rgba(13, 43, 69, 0.25);
+    --primary-inverse: #ffffff;
+    --background-color: #f7f7f7;
+    --card-background-color: #ffffff;
+    --card-border-color: #5C9EAD;
+    --form-element-border-color: var(--primary);
+    --h1-color: var(--primary);
+    --h2-color: var(--primary);
+    --h3-color: var(--primary);
+    --h4-color: var(--primary);
+    --h5-color: var(--primary);
+    --h6-color: var(--primary);
+}
+
+/* Dark Mode Variables */
+[data-theme="dark"] {
+    --primary: #8DDBE0; /* Light Cyan */
+    --primary-hover: #AEE8E8;
+    --primary-focus: rgba(141, 219, 224, 0.25);
+    --primary-inverse: #0D2B45;
+    --background-color: #0D2B45; /* Dark Slate Blue */
+    --card-background-color: #0F3A5D;
+    --card-border-color: #1D5C63;
+    --form-element-border-color: var(--primary);
+    --h1-color: #ffffff;
+    --h2-color: #ffffff;
+    --h3-color: #ffffff;
+    --h4-color: #ffffff;
+    --h5-color: #ffffff;
+    --h6-color: #ffffff;
+}
+
+body {
+    font-family: 'Special Elite', cursive;
+    font-size: 1.1rem;
+}
+
+h1, h2, h3, h4, h5, h6, strong {
+    font-family: 'Special Elite', cursive;
+    letter-spacing: 1px;
+}
+
+article {
+    border-style: dashed;
+}
+
+/* Navigation Bar */
+nav {
+    background: var(--card-background-color);
+    border-bottom: 2px dashed var(--primary);
+}
+
+nav ul li a, nav ul li select {
+    transition: all 0.2s ease-in-out;
+}
+
+nav ul li a:hover, nav ul li select:hover {
+    background-color: var(--primary-focus);
+    color: var(--primary-hover);
+}
+
+nav ul li a#theme-switcher {
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+    border: none;
+}
+
+/* Action buttons in tables */
+.action-button {
+    padding: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}

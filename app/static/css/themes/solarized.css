@@ -1,0 +1,98 @@
+/* Solarized Theme */
+
+/* Light Mode Variables */
+:root {
+    --base03:  #002b36;
+    --base02:  #073642;
+    --base01:  #586e75;
+    --base00:  #657b83;
+    --base0:   #839496;
+    --base1:   #93a1a1;
+    --base2:   #eee8d5;
+    --base3:   #fdf6e3;
+    --yellow:  #b58900;
+    --orange:  #cb4b16;
+    --red:     #dc322f;
+    --magenta: #d33682;
+    --violet:  #6c71c4;
+    --blue:    #268bd2;
+    --cyan:    #2aa198;
+    --green:   #859900;
+
+    --primary: var(--blue);
+    --primary-hover: var(--cyan);
+    --primary-focus: rgba(38, 139, 210, 0.25);
+    --primary-inverse: var(--base3);
+    --background-color: var(--base3);
+    --card-background-color: var(--base2);
+    --card-border-color: var(--base1);
+    --form-element-border-color: var(--base00);
+    --text-color: var(--base00);
+    --h1-color: var(--base01);
+    --h2-color: var(--base01);
+    --h3-color: var(--base01);
+    --h4-color: var(--base01);
+    --h5-color: var(--base01);
+    --h6-color: var(--base01);
+}
+
+/* Dark Mode Variables */
+[data-theme="dark"] {
+    --primary: var(--blue);
+    --primary-hover: var(--cyan);
+    --primary-focus: rgba(38, 139, 210, 0.25);
+    --primary-inverse: var(--base03);
+    --background-color: var(--base03);
+    --card-background-color: var(--base02);
+    --card-border-color: var(--base00);
+    --form-element-border-color: var(--base0);
+    --text-color: var(--base0);
+    --h1-color: var(--base1);
+    --h2-color: var(--base1);
+    --h3-color: var(--base1);
+    --h4-color: var(--base1);
+    --h5-color: var(--base1);
+    --h6-color: var(--base1);
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 1rem;
+}
+
+h1, h2, h3, h4, h5, h6, strong {
+    font-family: sans-serif;
+    font-weight: bold;
+    text-shadow: none;
+}
+
+/* Navigation Bar */
+nav {
+    background: var(--card-background-color);
+    border-bottom: 1px solid var(--card-border-color);
+}
+
+nav ul li a, nav ul li select {
+    transition: all 0.2s ease-in-out;
+}
+
+nav ul li a:hover, nav ul li select:hover {
+    background-color: var(--primary-focus);
+    color: var(--primary-hover);
+}
+
+nav ul li a#theme-switcher {
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+    border: none;
+}
+
+/* Action buttons in tables */
+.action-button {
+    padding: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}

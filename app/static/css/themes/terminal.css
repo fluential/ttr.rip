@@ -1,0 +1,102 @@
+/* Terminal Theme */
+
+/* Light Mode Variables (Green on White) */
+:root {
+    --primary: #008000;
+    --primary-hover: #006400;
+    --primary-focus: rgba(0, 128, 0, 0.15);
+    --primary-inverse: #ffffff;
+    --background-color: #f0f0f0;
+    --card-background-color: #ffffff;
+    --card-border-color: var(--primary);
+    --form-element-border-color: var(--primary);
+    --text-color: #008000;
+    --h1-color: var(--primary);
+    --h2-color: var(--primary);
+    --h3-color: var(--primary);
+    --h4-color: var(--primary);
+    --h5-color: var(--primary);
+    --h6-color: var(--primary);
+    --muted-color: #006400;
+}
+
+/* Dark Mode Variables (Amber on Black) */
+[data-theme="dark"] {
+    --primary: #FFBF00; /* Amber */
+    --primary-hover: #FFD700;
+    --primary-focus: rgba(255, 191, 0, 0.15);
+    --primary-inverse: #000000;
+    --background-color: #000000;
+    --card-background-color: #0a0a0a;
+    --card-border-color: var(--primary);
+    --form-element-border-color: var(--primary);
+    --text-color: var(--primary);
+    --h1-color: var(--primary);
+    --h2-color: var(--primary);
+    --h3-color: var(--primary);
+    --h4-color: var(--primary);
+    --h5-color: var(--primary);
+    --h6-color: var(--primary);
+    --muted-color: #cc9900;
+}
+
+body, input, select, textarea, button {
+    font-family: monospace;
+    font-size: 1.1rem;
+    color: var(--text-color);
+}
+
+h1, h2, h3, h4, h5, h6, strong {
+    font-family: monospace;
+    text-shadow: none;
+}
+
+article, details, input, select, textarea, button {
+    border-radius: 0;
+    box-shadow: none;
+}
+
+article {
+    border: 1px solid var(--primary);
+}
+
+article > header, details#new-check-section > summary {
+    font-size: 1.2rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--primary);
+    margin-bottom: 1rem;
+}
+
+/* Navigation Bar */
+nav {
+    background: var(--background-color);
+    border-bottom: 1px solid var(--primary);
+    padding: 0.25rem 1rem !important;
+    margin-bottom: 1.5rem;
+}
+
+nav ul li a, nav ul li select {
+    transition: none;
+    border: none;
+    padding: 5px 10px;
+}
+
+nav ul li a:hover, nav ul li select:hover {
+    background-color: var(--primary);
+    color: var(--primary-inverse);
+}
+
+nav ul li a#theme-switcher {
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+}
+
+/* Action buttons in tables */
+.action-button {
+    padding: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}

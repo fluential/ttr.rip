@@ -1,0 +1,101 @@
+/* Arcade Theme */
+
+/* Light Mode Variables */
+:root {
+    --primary: #0000FF; /* Blue */
+    --primary-hover: #3333FF;
+    --primary-focus: rgba(0, 0, 255, 0.25);
+    --primary-inverse: #ffffff;
+    --background-color: #ffffff;
+    --card-background-color: #f0f0f0;
+    --card-border-color: #000000;
+    --form-element-border-color: #000000;
+    --text-color: #000000;
+    --accent-color: #FF0000; /* Red */
+    --h1-color: var(--primary);
+    --h2-color: var(--primary);
+    --h3-color: var(--primary);
+    --h4-color: var(--primary);
+    --h5-color: var(--primary);
+    --h6-color: var(--primary);
+}
+
+/* Dark Mode Variables */
+[data-theme="dark"] {
+    --primary: #FF00FF; /* Magenta */
+    --primary-hover: #FF33FF;
+    --primary-focus: rgba(255, 0, 255, 0.25);
+    --primary-inverse: #000000;
+    --background-color: #000000;
+    --card-background-color: #1a1a1a;
+    --card-border-color: var(--primary);
+    --form-element-border-color: var(--primary);
+    --text-color: #ffffff;
+    --accent-color: #00FFFF; /* Cyan */
+    --h1-color: var(--accent-color);
+    --h2-color: var(--accent-color);
+    --h3-color: var(--accent-color);
+    --h4-color: var(--accent-color);
+    --h5-color: var(--accent-color);
+    --h6-color: var(--accent-color);
+}
+
+body, input, select, textarea, button {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 0.8rem;
+    color: var(--text-color);
+}
+
+h1, h2, h3, h4, h5, h6, strong {
+    font-family: 'Press Start 2P', cursive;
+    text-shadow: 2px 2px 0px var(--primary);
+    letter-spacing: 1px;
+}
+
+article, details, input, select, textarea, button {
+    border-radius: 0;
+    box-shadow: 4px 4px 0px 0px var(--primary);
+    border: 2px solid var(--primary);
+}
+
+article > header, details#new-check-section > summary {
+    font-size: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary);
+    margin-bottom: 1rem;
+}
+
+/* Navigation Bar */
+nav {
+    background: var(--background-color);
+    border-bottom: 2px solid var(--primary);
+    padding: 0.25rem 1rem !important;
+    margin-bottom: 1.5rem;
+}
+
+nav ul li a, nav ul li select {
+    transition: none;
+    border: 2px solid var(--primary);
+    padding: 5px 10px;
+}
+
+nav ul li a:hover, nav ul li select:hover {
+    background-color: var(--primary);
+    color: var(--primary-inverse);
+}
+
+nav ul li a#theme-switcher {
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+    border: none;
+}
+
+/* Action buttons in tables */
+.action-button {
+    padding: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}
