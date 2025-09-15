@@ -14,6 +14,7 @@ async def check_jobs():
     while True:
         await asyncio.sleep(settings.SCHEDULER_INTERVAL_SECONDS)
         now = datetime.now(timezone.utc)
+        logger.info("Scheduler running check cycle...")
         
         async with AsyncSessionLocal() as session:
             async with session.begin():
@@ -21,6 +22,7 @@ async def check_jobs():
                     select(Check).where(Check.status.in_(["up", "new"]))
                 )
                 checks_to_verify = result.scalars().all()
+                logger.info(f"Scheduler found {len(checks_to_verify)} active checks to verify.")
 
                 for check in checks_to_verify:
                     # The reference time for the deadline is the last ping if it exists,
