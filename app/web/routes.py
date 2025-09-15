@@ -31,7 +31,7 @@ async def home(request: Request):
 @router.post("/dashboard", response_class=HTMLResponse)
 async def login_with_key(request: Request, auth_key: str = Form(...)):
     if auth_key and len(auth_key) == 32:
-        response = RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+        response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
         response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
         return response
     return RedirectResponse(url="/?error=1", status_code=status.HTTP_302_FOUND)
@@ -39,19 +39,21 @@ async def login_with_key(request: Request, auth_key: str = Form(...)):
 @router.get("/new", response_class=HTMLResponse)
 async def new_anonymous_user(request: Request):
     auth_key = generate_auth_key()
-    response = RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+    response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
     return response
 
 
-@router.get("/dashboard/{auth_key}", response_class=HTMLResponse)
-async def public_dashboard(request: Request, auth_key: str):
-    if not (len(auth_key) == 32):
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    auth_key = request.cookies.get("auth_key")
+    if not auth_key or len(auth_key) != 32:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
     context = {"request": request, "auth_key": auth_key}
     response = templates.TemplateResponse("dashboard.html", context)
-    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # Refresh cookie
+    # Refresh cookie on activity
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60)
     return response
 
 
@@ -103,7 +105,7 @@ async def public_integrations(
     
     check = await crud.get_check_by_id_and_owner(db, check_id=check_id, principal=auth_key)
     if not check:
-        return RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
 
     is_telegram_authed = not settings.TELEGRAM_AUTH_ENABLED or bool(
         telegram_session

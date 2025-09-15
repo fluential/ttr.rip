@@ -65,7 +65,7 @@
             <button type="submit">Save Settings</button>
             <button type="button" id="test-telegram-btn" class="secondary">Test Connection</button>
             <button type="button" id="test-queue-btn" class="secondary">Test via Queue</button>
-            <button type="button" class="secondary outline" onclick="window.location.href='{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}'">Back to Dashboard</button>
+            <button type="button" class="secondary outline" onclick="window.location.href='{{ '/admin/dashboard' if is_admin else '/dashboard' }}'">Back to Dashboard</button>
         </footer>
     </form>
     <div id="form-message" style="margin-top: 1rem;"></div>
@@ -83,7 +83,7 @@
     <p><strong>Telegram login is not configured by the site administrator.</strong></p>
     {% endif %}
     <footer style="margin-top: 1rem;">
-        <a href="{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}" role="button" class="secondary outline">Back to Dashboard</a>
+        <a href="{{ '/admin/dashboard' if is_admin else '/dashboard' }}" role="button" class="secondary outline">Back to Dashboard</a>
     </footer>
     {% endif %}
 </article>
