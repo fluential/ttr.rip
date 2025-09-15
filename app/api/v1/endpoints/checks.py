@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,26 +11,26 @@ router = APIRouter()
 @router.get("/", response_model=List[schemas.Check])
 async def read_checks(
     db: AsyncSession = Depends(db_base.get_db),
-    current_user: db_models.User = Depends(security.get_current_user),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
 ):
-    return await crud.get_checks_by_owner(db=db, owner_id=current_user.id)
+    return await crud.get_checks_by_owner(db=db, principal=principal)
 
 @router.post("/", response_model=schemas.Check, status_code=status.HTTP_201_CREATED)
 async def create_check(
     check: schemas.CheckCreate,
     db: AsyncSession = Depends(db_base.get_db),
-    current_user: db_models.User = Depends(security.get_current_user),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
 ):
-    return await crud.create_check(db=db, check=check, owner_id=current_user.id)
+    return await crud.create_check(db=db, check=check, principal=principal)
 
 @router.put("/{check_id}", response_model=schemas.Check)
 async def update_check(
     check_id: int,
     check: schemas.CheckUpdate,
     db: AsyncSession = Depends(db_base.get_db),
-    current_user: db_models.User = Depends(security.get_current_user),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
 ):
-    updated_check = await crud.update_check(db=db, check_id=check_id, check_data=check, owner_id=current_user.id)
+    updated_check = await crud.update_check(db=db, check_id=check_id, check_data=check, principal=principal)
     if not updated_check:
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
@@ -39,9 +39,9 @@ async def update_check(
 async def delete_check(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
-    current_user: db_models.User = Depends(security.get_current_user),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
 ):
-    deleted_check = await crud.delete_check(db=db, check_id=check_id, owner_id=current_user.id)
+    deleted_check = await crud.delete_check(db=db, check_id=check_id, principal=principal)
     if not deleted_check:
         raise HTTPException(status_code=404, detail="Check not found")
     return deleted_check

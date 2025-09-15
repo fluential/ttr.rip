@@ -2,18 +2,12 @@
 
 {% block content %}
 <hgroup>
-    <h1>Dashboard</h1>
-    <h2>Manage your health checks below.</h2>
+    <h1>Admin Dashboard</h1>
+    <h2>Manage all health checks below.</h2>
 </hgroup>
 
 <article>
-    <header>Your Access Key</header>
-    <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
-    <input type="text" value="{{ auth_key }}" readonly onclick="this.select()" style="cursor: pointer; font-family: monospace; text-align: center;">
-</article>
-
-<article>
-    <header>New Check</header>
+    <header>New Check (Admin)</header>
     <form id="new-check-form">
         <div class="grid">
             <label for="name">
@@ -34,38 +28,39 @@
 </article>
 
 <article>
-    <header>Current Checks</header>
+    <header>All Checks</header>
     <figure>
         <table role="grid" id="checks-table">
             <thead>
                 <tr>
                     <th scope="col">Status</th>
                     <th scope="col">Name</th>
+                    <th scope="col">Owner</th>
                     <th scope="col">Ping URL</th>
                     <th scope="col">Last Ping</th>
                     <th scope="col">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="5">Loading...</td></tr>
+                <tr><td colspan="6">Loading...</td></tr>
             </tbody>
         </table>
     </figure>
 </article>
 
 <script>
-    const authKey = "{{ auth_key }}";
+    const apiToken = "{{ api_token }}";
 
     async function fetchChecks() {
         const response = await fetch('/api/v1/checks', {
-            headers: { 'X-Auth-Key': authKey }
+            headers: { 'Authorization': `Bearer ${apiToken}` }
         });
         const checks = await response.json();
         const tableBody = document.querySelector('#checks-table tbody');
         tableBody.innerHTML = '';
 
         if (checks.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="5">No checks found. Create one above!</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="6">No checks found.</td></tr>';
             return;
         }
 
@@ -73,6 +68,7 @@
             const row = document.createElement('tr');
             const lastPing = check.last_ping ? new Date(check.last_ping).toLocaleString() : 'Never';
             const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
+            const owner = check.owner_key || `admin (id: ${check.owner_id})`;
             const statusIcon = {
                 'up': '🟢',
                 'down': '🔴',
@@ -82,6 +78,7 @@
             row.innerHTML = `
                 <td><span class="status-${check.status}" title="${check.status.toUpperCase()}">${statusIcon} ${check.status.toUpperCase()}</span></td>
                 <td>${check.name}</td>
+                <td><small>${owner}</small></td>
                 <td><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer;"></td>
                 <td>${lastPing}</td>
                 <td>
@@ -125,7 +122,7 @@
         form.reset();
         delete form.dataset.editingId;
 
-        form.parentElement.querySelector('header').textContent = 'New Check';
+        form.parentElement.querySelector('header').textContent = 'New Check (Admin)';
         form.querySelector('button[type="submit"]').textContent = 'Create Check';
         
         const cancelButton = form.querySelector('.cancel-edit');
@@ -146,7 +143,7 @@
         };
 
         const headers = {
-            'X-Auth-Key': authKey,
+            'Authorization': `Bearer ${apiToken}`,
             'Content-Type': 'application/json'
         };
 
@@ -178,7 +175,7 @@
 
         const response = await fetch(`/api/v1/checks/${checkId}`, {
             method: 'DELETE',
-            headers: { 'X-Auth-Key': authKey }
+            headers: { 'Authorization': `Bearer ${apiToken}` }
         });
 
         if (response.ok) {

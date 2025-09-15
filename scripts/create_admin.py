@@ -17,7 +17,7 @@ async def main():
         if user:
             print("Admin user already exists.")
         else:
-            user_in = UserCreate(username="admin", password="password")
+            user_in = UserCreate(username="admin", password="password", is_admin=True)
             await create_user(session, user_in)
             print("Admin user created successfully.")
             print("Username: admin")

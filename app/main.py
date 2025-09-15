@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Base
 from app.db.base import engine, get_db
 from app.api.v1.routes import api_router
-from app.web.routes import router as web_router
+from app.web.routes import router as web_router, admin_router
 from app.services import scheduler
 from app import crud
 
@@ -43,3 +43,4 @@ async def ping_check(uuid: str, db: AsyncSession = Depends(get_db)):
 
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(web_router)
+app.include_router(admin_router)

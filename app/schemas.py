@@ -17,6 +17,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    is_admin: bool = False
 
 class User(UserBase):
     id: int
@@ -41,7 +42,8 @@ class Check(CheckBase):
     status: str
     created_at: datetime
     last_ping: Optional[datetime] = None
-    owner_id: int
+    owner_id: Optional[int] = None
+    owner_key: Optional[str] = None
 
     class Config:
         from_attributes = True
