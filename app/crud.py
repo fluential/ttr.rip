@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -80,6 +80,17 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         update_data = check_data.model_dump()
         for key, value in update_data.items():
             setattr(db_check, key, value)
+
+        # Re-evaluate status after update
+        now = datetime.now(timezone.utc)
+        reference_time = db_check.last_ping if db_check.last_ping else db_check.created_at
+        deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
+
+        if now > deadline:
+            db_check.status = "down"
+        else:
+            db_check.status = "up" if db_check.last_ping else "new"
+
         await db.commit()
         await db.refresh(db_check)
     return db_check

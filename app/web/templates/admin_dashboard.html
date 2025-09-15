@@ -68,22 +68,28 @@
         const isPast = seconds < 0;
         seconds = Math.abs(seconds);
 
+        if (seconds < 1) {
+            return isPast ? '0s ago' : 'in 0s';
+        }
+
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
 
-        let result = '';
+        const parts = [];
         if (hours > 0) {
-            result += `${hours}h `;
+            parts.push(`${hours}h`);
         }
-        if (minutes > 0 || hours === 0) {
-            result += `${minutes}m`;
+        if (minutes > 0) {
+            parts.push(`${minutes}m`);
+        }
+        if (secs > 0 || parts.length === 0) {
+            parts.push(`${secs}s`);
         }
 
-        if (result.trim() === '') {
-            result = '0m';
-        }
+        const result = parts.join(' ');
 
-        return isPast ? `${result.trim()} ago` : `in ${result.trim()}`;
+        return isPast ? `${result} ago` : `in ${result}`;
     }
 
     async function fetchChecks() {
