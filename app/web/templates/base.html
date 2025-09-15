@@ -26,11 +26,25 @@
         }
         body {
             font-family: 'Courier New', Courier, monospace;
+            font-size: 1.05rem;
         }
-        h1, h2, h3, h4, h5, h6, header, strong {
+        h1, h2, h3, h4, h5, h6, strong {
             font-family: 'VT323', monospace;
             letter-spacing: 2px;
             text-shadow: 0 0 5px var(--hacker-green);
+        }
+        article {
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        article > header {
+            font-family: 'VT323', monospace;
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px var(--hacker-green);
+            font-size: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--hacker-green);
+            margin-bottom: 1.5rem;
         }
         .ping-url {
             font-family: 'Courier New', monospace;
@@ -46,9 +60,16 @@
         .ping-url:focus {
             box-shadow: 0 0 8px var(--hacker-green);
         }
+        #checks-table thead th {
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            color: var(--hacker-green);
+        }
         #checks-table tbody td {
             font-family: 'Courier New', Courier, monospace;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
+            vertical-align: middle;
         }
     </style>
 </head>
