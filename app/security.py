@@ -57,7 +57,7 @@ async def get_auth_principal(
         return user
 
     if x_auth_key:
-        if len(x_auth_key) == 16 and x_auth_key.isdigit():
+        if len(x_auth_key) == 32:
             return x_auth_key
     
     raise HTTPException(

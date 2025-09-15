@@ -5,8 +5,8 @@
 
 # --- Configuration ---
 BASE_URL="http://localhost:8000"
-# Replace with a valid 16-digit key from your application's UI
-AUTH_KEY="9943910482084638" 
+# Replace with a valid key from your application's UI
+AUTH_KEY="replace-with-your-32-char-key" 
 NUM_CHECKS=30
 
 # --- Script ---

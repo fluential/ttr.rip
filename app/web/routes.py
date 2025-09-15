@@ -1,4 +1,4 @@
-import random
+import secrets
 from datetime import timedelta
 from fastapi import APIRouter, Request, Depends, Form, status, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -17,8 +17,8 @@ admin_router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/web/templates")
 
 def generate_auth_key() -> str:
-    """Generates a 16-digit key."""
-    return str(random.randint(1000_0000_0000_0000, 9999_9999_9999_9999))
+    """Generates a secure, URL-safe token."""
+    return secrets.token_urlsafe(24) # 32 characters
 
 # --- Public Routes ---
 
@@ -30,7 +30,7 @@ async def home(request: Request):
 
 @router.post("/dashboard", response_class=HTMLResponse)
 async def login_with_key(request: Request, auth_key: str = Form(...)):
-    if auth_key and len(auth_key) == 16 and auth_key.isdigit():
+    if auth_key and len(auth_key) == 32:
         response = RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
         response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
         return response
@@ -46,7 +46,7 @@ async def new_anonymous_user(request: Request):
 
 @router.get("/dashboard/{auth_key}", response_class=HTMLResponse)
 async def public_dashboard(request: Request, auth_key: str):
-    if not (len(auth_key) == 16 and auth_key.isdigit()):
+    if not (len(auth_key) == 32):
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
     context = {"request": request, "auth_key": auth_key}
