@@ -62,4 +62,13 @@ async def _send_telegram_notification(check_id: int, message: str):
 @celery_app.task(name="send_telegram_notification_task")
 def send_telegram_notification_task(check_id: int, message: str):
     """Celery task wrapper to run the async notification logic."""
-    asyncio.run(_send_telegram_notification(check_id, message))
+    try:
+        # If an event loop is running, use it to run the async function.
+        # This happens in DEBUG_MODE with task_always_eager=True, where the
+        # task is executed in the same process as the main async app.
+        loop = asyncio.get_running_loop()
+        loop.create_task(_send_telegram_notification(check_id, message))
+    except RuntimeError:
+        # If there's no running event loop, we're likely in a sync context
+        # like a standard Celery worker. In this case, asyncio.run() is appropriate.
+        asyncio.run(_send_telegram_notification(check_id, message))
