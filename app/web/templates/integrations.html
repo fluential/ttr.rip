@@ -9,9 +9,15 @@
 <article>
     <header>Telegram Notifications</header>
     {% if is_telegram_authed %}
+    {% if debug_mode %}
+    <p>
+        <strong>DEBUG MODE ENABLED:</strong> Telegram login is bypassed. You can directly enter your bot token and chat ID.
+    </p>
+    {% else %}
     <p>
         You are authenticated with Telegram. You can now configure notification settings below.
     </p>
+    {% endif %}
     <form id="telegram-settings-form">
         <label for="telegram_enabled">
             <input type="checkbox" id="telegram_enabled" name="telegram_enabled" role="switch" {% if check.telegram_enabled %}checked{% endif %}>
