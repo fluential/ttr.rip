@@ -57,6 +57,14 @@ class Check(CheckBase):
         from_attributes = True
 
 
+class CheckPage(BaseModel):
+    items: list[Check]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+
 # Telegram Schemas
 class TelegramSettings(BaseModel):
     telegram_bot_token: Optional[str] = None

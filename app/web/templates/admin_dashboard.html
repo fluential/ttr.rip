@@ -49,12 +49,12 @@
         <table role="grid" id="checks-table">
             <thead>
                 <tr>
-                    <th scope="col">Status</th>
-                    <th scope="col">Name</th>
+                    <th scope="col" data-sort="status">Status</th>
+                    <th scope="col" data-sort="name">Name</th>
                     <th scope="col">Owner</th>
-                    <th scope="col">Ping URL</th>
-                    <th scope="col">Last Ping</th>
-                    <th scope="col">Last Duration</th>
+                    <th scope="col" data-sort="uuid">Ping URL</th>
+                    <th scope="col" data-sort="last_ping">Last Ping</th>
+                    <th scope="col" data-sort="last_duration_seconds">Last Duration</th>
                     <th scope="col">Expires in</th>
                     <th scope="col">Actions</th>
                 </tr>
@@ -64,10 +64,25 @@
             </tbody>
         </table>
     </figure>
+    <nav id="pagination-controls" aria-label="pagination">
+        <ul>
+            <li><button id="prev-page" class="secondary outline" disabled>Previous</button></li>
+        </ul>
+        <ul id="page-info-container">
+            <li><span id="page-info">Page 1 of 1</span></li>
+        </ul>
+        <ul>
+            <li><button id="next-page" class="secondary outline" disabled>Next</button></li>
+        </ul>
+    </nav>
 </article>
 
 <script>
     const apiToken = "{{ api_token }}";
+    let currentPage = 1;
+    let currentSortBy = 'id';
+    let currentSortDir = 'desc';
+    const pageSize = 25;
 
     function copyUrl(element) {
         element.select();
@@ -175,11 +190,40 @@
         }
     }
 
+    function updatePagination(page, totalPages, totalItems) {
+        const prevButton = document.getElementById('prev-page');
+        const nextButton = document.getElementById('next-page');
+        const pageInfo = document.getElementById('page-info');
+
+        currentPage = page;
+
+        if (pageInfo) {
+            pageInfo.textContent = `Page ${page} of ${totalPages} (${totalItems} total)`;
+        }
+        if (prevButton) {
+            prevButton.disabled = page <= 1;
+        }
+        if (nextButton) {
+            nextButton.disabled = page >= totalPages;
+        }
+    }
+
+    function updateSortIndicators() {
+        document.querySelectorAll('#checks-table th[data-sort]').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            if (th.dataset.sort === currentSortBy) {
+                th.classList.add(currentSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+            }
+        });
+    }
+
     async function fetchChecks() {
-        const response = await fetch('/api/v1/checks', {
+        const url = `/api/v1/checks?page=${currentPage}&size=${pageSize}&sort_by=${currentSortBy}&sort_direction=${currentSortDir}`;
+        const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${apiToken}` }
         });
-        const checks = await response.json();
+        const data = await response.json();
+        const checks = data.items;
         const tableBody = document.querySelector('#checks-table tbody');
         const statusSummary = document.getElementById('status-summary');
 
@@ -193,6 +237,7 @@
                 statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: 0`;
                 statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: 0`;
             }
+            updatePagination(1, 1, 0);
             return;
         }
 
@@ -250,6 +295,8 @@
             statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: ${statusCounts.down}`;
             statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: ${statusCounts.new}`;
         }
+        updatePagination(data.page, data.pages, data.total);
+        updateSortIndicators();
     }
 
     function editCheck(event, id, name, interval, grace) {
@@ -361,11 +408,71 @@
         setInterval(fetchChecks, 5000);
         setInterval(fetchSystemStats, 10000);
         document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
+
+        // Pagination listeners
+        document.getElementById('prev-page')?.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchChecks();
+            }
+        });
+        document.getElementById('next-page')?.addEventListener('click', () => {
+            currentPage++;
+            fetchChecks();
+        });
+
+        // Sorting listeners
+        document.querySelectorAll('#checks-table th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const sortBy = th.dataset.sort;
+                if (currentSortBy === sortBy) {
+                    currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSortBy = sortBy;
+                    currentSortDir = 'desc'; // Default to desc for new column
+                }
+                currentPage = 1; // Reset to first page on new sort
+                fetchChecks();
+            });
+        });
     });
 </script>
 <style>
     .status-up { color: var(--pico-color-green-500); font-weight: bold; }
     .status-down { color: var(--pico-color-red-500); font-weight: bold; }
     .status-new { color: var(--pico-color-gray-500); font-weight: bold; }
+
+    th[data-sort] {
+        cursor: pointer;
+        user-select: none;
+    }
+    th[data-sort]::after {
+        content: ' ';
+        display: inline-block;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        margin-left: 5px;
+        opacity: 0.4;
+        vertical-align: middle;
+    }
+    th[data-sort].sort-asc::after {
+        border-bottom: 5px solid;
+        opacity: 1;
+    }
+    th[data-sort].sort-desc::after {
+        border-top: 5px solid;
+        opacity: 1;
+    }
+    #pagination-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1rem;
+    }
+    #pagination-controls ul {
+        margin-bottom: 0;
+    }
 </style>
 {% endblock %}

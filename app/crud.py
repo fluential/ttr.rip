@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 import logging
 from app.db import models
 from app import schemas, security
@@ -97,20 +98,36 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
 
     return check
 
-async def get_checks_by_owner(db: AsyncSession, principal: Union[models.User, str]):
+async def get_checks_by_owner(db: AsyncSession, principal: Union[models.User, str], page: int = 1, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc'):
+    # Base query
     if isinstance(principal, models.User) and principal.is_admin:
-        # Admin sees all checks, joining with User to get username
-        result = await db.execute(
-            select(models.Check)
-            .order_by(models.Check.id.desc())
-        )
+        query = select(models.Check)
     elif isinstance(principal, models.User):
         # Non-admin user (not currently possible but for future)
-        result = await db.execute(select(models.Check).filter(models.Check.owner_id == principal.id).order_by(models.Check.id.desc()))
+        query = select(models.Check).filter(models.Check.owner_id == principal.id)
     else:
         # Public user identified by auth key
-        result = await db.execute(select(models.Check).filter(models.Check.owner_key == principal).order_by(models.Check.id.desc()))
-    return result.scalars().all()
+        query = select(models.Check).filter(models.Check.owner_key == principal)
+
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar_one()
+
+    # Apply sorting
+    sort_column = getattr(models.Check, sort_by, models.Check.id)
+    if sort_direction == 'asc':
+        query = query.order_by(sort_column.asc())
+    else:
+        query = query.order_by(sort_column.desc())
+
+    # Apply pagination
+    query = query.offset((page - 1) * size).limit(size)
+
+    result = await db.execute(query)
+    items = result.scalars().all()
+    
+    return items, total
 
 async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: Union[models.User, str]):
     db_check_data = {

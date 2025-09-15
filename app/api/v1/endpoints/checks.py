@@ -1,5 +1,5 @@
 from typing import List, Union
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas, security
@@ -10,12 +10,37 @@ from app.db import models as db_models
 
 router = APIRouter()
 
-@router.get("/", response_model=List[schemas.Check])
+@router.get("/", response_model=schemas.CheckPage)
 async def read_checks(
     db: AsyncSession = Depends(db_base.get_db),
     principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    page: int = Query(1, ge=1),
+    size: int = Query(25, ge=1, le=100),
+    sort_by: str = Query('id'),
+    sort_direction: str = Query('desc', pattern="^(asc|desc)$"),
 ):
-    return await crud.get_checks_by_owner(db=db, principal=principal)
+    allowed_sort_fields = ['id', 'name', 'status', 'created_at', 'last_ping', 'last_duration_seconds', 'uuid']
+    if sort_by not in allowed_sort_fields:
+        raise HTTPException(status_code=400, detail=f"Invalid sort field: {sort_by}")
+
+    items, total = await crud.get_checks_by_owner(
+        db=db, 
+        principal=principal, 
+        page=page, 
+        size=size, 
+        sort_by=sort_by, 
+        sort_direction=sort_direction
+    )
+    
+    pages = (total + size - 1) // size if size > 0 else 0
+
+    return schemas.CheckPage(
+        items=items,
+        total=total,
+        page=page,
+        size=size,
+        pages=pages
+    )
 
 @router.post("/", response_model=schemas.Check, status_code=status.HTTP_201_CREATED)
 async def create_check(
