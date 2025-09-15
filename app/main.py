@@ -11,6 +11,7 @@ from app.api.v1.routes import api_router
 from app.web.routes import router as web_router, admin_router
 from app.services import scheduler
 from app import crud
+from app.core.config import settings
 from app.core.logging_config import setup_logging
 
 setup_logging()
@@ -22,6 +23,15 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
+    if not settings.DEBUG_MODE:
+        try:
+            import redis
+            r = redis.from_url(str(settings.REDIS_URL))
+            r.ping()
+            logger.info("Successfully connected to Redis for Celery broker.")
+        except Exception as e:
+            logger.error(f"Failed to connect to Redis: {e}")
+
     yield
     
     logger.info("Shutting down...")
