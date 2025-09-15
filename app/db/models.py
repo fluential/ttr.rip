@@ -40,6 +40,9 @@ class Check(Base):
     telegram_bot_token: Optional[str] = Column(String, nullable=True)
     telegram_chat_id: Optional[str] = Column(String, nullable=True)
     telegram_enabled: bool = Column(Boolean, default=False, nullable=False)
+    telegram_last_notification_status: Optional[str] = Column(String, nullable=True)
+    telegram_last_notification_message: Optional[str] = Column(String, nullable=True)
+    telegram_last_notification_timestamp: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     owner_id: Optional[int] = Column(Integer, ForeignKey("users.id"), nullable=True)
     owner_key: Optional[str] = Column(String, index=True, nullable=True)
 

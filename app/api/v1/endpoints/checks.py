@@ -68,7 +68,8 @@ async def test_telegram_notification(
         raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
 
     message = f"🔔 This is a test notification for your check '[{check.name}]'."
-    await notifications.send_telegram_notification(check, message)
+    await notifications.send_telegram_notification(db, check, message)
+    await db.commit()
     return {"message": "Test notification sent."}
 
 @router.delete("/{check_id}", response_model=schemas.Check)

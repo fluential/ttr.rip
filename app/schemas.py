@@ -47,6 +47,9 @@ class Check(CheckBase):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     telegram_enabled: bool
+    telegram_last_notification_status: Optional[str] = None
+    telegram_last_notification_message: Optional[str] = None
+    telegram_last_notification_timestamp: Optional[datetime] = None
     owner_id: Optional[int] = None
     owner_key: Optional[str] = None
 

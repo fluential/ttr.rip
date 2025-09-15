@@ -1,4 +1,6 @@
 import httpx
+from datetime import datetime, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Check
 
 def format_duration(seconds: int) -> str:
@@ -14,8 +16,8 @@ def format_duration(seconds: int) -> str:
     return f"{minutes}m {secs}s"
 
 
-async def send_telegram_notification(check: Check, message: str):
-    """Sends a notification to the configured Telegram chat."""
+async def send_telegram_notification(db: AsyncSession, check: Check, message: str):
+    """Sends a notification to the configured Telegram chat and updates the status."""
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
         return
 
@@ -31,7 +33,18 @@ async def send_telegram_notification(check: Check, message: str):
             response = await client.post(url, json=payload)
             response.raise_for_status()
             print(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id})")
+            check.telegram_last_notification_status = "ok"
+            check.telegram_last_notification_message = "Successfully sent."
         except httpx.HTTPStatusError as e:
-            print(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {e.response.status_code} {e.response.text}")
+            error_message = f"Error: {e.response.status_code} {e.response.text}"
+            print(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
+            check.telegram_last_notification_status = "error"
+            check.telegram_last_notification_message = error_message
         except Exception as e:
+            error_message = f"An unexpected error occurred: {e}"
             print(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}")
+            check.telegram_last_notification_status = "error"
+            check.telegram_last_notification_message = error_message
+    
+    check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+    # The calling function is responsible for the commit

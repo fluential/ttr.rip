@@ -9,6 +9,33 @@
 <article>
     <header>Telegram Notifications</header>
     {% if is_telegram_authed %}
+    <details open>
+        <summary>Integration Status</summary>
+        <div style="padding: 1rem; border-radius: var(--pico-border-radius);
+            {% if check.telegram_last_notification_status == 'ok' %}
+                background-color: var(--pico-color-green-200); color: var(--pico-color-green-900);
+            {% elif check.telegram_last_notification_status == 'error' %}
+                background-color: var(--pico-color-red-200); color: var(--pico-color-red-900);
+            {% else %}
+                background-color: var(--pico-card-background-color);
+            {% endif %}
+        ">
+            <p style="margin-bottom: 0.5rem;">
+                {% if check.telegram_last_notification_status == 'ok' %}
+                    <strong>Status: OK</strong>
+                {% elif check.telegram_last_notification_status == 'error' %}
+                    <strong>Status: Error</strong>
+                {% else %}
+                    <strong>Status: Unknown</strong> (No notification sent yet)
+                {% endif %}
+            </p>
+            {% if check.telegram_last_notification_timestamp %}
+                <p style="margin-bottom: 0.5rem;"><strong>Last Attempt:</strong> <span id="last-notification-time">{{ check.telegram_last_notification_timestamp.isoformat() }}</span></p>
+                <p style="margin-bottom: 0;"><strong>Details:</strong> <small>{{ check.telegram_last_notification_message }}</small></p>
+            {% endif %}
+        </div>
+    </details>
+    <hr>
     {% if debug_mode %}
     <p>
         <strong>DEBUG MODE ENABLED:</strong> Telegram login is bypassed. You can directly enter your bot token and chat ID.
@@ -158,6 +185,16 @@
             const testButton = document.getElementById('test-telegram-btn');
             if (testButton) {
                 testButton.addEventListener('click', handleTestClick);
+            }
+
+            const lastNotificationTimeElem = document.getElementById('last-notification-time');
+            if (lastNotificationTimeElem && lastNotificationTimeElem.textContent) {
+                try {
+                    const date = new Date(lastNotificationTimeElem.textContent);
+                    lastNotificationTimeElem.textContent = date.toLocaleString();
+                } catch (e) {
+                    console.error("Could not parse date:", lastNotificationTimeElem.textContent);
+                }
             }
         });
     }
