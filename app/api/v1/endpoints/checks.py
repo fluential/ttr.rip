@@ -54,7 +54,7 @@ async def update_check_telegram_settings(
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
 
-@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_202_ACCEPTED)
 async def test_telegram_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -68,9 +68,7 @@ async def test_telegram_notification(
         raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
 
     message = f"🔔 This is a test notification for your check '[{check.name}]'."
-    await notifications.send_telegram_notification(db, check, message)
-    await db.commit()
-    await db.refresh(check)
+    notifications.schedule_telegram_notification(check.id, message)
     return check
 
 @router.delete("/{check_id}", response_model=schemas.Check)

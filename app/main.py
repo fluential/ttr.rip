@@ -17,16 +17,9 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
-    scheduler_task = asyncio.create_task(scheduler.check_jobs())
-    
     yield
     
     print("Shutting down...")
-    scheduler_task.cancel()
-    try:
-        await scheduler_task
-    except asyncio.CancelledError:
-        print("Scheduler task cancelled.")
 
 
 app = FastAPI(lifespan=lifespan, title="ttl.rip")
