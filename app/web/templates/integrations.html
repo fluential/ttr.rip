@@ -36,6 +36,7 @@
         </div>
         <footer class="grid">
             <button type="submit">Save Settings</button>
+            <button type="button" id="test-telegram-btn" class="secondary">Test</button>
             <a href="{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}" role="button" class="secondary outline">Back to Dashboard</a>
         </footer>
     </form>
@@ -112,10 +113,51 @@
         }
     }
 
+    async function handleTestClick(event) {
+        event.preventDefault();
+        const formMessage = document.getElementById('form-message');
+        const testButton = document.getElementById('test-telegram-btn');
+
+        testButton.setAttribute('aria-busy', 'true');
+        testButton.disabled = true;
+        formMessage.textContent = 'Sending test message...';
+        formMessage.style.color = 'inherit';
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (isAdmin) {
+            headers['Authorization'] = `Bearer ${apiToken}`;
+        } else {
+            headers['X-Auth-Key'] = authKey;
+        }
+
+        const response = await fetch(`/api/v1/checks/${checkId}/telegram/test`, {
+            method: 'POST',
+            headers: headers
+        });
+
+        testButton.removeAttribute('aria-busy');
+        testButton.disabled = false;
+
+        if (response.ok) {
+            formMessage.textContent = 'Test message sent successfully!';
+            formMessage.style.color = 'var(--pico-color-green-500)';
+        } else {
+            const error = await response.json();
+            formMessage.textContent = `Failed to send test message: ${error.detail || 'Unknown error'}`;
+            formMessage.style.color = 'var(--pico-color-red-500)';
+        }
+    }
+
         document.addEventListener('DOMContentLoaded', () => {
             const form = document.getElementById('telegram-settings-form');
             if (form) {
                 form.addEventListener('submit', handleFormSubmit);
+            }
+            const testButton = document.getElementById('test-telegram-btn');
+            if (testButton) {
+                testButton.addEventListener('click', handleTestClick);
             }
         });
     }

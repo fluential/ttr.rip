@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas, security
+from app.services import notifications
 from app.core.config import settings
 from app.db import base as db_base
 from app.db import models as db_models
@@ -52,6 +53,23 @@ async def update_check_telegram_settings(
     if not updated_check:
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
+
+@router.post("/{check_id}/telegram/test", status_code=status.HTTP_200_OK)
+async def test_telegram_notification(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check:
+        raise HTTPException(status_code=404, detail="Check not found")
+
+    if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
+        raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
+
+    message = f"🔔 This is a test notification for your check '[{check.name}]'."
+    await notifications.send_telegram_notification(check, message)
+    return {"message": "Test notification sent."}
 
 @router.delete("/{check_id}", response_model=schemas.Check)
 async def delete_check(
