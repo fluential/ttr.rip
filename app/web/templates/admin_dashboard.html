@@ -38,11 +38,12 @@
                     <th scope="col">Owner</th>
                     <th scope="col">Ping URL</th>
                     <th scope="col">Last Ping</th>
+                    <th scope="col">Expires in</th>
                     <th scope="col">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="6">Loading...</td></tr>
+                <tr><td colspan="7">Loading...</td></tr>
             </tbody>
         </table>
     </figure>
@@ -50,6 +51,30 @@
 
 <script>
     const apiToken = "{{ api_token }}";
+
+    function formatTimeDifference(seconds) {
+        if (isNaN(seconds)) return 'N/A';
+
+        const isPast = seconds < 0;
+        seconds = Math.abs(seconds);
+
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+
+        let result = '';
+        if (hours > 0) {
+            result += `${hours}h `;
+        }
+        if (minutes > 0 || hours === 0) {
+            result += `${minutes}m`;
+        }
+
+        if (result.trim() === '') {
+            result = '0m';
+        }
+
+        return isPast ? `${result.trim()} ago` : `in ${result.trim()}`;
+    }
 
     async function fetchChecks() {
         const response = await fetch('/api/v1/checks', {
@@ -60,7 +85,7 @@
         tableBody.innerHTML = '';
 
         if (checks.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6">No checks found.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="7">No checks found.</td></tr>';
             return;
         }
 
@@ -75,12 +100,19 @@
                 'new': '🟡'
             }[check.status] || '⚪️';
 
+            const referenceTime = check.last_ping ? new Date(check.last_ping) : new Date(check.created_at);
+            const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
+            const now = new Date();
+            const diffSeconds = (deadline - now) / 1000;
+            const expiresIn = formatTimeDifference(diffSeconds);
+
             row.innerHTML = `
                 <td><span class="status-${check.status}" title="${check.status.toUpperCase()}">${statusIcon} ${check.status.toUpperCase()}</span></td>
                 <td>${check.name}</td>
                 <td><small>${owner}</small></td>
                 <td><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer;"></td>
                 <td>${lastPing}</td>
+                <td>${expiresIn}</td>
                 <td>
                     <div class="grid" style="margin-bottom: 0; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
                         <button class="outline" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">Edit</button>
