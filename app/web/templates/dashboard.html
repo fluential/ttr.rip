@@ -9,7 +9,7 @@
 <article>
     <header>Your Access Key</header>
     <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
-    <input type="text" class="ping-url" value="{{ auth_key }}" readonly onclick="copyUrl(this)" style="text-align: center; font-size: 1.1rem;">
+    <input type="password" class="ping-url" value="{{ auth_key }}" readonly onclick="copyUrl(this)" style="text-align: center; font-size: 1.1rem;">
 </article>
 
 <details id="new-check-section">
@@ -83,22 +83,33 @@
     const pageSize = 25;
 
     function copyUrl(element) {
+        const originalValue = element.value;
+        const isPassword = element.type === 'password';
+
+        if (isPassword) {
+            element.type = 'text';
+        }
+
         element.select();
-        navigator.clipboard.writeText(element.value).then(() => {
-            const originalValue = element.value;
+        navigator.clipboard.writeText(originalValue).then(() => {
             element.value = 'Copied!';
             setTimeout(() => {
                 element.value = originalValue;
+                if (isPassword) {
+                    element.type = 'password';
+                }
             }, 1200);
         }).catch(err => {
             console.error('Failed to copy text: ', err);
             // Fallback for older browsers
             try {
                 document.execCommand('copy');
-                const originalValue = element.value;
                 element.value = 'Copied!';
                 setTimeout(() => {
                     element.value = originalValue;
+                    if (isPassword) {
+                        element.type = 'password';
+                    }
                 }, 1200);
             } catch (e) {
                 console.error('Fallback copy failed', e);
