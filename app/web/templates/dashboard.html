@@ -97,36 +97,95 @@
                 <td>${check.name}</td>
                 <td><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer;"></td>
                 <td>${lastPing}</td>
-                <td><button class="secondary outline" onclick="deleteCheck(${check.id})">Delete</button></td>
+                <td>
+                    <div class="grid" style="margin-bottom: 0; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                        <button class="outline" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">Edit</button>
+                        <button class="secondary outline" onclick="deleteCheck(${check.id})">Delete</button>
+                    </div>
+                </td>
             `;
             tableBody.appendChild(row);
         });
     }
 
-    async function createCheck(event) {
+    function editCheck(event, id, name, interval, grace) {
+        event.stopPropagation();
+        const form = document.getElementById('new-check-form');
+        form.querySelector('#name').value = name;
+        form.querySelector('#interval_seconds').value = interval;
+        form.querySelector('#grace_seconds').value = grace;
+        
+        form.dataset.editingId = id;
+
+        form.querySelector('header').textContent = 'Edit Check';
+        form.querySelector('button[type="submit"]').textContent = 'Update Check';
+        
+        let cancelButton = form.querySelector('.cancel-edit');
+        if (!cancelButton) {
+            cancelButton = document.createElement('button');
+            cancelButton.type = 'button';
+            cancelButton.className = 'secondary outline cancel-edit';
+            cancelButton.textContent = 'Cancel';
+            cancelButton.style.marginLeft = '1rem';
+            cancelButton.onclick = cancelEdit;
+            form.querySelector('button[type="submit"]').insertAdjacentElement('afterend', cancelButton);
+        }
+        form.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+        const form = document.getElementById('new-check-form');
+        form.reset();
+        delete form.dataset.editingId;
+
+        form.querySelector('header').textContent = 'New Check';
+        form.querySelector('button[type="submit"]').textContent = 'Create Check';
+        
+        const cancelButton = form.querySelector('.cancel-edit');
+        if (cancelButton) {
+            cancelButton.remove();
+        }
+    }
+
+    async function handleFormSubmit(event) {
         event.preventDefault();
         if (!apiToken) return;
-        const formData = new FormData(event.target);
+
+        const form = event.target;
+        const editingId = form.dataset.editingId;
+
         const data = {
-            name: formData.get('name'),
-            interval_seconds: parseInt(formData.get('interval_seconds')),
-            grace_seconds: parseInt(formData.get('grace_seconds'))
+            name: form.querySelector('#name').value,
+            interval_seconds: parseInt(form.querySelector('#interval_seconds').value),
+            grace_seconds: parseInt(form.querySelector('#grace_seconds').value)
         };
 
-        const response = await fetch('/api/v1/checks', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
+        let response;
+        if (editingId) {
+            response = await fetch(`/api/v1/checks/${editingId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${apiToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+        } else {
+            response = await fetch('/api/v1/checks', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+        }
 
         if (response.ok) {
-            event.target.reset();
+            cancelEdit();
             fetchChecks();
         } else {
-            alert('Failed to create check.');
+            alert(`Failed to ${editingId ? 'update' : 'create'} check.`);
         }
     }
 
@@ -151,7 +210,7 @@
         if (apiToken) {
             fetchChecks();
         }
-        document.getElementById('new-check-form').addEventListener('submit', createCheck);
+        document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
     });
 </script>
 <style>

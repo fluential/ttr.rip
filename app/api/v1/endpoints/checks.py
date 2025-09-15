@@ -23,6 +23,18 @@ async def create_check(
 ):
     return await crud.create_check(db=db, check=check, owner_id=current_user.id)
 
+@router.put("/{check_id}", response_model=schemas.Check)
+async def update_check(
+    check_id: int,
+    check: schemas.CheckUpdate,
+    db: AsyncSession = Depends(db_base.get_db),
+    current_user: db_models.User = Depends(security.get_current_user),
+):
+    updated_check = await crud.update_check(db=db, check_id=check_id, check_data=check, owner_id=current_user.id)
+    if not updated_check:
+        raise HTTPException(status_code=404, detail="Check not found")
+    return updated_check
+
 @router.delete("/{check_id}", response_model=schemas.Check)
 async def delete_check(
     check_id: int,

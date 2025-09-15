@@ -32,6 +32,9 @@ class CheckBase(BaseModel):
 class CheckCreate(CheckBase):
     pass
 
+class CheckUpdate(CheckBase):
+    pass
+
 class Check(CheckBase):
     id: int
     uuid: str

@@ -45,6 +45,19 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, owner_id: i
     await db.refresh(db_check)
     return db_check
 
+async def update_check(db: AsyncSession, check_id: int, check_data: schemas.CheckUpdate, owner_id: int):
+    result = await db.execute(
+        select(models.Check).filter(models.Check.id == check_id, models.Check.owner_id == owner_id)
+    )
+    db_check = result.scalars().first()
+    if db_check:
+        update_data = check_data.model_dump()
+        for key, value in update_data.items():
+            setattr(db_check, key, value)
+        await db.commit()
+        await db.refresh(db_check)
+    return db_check
+
 async def delete_check(db: AsyncSession, check_id: int, owner_id: int):
     result = await db.execute(
         select(models.Check).filter(models.Check.id == check_id, models.Check.owner_id == owner_id)
