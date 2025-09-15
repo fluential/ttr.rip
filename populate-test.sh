@@ -5,13 +5,18 @@
 
 # --- Configuration ---
 BASE_URL="http://localhost:8000"
-# Replace with a valid key from your application's UI
-AUTH_KEY="replace-with-your-32-char-key" 
 NUM_CHECKS=30
 
 # --- Script ---
+if [ -z "${AUTH_KEY}" ]; then
+  echo "Error: AUTH_KEY environment variable is not set."
+  echo "Please set it to your 32-character access key before running this script."
+  echo "Example: export AUTH_KEY=your-key-here"
+  exit 1
+fi
+
 echo "Creating ${NUM_CHECKS} sample checks..."
-echo "Using Auth Key: ${AUTH_KEY}"
+echo "Using auth key from AUTH_KEY environment variable."
 echo "Targeting API at: ${BASE_URL}"
 echo "------------------------------------"
 
