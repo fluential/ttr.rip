@@ -1,0 +1,98 @@
+/* Retro Theme */
+
+:root {
+    --hacker-green: #00c700; /* Darker green for light mode */
+    --text-shadow-color: rgba(0, 199, 0, 0.5);
+    --primary: #008000;
+    --primary-hover: #006400;
+    --primary-focus: rgba(0, 128, 0, 0.25);
+    --primary-inverse: #ffffff;
+}
+
+[data-theme="dark"] {
+    --hacker-green: #00ff41;
+    --hacker-bg: #0d0208;
+    --primary: var(--hacker-green);
+    --primary-hover: #39ff14;
+    --primary-focus: rgba(0, 255, 65, 0.25);
+    --primary-inverse: var(--hacker-bg);
+    --background-color: var(--hacker-bg);
+    --card-background-color: #1a1a1a;
+    --card-border-color: var(--hacker-green);
+    --form-element-border-color: var(--hacker-green);
+    --form-element-focus-color: var(--primary-focus);
+    --text-shadow-color: var(--hacker-green);
+}
+
+body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 1.05rem;
+}
+
+h1, h2, h3, h4, h5, h6, strong {
+    font-family: 'VT323', monospace;
+    letter-spacing: 2px;
+    text-shadow: 0 0 5px var(--text-shadow-color);
+}
+
+article {
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+article > header, details#new-check-section > summary {
+    font-family: 'VT323', monospace;
+    letter-spacing: 2px;
+    text-shadow: 0 0 5px var(--text-shadow-color);
+    font-size: 1.5rem;
+    padding-bottom: 0.5rem;
+}
+
+article > header {
+    border-bottom: 1px solid var(--primary);
+    margin-bottom: 1.5rem;
+}
+
+details#new-check-section > summary {
+    cursor: pointer;
+}
+
+details#new-check-section[open] > summary {
+    border-bottom: 1px solid var(--primary);
+    margin-bottom: 1.5rem;
+}
+
+.ping-url {
+    font-family: 'Courier New', monospace;
+    background-color: #e0e0e0;
+    color: #008000;
+    border: 1px solid #008000;
+    padding: 5px 8px;
+    font-size: 0.9em;
+    cursor: copy;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+[data-theme="dark"] .ping-url {
+    background-color: #111;
+    color: var(--hacker-green);
+    border: 1px solid var(--hacker-green);
+}
+
+.ping-url:focus {
+    box-shadow: 0 0 8px var(--primary);
+}
+
+#checks-table thead th {
+    font-family: 'VT323', monospace;
+    font-size: 1.2rem;
+    letter-spacing: 1px;
+    color: var(--primary);
+}
+
+#checks-table tbody td {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.95rem;
+    vertical-align: middle;
+}

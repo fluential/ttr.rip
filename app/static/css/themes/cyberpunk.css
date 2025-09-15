@@ -1,0 +1,113 @@
+/* Cyberpunk Theme */
+
+/* Light Mode Variables */
+:root {
+    --primary: #0a043c; /* Dark Blue */
+    --primary-hover: #1a145c;
+    --primary-focus: rgba(10, 4, 60, 0.25);
+    --primary-inverse: #ffffff;
+    --background-color: #f0f0f0;
+    --card-background-color: #ffffff;
+    --card-border-color: #d0d0d0;
+    --form-element-border-color: #0a043c;
+    --form-element-focus-color: var(--primary-focus);
+    --accent-color: #00ffff; /* Cyan */
+    --accent-shadow: rgba(0, 255, 255, 0.5);
+    --h1-color: #0a043c;
+    --h2-color: #0a043c;
+    --h3-color: #0a043c;
+    --h4-color: #0a043c;
+    --h5-color: #0a043c;
+    --h6-color: #0a043c;
+}
+
+/* Dark Mode Variables */
+[data-theme="dark"] {
+    --primary: #ff00ff; /* Magenta */
+    --primary-hover: #ff33ff;
+    --primary-focus: rgba(255, 0, 255, 0.25);
+    --primary-inverse: #0a043c;
+    --background-color: #0a043c; /* Dark Blue */
+    --card-background-color: #130754;
+    --card-border-color: var(--primary);
+    --form-element-border-color: var(--primary);
+    --form-element-focus-color: var(--primary-focus);
+    --accent-color: #00ffff; /* Cyan */
+    --accent-shadow: rgba(0, 255, 255, 0.5);
+    --h1-color: var(--accent-color);
+    --h2-color: var(--accent-color);
+    --h3-color: var(--accent-color);
+    --h4-color: var(--accent-color);
+    --h5-color: var(--accent-color);
+    --h6-color: var(--accent-color);
+}
+
+body {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.05rem;
+}
+
+h1, h2, h3, h4, h5, h6, strong {
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 2px;
+    text-shadow: 0 0 8px var(--accent-shadow);
+}
+
+article {
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--primary);
+    box-shadow: 0 0 10px var(--primary-focus);
+}
+
+article > header, details#new-check-section > summary {
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 2px;
+    text-shadow: 0 0 8px var(--accent-shadow);
+    font-size: 1.5rem;
+    padding-bottom: 0.5rem;
+    color: var(--h1-color); /* Use header color variable */
+}
+
+article > header {
+    border-bottom: 1px solid var(--primary);
+    margin-bottom: 1.5rem;
+}
+
+details#new-check-section > summary {
+    cursor: pointer;
+}
+
+details#new-check-section[open] > summary {
+    border-bottom: 1px solid var(--primary);
+    margin-bottom: 1.5rem;
+}
+
+.ping-url {
+    font-family: 'Share Tech Mono', monospace;
+    background-color: #111;
+    color: var(--accent-color);
+    border: 1px solid var(--primary);
+    padding: 5px 8px;
+    font-size: 0.9em;
+    cursor: copy;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.ping-url:focus {
+    box-shadow: 0 0 8px var(--primary);
+}
+
+#checks-table thead th {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: 1px;
+    color: var(--h1-color); /* Use header color variable */
+}
+
+#checks-table tbody td {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.95rem;
+    vertical-align: middle;
+}

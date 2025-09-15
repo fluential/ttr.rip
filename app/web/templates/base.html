@@ -7,80 +7,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --hacker-green: #00ff41;
-            --hacker-bg: #0d0208;
-        }
-        [data-theme="dark"] {
-            --primary: var(--hacker-green);
-            --primary-hover: #39ff14;
-            --primary-focus: rgba(0, 255, 65, 0.25);
-            --primary-inverse: var(--hacker-bg);
-            --background-color: var(--hacker-bg);
-            --card-background-color: #1a1a1a;
-            --card-border-color: var(--hacker-green);
-            --form-element-border-color: var(--hacker-green);
-            --form-element-focus-color: var(--primary-focus);
-        }
-        body {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 1.05rem;
-        }
-        h1, h2, h3, h4, h5, h6, strong {
-            font-family: 'VT323', monospace;
-            letter-spacing: 2px;
-            text-shadow: 0 0 5px var(--hacker-green);
-        }
-        article {
-            padding: 1rem 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        article > header, details#new-check-section > summary {
-            font-family: 'VT323', monospace;
-            letter-spacing: 2px;
-            text-shadow: 0 0 5px var(--hacker-green);
-            font-size: 1.5rem;
-            padding-bottom: 0.5rem;
-        }
-        article > header {
-            border-bottom: 1px solid var(--hacker-green);
-            margin-bottom: 1.5rem;
-        }
-        details#new-check-section > summary {
-            cursor: pointer;
-        }
-        details#new-check-section[open] > summary {
-            border-bottom: 1px solid var(--hacker-green);
-            margin-bottom: 1.5rem;
-        }
-        .ping-url {
-            font-family: 'Courier New', monospace;
-            background-color: #111;
-            color: var(--hacker-green);
-            border: 1px solid var(--hacker-green);
-            padding: 5px 8px;
-            font-size: 0.9em;
-            cursor: copy;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        .ping-url:focus {
-            box-shadow: 0 0 8px var(--hacker-green);
-        }
-        #checks-table thead th {
-            font-family: 'VT323', monospace;
-            font-size: 1.2rem;
-            letter-spacing: 1px;
-            color: var(--hacker-green);
-        }
-        #checks-table tbody td {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.95rem;
-            vertical-align: middle;
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" id="theme-style" href="">
 </head>
 <body>
     <main class="container">
@@ -97,6 +25,12 @@
                 {% elif request.cookies.get("auth_key") %}
                     <li><a href="/">Logout</a></li>
                 {% endif %}
+                <li>
+                    <select id="theme-selector" style="margin-bottom: 0;">
+                        <option value="retro">Retro</option>
+                        <option value="cyberpunk">Cyberpunk</option>
+                    </select>
+                </li>
                 <li><a href="#" id="theme-switcher" title="Switch theme"></a></li>
             </ul>
         </nav>
@@ -104,27 +38,50 @@
     </main>
     <script>
         const themeSwitcher = document.getElementById('theme-switcher');
+        const themeSelector = document.getElementById('theme-selector');
+        const themeStyle = document.getElementById('theme-style');
         const html = document.documentElement;
 
-        const setTheme = (theme) => {
-            html.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
+        // Handles light/dark mode
+        const setColorMode = (mode) => {
+            html.setAttribute('data-theme', mode);
+            localStorage.setItem('colorMode', mode);
             if (themeSwitcher) {
-                themeSwitcher.textContent = theme === 'dark' ? '☀️' : '🌙';
+                themeSwitcher.textContent = mode === 'dark' ? '☀️' : '🌙';
             }
+        };
+
+        // Handles app theme (retro, cyberpunk)
+        const setAppTheme = (themeName) => {
+            if (themeStyle) {
+                themeStyle.setAttribute('href', `/static/css/themes/${themeName}.css`);
+            }
+            if (themeSelector) {
+                themeSelector.value = themeName;
+            }
+            localStorage.setItem('appTheme', themeName);
         };
 
         if (themeSwitcher) {
             themeSwitcher.addEventListener('click', (e) => {
                 e.preventDefault();
-                const currentTheme = html.getAttribute('data-theme');
-                setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+                const currentMode = html.getAttribute('data-theme');
+                setColorMode(currentMode === 'dark' ? 'light' : 'dark');
+            });
+        }
+
+        if (themeSelector) {
+            themeSelector.addEventListener('change', (e) => {
+                setAppTheme(e.target.value);
             });
         }
 
         // Set theme on initial load
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        setTheme(savedTheme);
+        const savedAppTheme = localStorage.getItem('appTheme') || 'retro';
+        const savedColorMode = localStorage.getItem('colorMode') || 'dark';
+        
+        setAppTheme(savedAppTheme);
+        setColorMode(savedColorMode);
 
         // New Check link handler
         const newCheckLink = document.getElementById('new-check-link');
