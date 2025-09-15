@@ -31,6 +31,20 @@ async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
 async def update_check_ping(db: AsyncSession, check: models.Check):
     check.last_ping = datetime.now(timezone.utc)
     check.status = "up"
+    check.last_start = None
+    await db.commit()
+    await db.refresh(check)
+    return check
+
+async def update_check_start(db: AsyncSession, check: models.Check):
+    check.last_start = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(check)
+    return check
+
+async def update_check_fail(db: AsyncSession, check: models.Check):
+    check.status = "down"
+    check.last_start = None
     await db.commit()
     await db.refresh(check)
     return check
