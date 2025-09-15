@@ -54,7 +54,7 @@ async def update_check_telegram_settings(
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
 
-@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
 async def test_telegram_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -68,8 +68,28 @@ async def test_telegram_notification(
         raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
 
     message = f"🔔 This is a test notification for your check '[{check.name}]'."
-    notifications.schedule_telegram_notification(check.id, message)
+    await notifications.send_telegram_notification(db, check, message)
+    await db.commit()
+    await db.refresh(check)
     return check
+
+@router.post("/{check_id}/telegram/test-queue", status_code=status.HTTP_202_ACCEPTED)
+async def test_telegram_notification_queue(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check:
+        raise HTTPException(status_code=404, detail="Check not found")
+
+    if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
+        raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
+
+    message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
+    notifications.schedule_telegram_notification(check.id, message)
+    return {"message": "Test notification queued."}
+
 
 @router.delete("/{check_id}", response_model=schemas.Check)
 async def delete_check(

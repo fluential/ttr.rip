@@ -63,7 +63,8 @@
         </div>
         <footer class="grid">
             <button type="submit">Save Settings</button>
-            <button type="button" id="test-telegram-btn" class="secondary">Test</button>
+            <button type="button" id="test-telegram-btn" class="secondary">Test Connection</button>
+            <button type="button" id="test-queue-btn" class="secondary">Test via Queue</button>
             <button type="button" class="secondary outline" onclick="window.location.href='{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}'">Back to Dashboard</button>
         </footer>
     </form>
@@ -173,6 +174,43 @@
         }
     }
 
+    async function handleTestQueueClick(event) {
+        event.preventDefault();
+        const formMessage = document.getElementById('form-message');
+        const testQueueButton = document.getElementById('test-queue-btn');
+
+        testQueueButton.setAttribute('aria-busy', 'true');
+        testQueueButton.disabled = true;
+        formMessage.textContent = 'Queueing test message...';
+        formMessage.style.color = 'inherit';
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (isAdmin) {
+            headers['Authorization'] = `Bearer ${apiToken}`;
+        } else {
+            headers['X-Auth-Key'] = authKey;
+        }
+
+        const response = await fetch(`/api/v1/checks/${checkId}/telegram/test-queue`, {
+            method: 'POST',
+            headers: headers
+        });
+
+        testQueueButton.removeAttribute('aria-busy');
+        testQueueButton.disabled = false;
+
+        if (response.ok) {
+            formMessage.textContent = 'Test message queued successfully! Status will update after processing.';
+            formMessage.style.color = 'var(--pico-color-green-500)';
+        } else {
+            const error = await response.json();
+            formMessage.textContent = `Failed to queue test message: ${error.detail || 'Unknown error'}`;
+            formMessage.style.color = 'var(--pico-color-red-500)';
+        }
+    }
+
     async function handleTestClick(event) {
         event.preventDefault();
         const formMessage = document.getElementById('form-message');
@@ -180,7 +218,7 @@
 
         testButton.setAttribute('aria-busy', 'true');
         testButton.disabled = true;
-        formMessage.textContent = 'Sending test message...';
+        formMessage.textContent = 'Sending test connection message...';
         formMessage.style.color = 'inherit';
 
         const headers = {
@@ -203,11 +241,11 @@
         if (response.ok) {
             const updatedCheck = await response.json();
             updateIntegrationStatusUI(updatedCheck);
-            formMessage.textContent = 'Test message sent successfully!';
+            formMessage.textContent = 'Test connection message sent successfully!';
             formMessage.style.color = 'var(--pico-color-green-500)';
         } else {
             const error = await response.json();
-            formMessage.textContent = `Failed to send test message: ${error.detail || 'Unknown error'}`;
+            formMessage.textContent = `Failed to send test connection message: ${error.detail || 'Unknown error'}`;
             formMessage.style.color = 'var(--pico-color-red-500)';
         }
     }
@@ -220,6 +258,11 @@
             const testButton = document.getElementById('test-telegram-btn');
             if (testButton) {
                 testButton.addEventListener('click', handleTestClick);
+            }
+
+            const testQueueButton = document.getElementById('test-queue-btn');
+            if (testQueueButton) {
+                testQueueButton.addEventListener('click', handleTestQueueClick);
             }
 
             const lastNotificationTimeElem = document.getElementById('last-notification-time');
