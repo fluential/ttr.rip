@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.db import models
 from app import schemas, security
+from app.services import notifications
 
 # User CRUD
 async def get_user_by_username(db: AsyncSession, username: str):
@@ -50,11 +51,17 @@ async def update_check_ping(db: AsyncSession, check: models.Check):
     else:
         check.last_duration_seconds = None
 
+    previous_status = check.status
     check.last_ping = now
     check.status = "up"
     check.last_start = None
     await db.commit()
     await db.refresh(check)
+
+    if previous_status == "down":
+        message = f"🟢 Check Up: {check.name} is back up."
+        await notifications.send_telegram_notification(check, message)
+
     return check
 
 async def update_check_start(db: AsyncSession, check: models.Check):
@@ -64,10 +71,16 @@ async def update_check_start(db: AsyncSession, check: models.Check):
     return check
 
 async def update_check_fail(db: AsyncSession, check: models.Check):
+    previous_status = check.status
     check.status = "down"
     check.last_start = None
     await db.commit()
     await db.refresh(check)
+
+    if previous_status != "down":
+        message = f"🔴 Check Failed: {check.name} reported a failure."
+        await notifications.send_telegram_notification(check, message)
+
     return check
 
 async def get_checks_by_owner(db: AsyncSession, principal: Union[models.User, str]):
@@ -129,6 +142,35 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         await db.commit()
         await db.refresh(db_check)
     return db_check
+
+
+async def create_or_update_telegram_auth(db: AsyncSession, check_id: int, login_data: schemas.TelegramLoginData):
+    # Find existing auth for this check
+    result = await db.execute(select(models.TelegramAuth).filter(models.TelegramAuth.check_id == check_id))
+    db_auth = result.scalars().first()
+
+    if db_auth:
+        # Update existing auth record
+        db_auth.telegram_user_id = login_data.id
+        db_auth.first_name = login_data.first_name
+        db_auth.username = login_data.username
+        db_auth.auth_date = login_data.auth_date
+        db_auth.hash = login_data.hash
+    else:
+        # Create new auth record
+        db_auth = models.TelegramAuth(
+            check_id=check_id,
+            telegram_user_id=login_data.id,
+            first_name=login_data.first_name,
+            username=login_data.username,
+            auth_date=login_data.auth_date,
+            hash=login_data.hash,
+        )
+        db.add(db_auth)
+    
+    await db.commit()
+    await db.refresh(db_auth)
+    return db_auth
 
 
 async def update_check_telegram_settings(db: AsyncSession, check_id: int, settings_data: schemas.TelegramSettingsUpdate, principal: Union[models.User, str]):

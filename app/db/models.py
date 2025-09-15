@@ -44,3 +44,18 @@ class Check(Base):
     owner_key: Optional[str] = Column(String, index=True, nullable=True)
 
     owner = relationship("User", back_populates="checks")
+    telegram_auth = relationship("TelegramAuth", back_populates="check", uselist=False, cascade="all, delete-orphan")
+
+
+class TelegramAuth(Base):
+    __tablename__ = "telegram_auths"
+
+    id: int = Column(Integer, primary_key=True, index=True)
+    telegram_user_id: int = Column(Integer, index=True)
+    first_name: str = Column(String)
+    username: Optional[str] = Column(String, nullable=True)
+    auth_date: int = Column(Integer)
+    hash: str = Column(String)
+    check_id: int = Column(Integer, ForeignKey("checks.id"), unique=True, nullable=False)
+
+    check = relationship("Check", back_populates="telegram_auth")

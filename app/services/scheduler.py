@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.future import select
 from app.db.base import AsyncSessionLocal
 from app.db.models import Check
+from app.services import notifications
 
 async def check_jobs():
     print("Scheduler started. Checking for overdue jobs every 60 seconds.")
@@ -25,7 +26,10 @@ async def check_jobs():
                     if reference_time:
                         deadline = reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
                         if now > deadline:
-                            print(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
-                            check.status = "down"
+                            if check.status != "down":
+                                print(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
+                                check.status = "down"
+                                message = f"🔴 Check Down: {check.name}"
+                                await notifications.send_telegram_notification(check, message)
                 
                 await session.commit()

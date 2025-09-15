@@ -62,3 +62,22 @@ class TelegramSettings(BaseModel):
 
 class TelegramSettingsUpdate(TelegramSettings):
     pass
+
+
+class TelegramLoginData(BaseModel):
+    id: int
+    first_name: str
+    username: Optional[str] = None
+    auth_date: int
+    hash: str
+    photo_url: Optional[str] = None
+
+
+class TelegramAuth(BaseModel):
+    telegram_user_id: int
+    first_name: str
+    username: Optional[str] = None
+    auth_date: int
+
+    class Config:
+        from_attributes = True

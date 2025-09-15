@@ -1,6 +1,6 @@
 import random
 from datetime import timedelta
-from fastapi import APIRouter, Request, Depends, Form, status
+from fastapi import APIRouter, Request, Depends, Form, status, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,8 +54,48 @@ async def public_dashboard(request: Request, auth_key: str):
     return response
 
 
+@router.get("/telegram/callback", response_class=HTMLResponse, name="telegram_callback")
+async def telegram_callback(
+    request: Request,
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+):
+    query_params = {k: v for k, v in request.query_params.items() if k not in ['check_id']}
+    
+    if not security.validate_telegram_hash(query_params.copy()):
+        raise HTTPException(status_code=400, detail="Invalid hash from Telegram")
+
+    login_data = schemas.TelegramLoginData(**query_params)
+    
+    check = await db.get(db_models.Check, check_id)
+    if not check:
+        raise HTTPException(status_code=404, detail="Check not found")
+
+    await crud.create_or_update_telegram_auth(db, check_id=check_id, login_data=login_data)
+
+    session_token = security.create_telegram_session_token({
+        "telegram_user_id": login_data.id,
+        "check_id": check_id
+    })
+
+    # Determine redirect URL based on whether it was an admin or public user
+    if check.owner_id: # Admin-owned check
+        redirect_url = f"/admin/check/{check_id}/integrations"
+    else: # Public key-owned check
+        redirect_url = f"/check/{check_id}/integrations"
+
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
+    response.set_cookie(key="telegram_session", value=session_token, httponly=True, samesite="lax")
+    return response
+
+
 @router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
-async def public_integrations(request: Request, check_id: int, db: AsyncSession = Depends(db_base.get_db)):
+async def public_integrations(
+    request: Request,
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    telegram_session: dict = Depends(security.get_telegram_session_data)
+):
     auth_key = request.cookies.get("auth_key")
     if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
@@ -64,7 +104,23 @@ async def public_integrations(request: Request, check_id: int, db: AsyncSession 
     if not check:
         return RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
 
-    context = {"request": request, "check": check, "auth_key": auth_key, "is_admin": False}
+    is_telegram_authed = bool(
+        telegram_session
+        and telegram_session.get("check_id") == check_id
+        and telegram_session.get("telegram_user_id")
+    )
+
+    auth_url = request.url_for('telegram_callback').include_query_params(check_id=check.id)
+
+    context = {
+        "request": request,
+        "check": check,
+        "auth_key": auth_key,
+        "is_admin": False,
+        "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
+        "telegram_auth_url": str(auth_url),
+        "is_telegram_authed": is_telegram_authed,
+    }
     return templates.TemplateResponse("integrations.html", context)
 
 
@@ -108,7 +164,12 @@ async def admin_dashboard(request: Request):
 
 
 @admin_router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
-async def admin_integrations(request: Request, check_id: int, db: AsyncSession = Depends(db_base.get_db)):
+async def admin_integrations(
+    request: Request,
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    telegram_session: dict = Depends(security.get_telegram_session_data)
+):
     token = request.cookies.get("auth_token")
     if not token:
         return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
@@ -120,5 +181,21 @@ async def admin_integrations(request: Request, check_id: int, db: AsyncSession =
     if not check:
         return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
 
-    context = {"request": request, "check": check, "api_token": token, "is_admin": True}
+    is_telegram_authed = bool(
+        telegram_session
+        and telegram_session.get("check_id") == check_id
+        and telegram_session.get("telegram_user_id")
+    )
+
+    auth_url = request.url_for('telegram_callback').include_query_params(check_id=check.id)
+
+    context = {
+        "request": request,
+        "check": check,
+        "api_token": token,
+        "is_admin": True,
+        "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
+        "telegram_auth_url": str(auth_url),
+        "is_telegram_authed": is_telegram_authed,
+    }
     return templates.TemplateResponse("integrations.html", context)

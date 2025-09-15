@@ -8,9 +8,9 @@
 
 <article>
     <header>Telegram Notifications</header>
+    {% if is_telegram_authed %}
     <p>
-        Get an alert via Telegram when this check goes down.
-        <!-- TODO: This section should be protected by "Login with Telegram" -->
+        You are authenticated with Telegram. You can now configure notification settings below.
     </p>
     <form id="telegram-settings-form">
         <label for="telegram_enabled">
@@ -34,15 +34,34 @@
         </footer>
     </form>
     <div id="form-message" style="margin-top: 1rem;"></div>
+    {% else %}
+    <p>
+        Get an alert via Telegram when this check goes down. To configure settings, you must first log in with your Telegram account.
+    </p>
+    {% if telegram_bot_name %}
+    <script async src="https://telegram.org/js/telegram-widget.js?22"
+        data-telegram-login="{{ telegram_bot_name }}"
+        data-size="large"
+        data-auth-url="{{ telegram_auth_url }}"
+        data-request-access="write"></script>
+    {% else %}
+    <p><strong>Telegram login is not configured by the site administrator.</strong></p>
+    {% endif %}
+    <footer style="margin-top: 1rem;">
+        <a href="{{ '/admin/dashboard' if is_admin else '/dashboard/' + auth_key }}" role="button" class="secondary outline">Back to Dashboard</a>
+    </footer>
+    {% endif %}
 </article>
 
 <script>
-    const checkId = {{ check.id }};
-    const isAdmin = {{ 'true' if is_admin else 'false' }};
-    const apiToken = "{{ api_token if is_admin else '' }}";
-    const authKey = "{{ auth_key if not is_admin else '' }}";
+    const isTelegramAuthed = {{ 'true' if is_telegram_authed else 'false' }};
+    if (isTelegramAuthed) {
+        const checkId = {{ check.id }};
+        const isAdmin = {{ 'true' if is_admin else 'false' }};
+        const apiToken = "{{ api_token if is_admin else '' }}";
+        const authKey = "{{ auth_key if not is_admin else '' }}";
 
-    async function handleFormSubmit(event) {
+        async function handleFormSubmit(event) {
         event.preventDefault();
         const form = event.target;
         const formMessage = document.getElementById('form-message');
@@ -87,8 +106,12 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('telegram-settings-form').addEventListener('submit', handleFormSubmit);
-    });
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('telegram-settings-form');
+            if (form) {
+                form.addEventListener('submit', handleFormSubmit);
+            }
+        });
+    }
 </script>
 {% endblock %}

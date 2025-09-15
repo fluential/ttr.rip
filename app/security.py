@@ -1,6 +1,8 @@
+import hmac
+import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-from fastapi import Depends, HTTPException, status, Header
+from typing import Optional, Dict, Any
+from fastapi import Depends, HTTPException, status, Header, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -84,3 +86,45 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+def create_telegram_session_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+
+async def get_telegram_session_data(
+    telegram_session: Optional[str] = Cookie(None),
+) -> Dict[str, Any]:
+    if not telegram_session:
+        return {} # Return empty dict if no cookie, so routes can use it for conditional logic
+
+    try:
+        payload = jwt.decode(telegram_session, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        check_id: int = payload.get("check_id")
+        telegram_user_id: int = payload.get("telegram_user_id")
+        if check_id is None or telegram_user_id is None:
+            return {} # Invalid payload
+        return payload
+    except JWTError:
+        return {} # Invalid token
+
+
+def validate_telegram_hash(auth_data: Dict[str, Any]) -> bool:
+    if not settings.TELEGRAM_BOT_TOKEN:
+        return False
+
+    hash_from_telegram = auth_data.pop('hash')
+    data_check_string_parts = []
+    for key, value in sorted(auth_data.items()):
+        data_check_string_parts.append(f"{key}={value}")
+    
+    data_check_string = "\n".join(data_check_string_parts)
+    
+    secret_key = hashlib.sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
+    calculated_hash = hmac.new(secret_key, msg=data_check_string.encode(), digestmod=hashlib.sha256).hexdigest()
+    
+    return hmac.compare_digest(calculated_hash, hash_from_telegram)
