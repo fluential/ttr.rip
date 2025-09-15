@@ -11,3 +11,5 @@ def setup_logging():
         format=log_format,
         stream=sys.stdout,
     )
+    # Silence httpx's verbose logging to avoid leaking secrets in URLs
+    logging.getLogger("httpx").setLevel(logging.WARNING)
