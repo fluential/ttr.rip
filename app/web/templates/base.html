@@ -14,7 +14,11 @@
             </ul>
             {% if request.cookies.get("auth_token") %}
             <ul>
-                <li><a href="/admin/logout">Logout</a></li>
+                <li><a href="/admin/logout">Admin Logout</a></li>
+            </ul>
+            {% elif request.cookies.get("auth_key") %}
+            <ul>
+                <li><a href="/">Logout</a></li>
             </ul>
             {% endif %}
         </nav>

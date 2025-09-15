@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<article>
+    <hgroup>
+        <h1>Welcome to ttl.rip</h1>
+        <h2>A simple health check monitoring service.</h2>
+    </hgroup>
+    <p>
+        Login with your existing key or get a new one to start monitoring.
+    </p>
+    <form method="post" action="/dashboard">
+        <input type="text" name="auth_key" placeholder="Enter your 16-digit key" aria-label="Access Key" required pattern="\d{16}">
+        <button type="submit">Login with Key</button>
+    </form>
+    <a href="/new" role="button" class="secondary">Get a New Key</a>
+    {% if "error" in request.query_params %}
+    <p><small style="color: var(--pico-color-red-500);">Invalid key provided.</small></p>
+    {% endif %}
+</article>
+{% endblock %}

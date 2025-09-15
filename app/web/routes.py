@@ -21,13 +21,23 @@ def generate_auth_key() -> str:
 
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    auth_key = request.cookies.get("auth_key")
-    if not auth_key or not (len(auth_key) == 16 and auth_key.isdigit()):
-        auth_key = generate_auth_key()
-        response = RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
-        response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
-        return response
-    return RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+    response = templates.TemplateResponse("public_login.html", {"request": request})
+    response.delete_cookie("auth_key")
+    return response
+
+@router.post("/dashboard", response_class=HTMLResponse)
+async def login_with_key(request: Request, auth_key: str = Form(...)):
+    if auth_key and len(auth_key) == 16 and auth_key.isdigit():
+        return RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url="/?error=1", status_code=status.HTTP_302_FOUND)
+
+@router.get("/new", response_class=HTMLResponse)
+async def new_anonymous_user(request: Request):
+    auth_key = generate_auth_key()
+    response = RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
+    return response
+
 
 @router.get("/dashboard/{auth_key}", response_class=HTMLResponse)
 async def public_dashboard(request: Request, auth_key: str):
