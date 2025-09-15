@@ -27,6 +27,15 @@ celery_app.conf.update(
 
 if settings.DEBUG_MODE:
     logger.info("DEBUG_MODE is on. Celery will run tasks eagerly without a broker.")
+else:
+    try:
+        import redis
+        r = redis.from_url(str(settings.REDIS_URL))
+        r.ping()
+        logger.info("Celery worker successfully connected to Redis.")
+    except Exception as e:
+        logger.error(f"Celery worker failed to connect to Redis: {e}. Tasks may not be processed.")
+
 
 async def _send_telegram_notification(check_id: int, message: str):
     """The core async logic for sending a notification and updating the DB."""
