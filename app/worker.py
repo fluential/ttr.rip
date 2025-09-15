@@ -39,12 +39,21 @@ else:
 
 async def _send_telegram_notification(check_id: int, message: str):
     """The core async logic for sending a notification and updating the DB."""
+    owner_identifier_for_stats = None
     async with AsyncSessionLocal() as session:
         async with session.begin():
             result = await session.execute(select(Check).filter(Check.id == check_id))
             check = result.scalars().first()
 
-            if not check or not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
+            if not check:
+                return
+
+            if check.owner_key:
+                owner_identifier_for_stats = check.owner_key
+            elif check.owner_id:
+                owner_identifier_for_stats = f"user_id_{check.owner_id}"
+
+            if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
                 return
 
             try:
@@ -86,6 +95,14 @@ async def _send_telegram_notification(check_id: int, message: str):
             
             check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
             await session.commit()
+
+    if owner_identifier_for_stats and not settings.DEBUG_MODE:
+        try:
+            import redis
+            r = redis.from_url(str(settings.REDIS_URL))
+            r.incr(f"user_stats:processed_notifications:{owner_identifier_for_stats}")
+        except Exception as e:
+            logger.error(f"Could not increment processed notification count for check {check_id}: {e}")
 
 @celery_app.task(name="send_telegram_notification_task")
 def send_telegram_notification_task(check_id: int, message: str):

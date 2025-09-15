@@ -73,6 +73,7 @@ class CheckStats(BaseModel):
     avg_interval_seconds: Optional[float] = None
     avg_duration_seconds: Optional[float] = None
     user_queued_notifications: Union[int, str] = 0
+    processed_notifications: Union[int, str] = 0
 
 
 # Telegram Schemas

@@ -68,10 +68,11 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: Union[
                 if body_b64:
                     body_json = base64.b64decode(body_b64).decode('utf-8')
                     body = json.loads(body_json)
-                    # Celery task body has 'args' which is a list
-                    args = body.get('args', [])
-                    if args and isinstance(args[0], int) and args[0] in user_check_ids:
-                        user_queued_count += 1
+                    # Celery task body is a list: [args, kwargs, options]
+                    if isinstance(body, list) and len(body) > 0:
+                        args = body[0]
+                        if args and isinstance(args, list) and len(args) > 0 and isinstance(args[0], int) and args[0] in user_check_ids:
+                            user_queued_count += 1
             except Exception:
                 # Ignore tasks that can't be parsed, might be other task types
                 continue
@@ -118,6 +119,22 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.Use
 
     user_queued_notifications = await get_user_queued_notification_count(db, principal)
     
+    processed_notifications: Union[int, str] = 0
+    if not settings.DEBUG_MODE:
+        try:
+            import redis
+            r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
+            if isinstance(principal, models.User):
+                owner_identifier = f"user_id_{principal.id}"
+            else:
+                owner_identifier = principal
+            
+            count = r.get(f"user_stats:processed_notifications:{owner_identifier}")
+            processed_notifications = int(count) if count else 0
+        except Exception as e:
+            logger.error(f"Could not get processed notification count for principal: {e}")
+            processed_notifications = "N/A"
+
     if stats and stats.total_checks > 0:
         return schemas.CheckStats(
             total_checks=stats.total_checks,
@@ -126,7 +143,8 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.Use
             new_count=stats.new_count or 0,
             avg_interval_seconds=stats.avg_interval_seconds,
             avg_duration_seconds=stats.avg_duration_seconds,
-            user_queued_notifications=user_queued_notifications
+            user_queued_notifications=user_queued_notifications,
+            processed_notifications=processed_notifications
         )
     else:
         return schemas.CheckStats(
@@ -134,7 +152,8 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.Use
             up_count=0,
             down_count=0,
             new_count=0,
-            user_queued_notifications=user_queued_notifications
+            user_queued_notifications=user_queued_notifications,
+            processed_notifications=processed_notifications
         )
 
 
