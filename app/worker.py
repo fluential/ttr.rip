@@ -15,7 +15,11 @@ celery_app = Celery(
 )
 celery_app.conf.update(
     task_track_started=True,
+    task_always_eager=settings.DEBUG_MODE,
 )
+
+if settings.DEBUG_MODE:
+    print("DEBUG_MODE is on. Celery will run tasks eagerly without a broker.")
 
 async def _send_telegram_notification(check_id: int, message: str):
     """The core async logic for sending a notification and updating the DB."""
