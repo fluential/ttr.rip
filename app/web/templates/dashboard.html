@@ -117,7 +117,7 @@
         
         form.dataset.editingId = id;
 
-        form.querySelector('header').textContent = 'Edit Check';
+        form.parentElement.querySelector('header').textContent = 'Edit Check';
         form.querySelector('button[type="submit"]').textContent = 'Update Check';
         
         let cancelButton = form.querySelector('.cancel-edit');
@@ -138,7 +138,7 @@
         form.reset();
         delete form.dataset.editingId;
 
-        form.querySelector('header').textContent = 'New Check';
+        form.parentElement.querySelector('header').textContent = 'New Check';
         form.querySelector('button[type="submit"]').textContent = 'Create Check';
         
         const cancelButton = form.querySelector('.cancel-edit');
