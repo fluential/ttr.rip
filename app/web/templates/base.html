@@ -5,6 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ttl.rip</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --hacker-green: #00ff41;
+            --hacker-bg: #0d0208;
+        }
+        [data-theme="dark"] {
+            --primary: var(--hacker-green);
+            --primary-hover: #39ff14;
+            --primary-focus: rgba(0, 255, 65, 0.25);
+            --primary-inverse: var(--hacker-bg);
+            --background-color: var(--hacker-bg);
+            --card-background-color: #1a1a1a;
+            --card-border-color: var(--hacker-green);
+            --form-element-border-color: var(--hacker-green);
+            --form-element-focus-color: var(--primary-focus);
+        }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+        }
+        h1, h2, h3, h4, h5, h6, header, strong {
+            font-family: 'VT323', monospace;
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px var(--hacker-green);
+        }
+        .ping-url {
+            font-family: 'Courier New', monospace;
+            background-color: #111;
+            color: var(--hacker-green);
+            border: 1px solid var(--hacker-green);
+            padding: 5px 8px;
+            font-size: 0.9em;
+            cursor: copy;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .ping-url:focus {
+            box-shadow: 0 0 8px var(--hacker-green);
+        }
+        #checks-table tbody td {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+        }
+    </style>
 </head>
 <body>
     <main class="container">

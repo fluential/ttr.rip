@@ -62,6 +62,30 @@
 <script>
     const apiToken = "{{ api_token }}";
 
+    function copyUrl(element) {
+        element.select();
+        navigator.clipboard.writeText(element.value).then(() => {
+            const originalValue = element.value;
+            element.value = 'Copied!';
+            setTimeout(() => {
+                element.value = originalValue;
+            }, 1200);
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            // Fallback for older browsers
+            try {
+                document.execCommand('copy');
+                const originalValue = element.value;
+                element.value = 'Copied!';
+                setTimeout(() => {
+                    element.value = originalValue;
+                }, 1200);
+            } catch (e) {
+                console.error('Fallback copy failed', e);
+            }
+        });
+    }
+
     function parseUTCDate(dateString) {
         if (!dateString) return null;
         // If timezone info (Z or +/-hh:mm) is missing, treat the string as UTC.
@@ -130,9 +154,9 @@
         if (checks.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="8">No checks found.</td></tr>';
             if (statusSummary) {
-                statusSummary.querySelector('.status-up').textContent = `Up: 0`;
-                statusSummary.querySelector('.status-down').textContent = `Down: 0`;
-                statusSummary.querySelector('.status-new').textContent = `New: 0`;
+                statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: 0`;
+                statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: 0`;
+                statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: 0`;
             }
             return;
         }
@@ -171,7 +195,7 @@
                 <td><span class="status-${currentStatus}" title="${currentStatus.toUpperCase()}">${statusIcon} ${currentStatus.toUpperCase()}</span></td>
                 <td>${check.name}</td>
                 <td><small>${owner}</small></td>
-                <td><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer;"></td>
+                <td><input type="text" class="ping-url" value="${pingUrl}" readonly onclick="copyUrl(this)"></td>
                 <td>${lastPing}</td>
                 <td>${lastDuration}</td>
                 <td>${expiresIn}</td>
@@ -187,9 +211,9 @@
         });
 
         if (statusSummary) {
-            statusSummary.querySelector('.status-up').textContent = `Up: ${statusCounts.up}`;
-            statusSummary.querySelector('.status-down').textContent = `Down: ${statusCounts.down}`;
-            statusSummary.querySelector('.status-new').textContent = `New: ${statusCounts.new}`;
+            statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: ${statusCounts.up}`;
+            statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: ${statusCounts.down}`;
+            statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: ${statusCounts.new}`;
         }
     }
 
