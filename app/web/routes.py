@@ -28,7 +28,9 @@ async def home(request: Request):
 @router.post("/dashboard", response_class=HTMLResponse)
 async def login_with_key(request: Request, auth_key: str = Form(...)):
     if auth_key and len(auth_key) == 16 and auth_key.isdigit():
-        return RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+        response = RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
+        response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
+        return response
     return RedirectResponse(url="/?error=1", status_code=status.HTTP_302_FOUND)
 
 @router.get("/new", response_class=HTMLResponse)
