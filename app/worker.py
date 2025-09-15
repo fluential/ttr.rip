@@ -53,6 +53,14 @@ async def _send_telegram_notification(check_id: int, message: str):
             elif check.owner_id:
                 owner_identifier_for_stats = f"user_id_{check.owner_id}"
 
+            if owner_identifier_for_stats and not settings.DEBUG_MODE:
+                try:
+                    import redis
+                    r = redis.from_url(str(settings.REDIS_URL))
+                    r.decr(f"user_stats:queued_notifications:{owner_identifier_for_stats}")
+                except Exception as e:
+                    logger.error(f"Could not decrement queued notification count for check {check_id}: {e}")
+
             if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
                 return
 

@@ -67,17 +67,30 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
     # The calling function is responsible for the commit
 
 
-def schedule_telegram_notification(check_id: int, message: str):
+def schedule_telegram_notification(check: Check, message: str):
     """Enqueues a task to send a Telegram notification."""
+    if not settings.DEBUG_MODE:
+        try:
+            import redis
+            r = redis.from_url(str(settings.REDIS_URL))
+            if check.owner_key:
+                owner_identifier = check.owner_key
+            elif check.owner_id:
+                owner_identifier = f"user_id_{check.owner_id}"
+            else:
+                owner_identifier = None
+            
+            if owner_identifier:
+                r.incr(f"user_stats:queued_notifications:{owner_identifier}")
+        except Exception as e:
+            logger.error(f"Could not increment queued notification count for check {check.id}: {e}")
+
     if settings.DEBUG_MODE:
-        # In debug mode, Celery's eager execution conflicts with the running
-        # asyncio loop. We bypass Celery and schedule the task directly.
         from app.worker import _send_telegram_notification
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(_send_telegram_notification(check_id, message))
+            loop.create_task(_send_telegram_notification(check.id, message))
         except RuntimeError:
-            # This should not happen when called from the scheduler, but as a fallback.
             logger.error("Failed to schedule direct telegram notification: no running event loop.")
     else:
-        send_telegram_notification_task.delay(check_id, message)
+        send_telegram_notification_task.delay(check.id, message)

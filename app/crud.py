@@ -42,45 +42,19 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: Union[
     if settings.DEBUG_MODE:
         return 0
 
-    if isinstance(principal, models.User):
-        query = select(models.Check.id).filter(models.Check.owner_id == principal.id)
-    else:
-        query = select(models.Check.id).filter(models.Check.owner_key == principal)
-    
-    result = await db.execute(query)
-    user_check_ids = {row[0] for row in result}
-
-    if not user_check_ids:
-        return 0
-
     try:
         import redis
         r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-        r.ping()
-        queue_name = celery_app.conf.get('task_default_queue', 'celery')
         
-        user_queued_count = 0
-        tasks = r.lrange(queue_name, 0, -1)
-        for task_json in tasks:
-            try:
-                task_data = json.loads(task_json)
-                body_b64 = task_data.get('body')
-                if body_b64:
-                    body_json = base64.b64decode(body_b64).decode('utf-8')
-                    body = json.loads(body_json)
-                    # Celery task body is a list: [args, kwargs, options]
-                    if isinstance(body, list) and len(body) > 0:
-                        args = body[0]
-                        if args and isinstance(args, list) and len(args) > 0 and isinstance(args[0], int) and args[0] in user_check_ids:
-                            user_queued_count += 1
-            except Exception:
-                # Ignore tasks that can't be parsed, might be other task types
-                continue
+        if isinstance(principal, models.User):
+            owner_identifier = f"user_id_{principal.id}"
+        else:
+            owner_identifier = principal
         
-        return user_queued_count
-
+        count = r.get(f"user_stats:queued_notifications:{owner_identifier}")
+        return int(count) if count else 0
     except Exception as e:
-        logger.error(f"Could not get user queue stats: {e}", exc_info=False)
+        logger.error(f"Could not get user queued notification count: {e}", exc_info=False)
         return "N/A"
 
 
@@ -187,7 +161,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check):
         if check.last_duration_seconds is not None:
             duration_str = notifications.format_duration(check.last_duration_seconds)
             message += f" Last run took {duration_str}."
-        notifications.schedule_telegram_notification(check.id, message)
+        notifications.schedule_telegram_notification(check, message)
 
     return check
 
@@ -206,7 +180,7 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
 
     if previous_status != "down":
         message = f"🔴 Check Failed: [{check.name}] reported a failure."
-        notifications.schedule_telegram_notification(check.id, message)
+        notifications.schedule_telegram_notification(check, message)
 
     return check
 

@@ -120,7 +120,7 @@ async def test_telegram_notification_queue(
         raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
 
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
-    notifications.schedule_telegram_notification(check.id, message)
+    notifications.schedule_telegram_notification(check, message)
     return {"message": "Test notification queued."}
 
 
