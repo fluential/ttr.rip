@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 
 from app.db import base as db_base
 from app.db import models as db_models
-from app import crud, security
+from app import crud, security, schemas
 from app.core.config import settings
 
 router = APIRouter()
