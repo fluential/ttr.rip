@@ -12,9 +12,9 @@
     <input type="text" class="ping-url" value="{{ auth_key }}" readonly onclick="copyUrl(this)" style="text-align: center; font-size: 1.1rem;">
 </article>
 
-<article>
-    <header>New Check</header>
-    <form id="new-check-form">
+<details id="new-check-section">
+    <summary>New Check</summary>
+    <form id="new-check-form" style="margin-top: 1.5rem;">
         <div class="grid">
             <label for="name">
                 Name
@@ -31,7 +31,7 @@
         </label>
         <button type="submit">Create Check</button>
     </form>
-</article>
+</details>
 
 <article>
     <header>Overall Status</header>
@@ -222,6 +222,10 @@
 
     function editCheck(event, id, name, interval, grace) {
         event.stopPropagation();
+        const details = document.getElementById('new-check-section');
+        if (details) {
+            details.open = true;
+        }
         const form = document.getElementById('new-check-form');
         form.querySelector('#name').value = name;
         form.querySelector('#interval_seconds').value = interval;
@@ -229,7 +233,9 @@
         
         form.dataset.editingId = id;
 
-        form.parentElement.querySelector('header').textContent = 'Edit Check';
+        if (details) {
+            details.querySelector('summary').textContent = 'Edit Check';
+        }
         form.querySelector('button[type="submit"]').textContent = 'Update Check';
         
         let cancelButton = form.querySelector('.cancel-edit');
@@ -250,7 +256,11 @@
         form.reset();
         delete form.dataset.editingId;
 
-        form.parentElement.querySelector('header').textContent = 'New Check';
+        const details = document.getElementById('new-check-section');
+        if (details) {
+            details.querySelector('summary').textContent = 'New Check';
+            details.open = false;
+        }
         form.querySelector('button[type="submit"]').textContent = 'Create Check';
         
         const cancelButton = form.querySelector('.cancel-edit');

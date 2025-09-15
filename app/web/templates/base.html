@@ -37,12 +37,21 @@
             padding: 1rem 1.5rem;
             margin-bottom: 1.5rem;
         }
-        article > header {
+        article > header, details#new-check-section > summary {
             font-family: 'VT323', monospace;
             letter-spacing: 2px;
             text-shadow: 0 0 5px var(--hacker-green);
             font-size: 1.5rem;
             padding-bottom: 0.5rem;
+        }
+        article > header {
+            border-bottom: 1px solid var(--hacker-green);
+            margin-bottom: 1.5rem;
+        }
+        details#new-check-section > summary {
+            cursor: pointer;
+        }
+        details#new-check-section[open] > summary {
             border-bottom: 1px solid var(--hacker-green);
             margin-bottom: 1.5rem;
         }
@@ -80,6 +89,9 @@
                 <li><strong>ttl.rip</strong></li>
             </ul>
             <ul>
+                {% if request.path.startswith('/dashboard') or request.path.startswith('/admin/dashboard') %}
+                <li><a href="#new-check-section" id="new-check-link">New Check</a></li>
+                {% endif %}
                 {% if request.cookies.get("auth_token") %}
                     <li><a href="/admin/logout">Admin Logout</a></li>
                 {% elif request.cookies.get("auth_key") %}
@@ -113,6 +125,20 @@
         // Set theme on initial load
         const savedTheme = localStorage.getItem('theme') || 'dark';
         setTheme(savedTheme);
+
+        // New Check link handler
+        const newCheckLink = document.getElementById('new-check-link');
+        if (newCheckLink) {
+            newCheckLink.addEventListener('click', (e) => {
+                const newCheckSection = document.getElementById('new-check-section');
+                if (newCheckSection) {
+                    if (!newCheckSection.open) {
+                        newCheckSection.open = true;
+                    }
+                    // Default anchor behavior will scroll to the section
+                }
+            });
+        }
     </script>
 </body>
 </html>
