@@ -52,6 +52,16 @@
 <script>
     const apiToken = "{{ api_token }}";
 
+    function parseUTCDate(dateString) {
+        if (!dateString) return null;
+        // If timezone info (Z or +/-hh:mm) is missing, treat the string as UTC.
+        // This corrects for browsers interpreting naive ISO-like strings as local time.
+        if (!/Z|[+-]\d{2}:\d{2}$/.test(dateString)) {
+            return new Date(dateString.replace(' ', 'T') + 'Z');
+        }
+        return new Date(dateString);
+    }
+
     function formatTimeDifference(seconds) {
         if (isNaN(seconds)) return 'N/A';
 
@@ -91,7 +101,7 @@
 
         checks.forEach(check => {
             const row = document.createElement('tr');
-            const lastPing = check.last_ping ? new Date(check.last_ping).toLocaleString() : 'Never';
+            const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
             const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
             const owner = check.owner_key || `admin (id: ${check.owner_id})`;
             const statusIcon = {
@@ -100,7 +110,7 @@
                 'new': '🟡'
             }[check.status] || '⚪️';
 
-            const referenceTime = check.last_ping ? new Date(check.last_ping) : new Date(check.created_at);
+            const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
             const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
             const now = new Date();
             const diffSeconds = (deadline - now) / 1000;
