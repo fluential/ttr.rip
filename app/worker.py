@@ -22,6 +22,7 @@ celery_app = Celery(
 celery_app.conf.update(
     task_track_started=True,
     task_always_eager=settings.DEBUG_MODE,
+    task_default_queue='rtt_celery_queue',
 )
 
 if settings.DEBUG_MODE:

@@ -23,13 +23,14 @@ def get_queue_stats():
         import redis
         r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
         r.ping()  # Check connection
-        total_queued = r.llen('celery')
+        queue_name = celery_app.conf.get('task_default_queue', 'celery')
+        total_queued = r.llen(queue_name)
 
         inspector = celery_app.control.inspect(timeout=1)
         stats = inspector.stats()
         if not stats:
             return {
-                "broker_status": "Online (No workers found)",
+                "broker_status": "Redis (Connected, no workers)",
                 "workers_online": 0,
                 "total_queued": total_queued,
                 "total_active": "N/A",
@@ -44,7 +45,7 @@ def get_queue_stats():
         total_reserved = sum(len(tasks) for tasks in reserved.values()) if reserved else 0
 
         return {
-            "broker_status": "Online",
+            "broker_status": "Redis (Connected)",
             "workers_online": workers_online,
             "total_queued": total_queued,
             "total_active": total_active,
@@ -53,7 +54,7 @@ def get_queue_stats():
     except Exception as e:
         logger.error(f"Could not get queue stats: {e}", exc_info=False)
         return {
-            "broker_status": "Error: Connection failed",
+            "broker_status": "Redis (Connection failed)",
             "workers_online": "N/A",
             "total_queued": "N/A",
             "total_active": "N/A",
