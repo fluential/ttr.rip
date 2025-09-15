@@ -195,10 +195,8 @@ async def get_checks_by_owner(db: AsyncSession, principal: Union[models.User, st
         # Public user identified by auth key
         query = select(models.Check).filter(models.Check.owner_key == principal)
 
-    # Get total count
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar_one()
+    # Add total count to the main query using a window function
+    query = query.add_columns(func.count(models.Check.id).over().label("total_count"))
 
     # Apply sorting
     sort_column = getattr(models.Check, sort_by, models.Check.id)
@@ -211,8 +209,14 @@ async def get_checks_by_owner(db: AsyncSession, principal: Union[models.User, st
     query = query.offset((page - 1) * size).limit(size)
 
     result = await db.execute(query)
-    items = result.scalars().all()
-    
+    rows = result.all()
+
+    if not rows:
+        return [], 0
+
+    items = [row.Check for row in rows]
+    total = rows[0].total_count
+
     return items, total
 
 async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: Union[models.User, str]):
