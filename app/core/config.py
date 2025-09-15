@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./test.db"
     REDIS_URL: RedisDsn = "redis://localhost:6379/0"
     SECRET_KEY: str = "a_very_secret_key"
+    ENCRYPTION_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     DEBUG_MODE: bool = False

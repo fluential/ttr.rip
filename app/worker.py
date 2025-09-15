@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.db.base import AsyncSessionLocal
 from app.db.models import Check
 from app.core.logging_config import setup_logging
+from app.core import encryption
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -36,7 +37,18 @@ async def _send_telegram_notification(check_id: int, message: str):
             if not check or not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
                 return
 
-            url = f"https://api.telegram.org/bot{check.telegram_bot_token}/sendMessage"
+            try:
+                decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
+            except Exception:
+                error_message = "Failed to decrypt bot token. Please re-save your settings."
+                logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}) in worker: {error_message}")
+                check.telegram_last_notification_status = "error"
+                check.telegram_last_notification_message = error_message
+                check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+                await session.commit()
+                return
+
+            url = f"https://api.telegram.org/bot{decrypted_token}/sendMessage"
             payload = {
                 "chat_id": check.telegram_chat_id,
                 "text": message,

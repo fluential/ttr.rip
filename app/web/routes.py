@@ -10,6 +10,7 @@ from app.db import base as db_base
 from app.db import models as db_models
 from app import crud, security, schemas
 from app.core.config import settings
+from app.core import encryption
 
 router = APIRouter()
 admin_router = APIRouter(prefix="/admin")
@@ -112,6 +113,14 @@ async def public_integrations(
 
     auth_url = request.url_for('telegram_callback').include_query_params(check_id=check.id)
 
+    decrypted_token = ""
+    if check.telegram_bot_token:
+        try:
+            decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
+        except Exception:
+            # If decryption fails (e.g., key changed, old data), treat as empty.
+            decrypted_token = ""
+
     context = {
         "request": request,
         "check": check,
@@ -121,6 +130,7 @@ async def public_integrations(
         "telegram_auth_url": str(auth_url),
         "is_telegram_authed": is_telegram_authed,
         "debug_mode": settings.DEBUG_MODE,
+        "telegram_bot_token": decrypted_token,
     }
     return templates.TemplateResponse("integrations.html", context)
 
@@ -190,6 +200,13 @@ async def admin_integrations(
 
     auth_url = request.url_for('telegram_callback').include_query_params(check_id=check.id)
 
+    decrypted_token = ""
+    if check.telegram_bot_token:
+        try:
+            decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
+        except Exception:
+            decrypted_token = ""
+
     context = {
         "request": request,
         "check": check,
@@ -199,5 +216,6 @@ async def admin_integrations(
         "telegram_auth_url": str(auth_url),
         "is_telegram_authed": is_telegram_authed,
         "debug_mode": settings.DEBUG_MODE,
+        "telegram_bot_token": decrypted_token,
     }
     return templates.TemplateResponse("integrations.html", context)

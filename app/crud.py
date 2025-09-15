@@ -7,6 +7,7 @@ import logging
 from app.db import models
 from app import schemas, security
 from app.services import notifications
+from app.core import encryption
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,14 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
     db_check = result.scalars().first()
     if db_check:
         update_data = settings_data.model_dump(exclude_unset=True)
+        if 'telegram_bot_token' in update_data:
+            token = update_data['telegram_bot_token']
+            if token:
+                update_data['telegram_bot_token'] = encryption.encrypt_token(token)
+            else:
+                # Store None if the token is cleared
+                update_data['telegram_bot_token'] = None
+
         for key, value in update_data.items():
             setattr(db_check, key, value)
         await db.commit()

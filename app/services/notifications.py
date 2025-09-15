@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Check
 from app.worker import send_telegram_notification_task
 from app.core.config import settings
+from app.core import encryption
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,17 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
         return
 
-    url = f"https://api.telegram.org/bot{check.telegram_bot_token}/sendMessage"
+    try:
+        decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
+    except Exception:
+        error_message = "Failed to decrypt bot token. Please re-save your settings."
+        logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
+        check.telegram_last_notification_status = "error"
+        check.telegram_last_notification_message = error_message
+        check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+        return
+
+    url = f"https://api.telegram.org/bot{decrypted_token}/sendMessage"
     payload = {
         "chat_id": check.telegram_chat_id,
         "text": message,
