@@ -31,7 +31,7 @@ async def check_jobs():
                             if check.status != "down":
                                 print(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
                                 check.status = "down"
-                                message = f"🔴 Check Down: [{check.name}] is overdue."
+                                message = f"[{check.name}] Down"
                                 await notifications.send_telegram_notification(check, message)
                 
                 await session.commit()
