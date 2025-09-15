@@ -50,7 +50,7 @@
                 <tr>
                     <th scope="col">Status</th>
                     <th scope="col">Name</th>
-                    <th scope="col">Ping URLs</th>
+                    <th scope="col">Ping URL</th>
                     <th scope="col">Last Ping</th>
                     <th scope="col">Last Duration</th>
                     <th scope="col">Expires in</th>
@@ -147,17 +147,6 @@
             const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
             const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
 
-            const pingUrlsHtml = `
-                <details role="list" style="margin-bottom: 0;">
-                    <summary aria-haspopup="listbox" style="padding: 0.25rem 0.5rem; margin-bottom: 0;">URLs</summary>
-                    <ul role="listbox" style="margin: 0; padding: 0.5rem; background-color: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color); border-radius: var(--pico-border-radius);">
-                        <li><small>Success:</small><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer; height: 2rem; margin-bottom: 0.25rem;"></li>
-                        <li><small>Start:</small><input type="text" value="${pingUrl}/start" readonly onclick="this.select()" style="cursor: pointer; height: 2rem; margin-bottom: 0.25rem;"></li>
-                        <li><small>Fail:</small><input type="text" value="${pingUrl}/fail" readonly onclick="this.select()" style="cursor: pointer; height: 2rem; margin-bottom: 0;"></li>
-                    </ul>
-                </details>
-            `;
-
             const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
             const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
             const now = new Date();
@@ -185,7 +174,7 @@
             row.innerHTML = `
                 <td><span class="status-${currentStatus}" title="${currentStatus.toUpperCase()}">${statusIcon} ${currentStatus.toUpperCase()}</span></td>
                 <td>${check.name}</td>
-                <td>${pingUrlsHtml}</td>
+                <td><input type="text" value="${pingUrl}" readonly onclick="this.select()" style="cursor: pointer;"></td>
                 <td>${lastPing}</td>
                 <td>${lastDuration}</td>
                 <td>${expiresIn}</td>
