@@ -1,4 +1,6 @@
 import uuid
+import json
+import base64
 from datetime import datetime, timezone, timedelta
 from typing import Union
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,8 @@ from app.db import models
 from app import schemas, security
 from app.services import notifications
 from app.core import encryption
+from app.worker import celery_app
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,51 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
 async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
     result = await db.execute(select(models.Check).filter(models.Check.uuid == check_uuid))
     return result.scalars().first()
+
+async def get_user_queued_notification_count(db: AsyncSession, principal: Union[models.User, str]) -> Union[int, str]:
+    if settings.DEBUG_MODE:
+        return 0
+
+    if isinstance(principal, models.User):
+        query = select(models.Check.id).filter(models.Check.owner_id == principal.id)
+    else:
+        query = select(models.Check.id).filter(models.Check.owner_key == principal)
+    
+    result = await db.execute(query)
+    user_check_ids = {row[0] for row in result}
+
+    if not user_check_ids:
+        return 0
+
+    try:
+        import redis
+        r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
+        r.ping()
+        queue_name = celery_app.conf.get('task_default_queue', 'celery')
+        
+        user_queued_count = 0
+        tasks = r.lrange(queue_name, 0, -1)
+        for task_json in tasks:
+            try:
+                task_data = json.loads(task_json)
+                body_b64 = task_data.get('body')
+                if body_b64:
+                    body_json = base64.b64decode(body_b64).decode('utf-8')
+                    body = json.loads(body_json)
+                    # Celery task body has 'args' which is a list
+                    args = body.get('args', [])
+                    if args and isinstance(args[0], int) and args[0] in user_check_ids:
+                        user_queued_count += 1
+            except Exception:
+                # Ignore tasks that can't be parsed, might be other task types
+                continue
+        
+        return user_queued_count
+
+    except Exception as e:
+        logger.error(f"Could not get user queue stats: {e}", exc_info=False)
+        return "N/A"
+
 
 async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: Union[models.User, str]):
     query = select(models.Check).filter(models.Check.id == check_id)
@@ -66,6 +115,8 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.Use
 
     result = await db.execute(stats_query)
     stats = result.first()
+
+    user_queued_notifications = await get_user_queued_notification_count(db, principal)
     
     if stats and stats.total_checks > 0:
         return schemas.CheckStats(
@@ -74,14 +125,16 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.Use
             down_count=stats.down_count or 0,
             new_count=stats.new_count or 0,
             avg_interval_seconds=stats.avg_interval_seconds,
-            avg_duration_seconds=stats.avg_duration_seconds
+            avg_duration_seconds=stats.avg_duration_seconds,
+            user_queued_notifications=user_queued_notifications
         )
     else:
         return schemas.CheckStats(
             total_checks=0,
             up_count=0,
             down_count=0,
-            new_count=0
+            new_count=0,
+            user_queued_notifications=user_queued_notifications
         )
 
 

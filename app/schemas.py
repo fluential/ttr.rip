@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime
 import uuid
 
@@ -72,6 +72,7 @@ class CheckStats(BaseModel):
     new_count: int
     avg_interval_seconds: Optional[float] = None
     avg_duration_seconds: Optional[float] = None
+    user_queued_notifications: Union[int, str] = 0
 
 
 # Telegram Schemas
