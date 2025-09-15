@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import asyncio
+import logging
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,16 +11,20 @@ from app.api.v1.routes import api_router
 from app.web.routes import router as web_router, admin_router
 from app.services import scheduler
 from app import crud
+from app.core.logging_config import setup_logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting up...")
+    logger.info("Starting up...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
     yield
     
-    print("Shutting down...")
+    logger.info("Shutting down...")
 
 
 app = FastAPI(lifespan=lifespan, title="ttl.rip")

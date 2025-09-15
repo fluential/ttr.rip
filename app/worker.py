@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from celery import Celery
 from sqlalchemy.future import select
 import httpx
@@ -7,6 +8,10 @@ from datetime import datetime, timezone
 from app.core.config import settings
 from app.db.base import AsyncSessionLocal
 from app.db.models import Check
+from app.core.logging_config import setup_logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 celery_app = Celery(
     "worker",
@@ -19,7 +24,7 @@ celery_app.conf.update(
 )
 
 if settings.DEBUG_MODE:
-    print("DEBUG_MODE is on. Celery will run tasks eagerly without a broker.")
+    logger.info("DEBUG_MODE is on. Celery will run tasks eagerly without a broker.")
 
 async def _send_telegram_notification(check_id: int, message: str):
     """The core async logic for sending a notification and updating the DB."""
@@ -42,17 +47,17 @@ async def _send_telegram_notification(check_id: int, message: str):
                 try:
                     response = await client.post(url, json=payload)
                     response.raise_for_status()
-                    print(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id})")
+                    logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id})")
                     check.telegram_last_notification_status = "ok"
                     check.telegram_last_notification_message = "Successfully sent."
                 except httpx.HTTPStatusError as e:
                     error_message = f"Error: {e.response.status_code} {e.response.text}"
-                    print(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
+                    logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
                     check.telegram_last_notification_status = "error"
                     check.telegram_last_notification_message = error_message
                 except Exception as e:
                     error_message = f"An unexpected error occurred: {e}"
-                    print(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}")
+                    logger.error(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}", exc_info=True)
                     check.telegram_last_notification_status = "error"
                     check.telegram_last_notification_message = error_message
             

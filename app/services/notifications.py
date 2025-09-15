@@ -1,8 +1,11 @@
 import httpx
+import logging
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Check
 from app.worker import send_telegram_notification_task
+
+logger = logging.getLogger(__name__)
 
 def format_duration(seconds: int) -> str:
     """Formats seconds into a human-readable string like '1m 30s'."""
@@ -32,17 +35,17 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
         try:
             response = await client.post(url, json=payload)
             response.raise_for_status()
-            print(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id})")
+            logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id})")
             check.telegram_last_notification_status = "ok"
             check.telegram_last_notification_message = "Successfully sent."
         except httpx.HTTPStatusError as e:
             error_message = f"Error: {e.response.status_code} {e.response.text}"
-            print(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
+            logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
             check.telegram_last_notification_status = "error"
             check.telegram_last_notification_message = error_message
         except Exception as e:
             error_message = f"An unexpected error occurred: {e}"
-            print(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}")
+            logger.error(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}", exc_info=True)
             check.telegram_last_notification_status = "error"
             check.telegram_last_notification_message = error_message
     

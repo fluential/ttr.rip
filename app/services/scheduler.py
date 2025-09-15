@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.future import select
 from app.db.base import AsyncSessionLocal
@@ -6,8 +7,10 @@ from app.db.models import Check
 from app.services import notifications
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 async def check_jobs():
-    print(f"Scheduler started. Checking for overdue jobs every {settings.SCHEDULER_INTERVAL_SECONDS} seconds.")
+    logger.info(f"Scheduler started. Checking for overdue jobs every {settings.SCHEDULER_INTERVAL_SECONDS} seconds.")
     while True:
         await asyncio.sleep(settings.SCHEDULER_INTERVAL_SECONDS)
         now = datetime.now(timezone.utc)
@@ -30,7 +33,7 @@ async def check_jobs():
                         deadline = reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
                         if now > deadline:
                             if check.status != "down":
-                                print(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
+                                logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
                                 check.status = "down"
                                 message = f"🔴 Check Down: [{check.name}] is overdue."
                                 notifications.schedule_telegram_notification(check.id, message)
