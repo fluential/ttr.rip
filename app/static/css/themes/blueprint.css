@@ -51,6 +51,13 @@ article {
     padding: 1.5rem 1rem;
 }
 
+#checks-table thead th {
+    font-family: 'Special Elite', cursive;
+    font-size: 1.2rem;
+    letter-spacing: 1px;
+    color: var(--h1-color);
+}
+
 /* Navigation Bar */
 nav {
     background: var(--card-background-color);

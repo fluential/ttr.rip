@@ -70,6 +70,12 @@ article {
     padding: 1.5rem 1rem;
 }
 
+#checks-table thead th {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--h1-color);
+}
+
 /* Navigation Bar */
 nav {
     background: var(--card-background-color);
