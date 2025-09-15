@@ -105,7 +105,7 @@ async def public_integrations(
     if not check:
         return RedirectResponse(url=f"/dashboard/{auth_key}", status_code=status.HTTP_302_FOUND)
 
-    is_telegram_authed = settings.DEBUG_MODE or bool(
+    is_telegram_authed = not settings.TELEGRAM_AUTH_ENABLED or bool(
         telegram_session
         and telegram_session.get("check_id") == check_id
         and telegram_session.get("telegram_user_id")
@@ -129,7 +129,7 @@ async def public_integrations(
         "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
         "telegram_auth_url": str(auth_url),
         "is_telegram_authed": is_telegram_authed,
-        "debug_mode": settings.DEBUG_MODE,
+        "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
     }
     return templates.TemplateResponse("integrations.html", context)
@@ -192,7 +192,7 @@ async def admin_integrations(
     if not check:
         return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
 
-    is_telegram_authed = settings.DEBUG_MODE or bool(
+    is_telegram_authed = not settings.TELEGRAM_AUTH_ENABLED or bool(
         telegram_session
         and telegram_session.get("check_id") == check_id
         and telegram_session.get("telegram_user_id")
@@ -215,7 +215,7 @@ async def admin_integrations(
         "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
         "telegram_auth_url": str(auth_url),
         "is_telegram_authed": is_telegram_authed,
-        "debug_mode": settings.DEBUG_MODE,
+        "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
     }
     return templates.TemplateResponse("integrations.html", context)

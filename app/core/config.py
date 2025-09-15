@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # For "Login with Telegram" feature
     TELEGRAM_BOT_NAME: str = ""
     TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_AUTH_ENABLED: bool = False
 
     model_config = SettingsConfigDict(env_file=".env")
 

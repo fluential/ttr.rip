@@ -36,9 +36,9 @@
         </div>
     </details>
     <hr>
-    {% if debug_mode %}
+    {% if not telegram_auth_enabled %}
     <p>
-        <strong>DEBUG MODE ENABLED:</strong> Telegram login is bypassed. You can directly enter your bot token and chat ID.
+        <strong>TELEGRAM AUTH DISABLED:</strong> Telegram login is bypassed. You can directly enter your bot token and chat ID.
     </p>
     {% else %}
     <p>
