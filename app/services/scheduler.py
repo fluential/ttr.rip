@@ -18,9 +18,9 @@ async def check_jobs():
                 checks_to_verify = result.scalars().all()
 
                 for check in checks_to_verify:
-                    # For 'up' checks, the reference time is the last ping.
-                    # For 'new' checks, it's the creation time.
-                    reference_time = check.last_ping if check.status == "up" else check.created_at
+                    # The reference time for the deadline is the last ping if it exists,
+                    # otherwise it's the time the check was created.
+                    reference_time = check.last_ping if check.last_ping else check.created_at
                     
                     if reference_time:
                         deadline = reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
