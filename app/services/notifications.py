@@ -1,6 +1,19 @@
 import httpx
 from app.db.models import Check
 
+def format_duration(seconds: int) -> str:
+    """Formats seconds into a human-readable string like '1m 30s'."""
+    if seconds < 0:
+        return "N/A"
+    if seconds < 60:
+        return f"{seconds}s"
+    
+    minutes = seconds // 60
+    secs = seconds % 60
+    
+    return f"{minutes}m {secs}s"
+
+
 async def send_telegram_notification(check: Check, message: str):
     """Sends a notification to the configured Telegram chat."""
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
