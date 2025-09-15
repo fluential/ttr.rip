@@ -43,6 +43,13 @@
 </article>
 
 <article>
+    <header>User Stats</header>
+    <div id="user-stats-summary">
+        <p>Loading user stats...</p>
+    </div>
+</article>
+
+<article>
     <header>Current Checks</header>
     <figure>
         <table role="grid" id="checks-table">
@@ -162,13 +169,41 @@
         if (seconds < 0) return 'N/A';
 
         if (seconds < 60) {
-            return `${seconds}s`;
+            return `${Math.round(seconds)}s`;
         }
 
         const minutes = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
+        const secs = Math.round(seconds % 60);
 
         return `${minutes}m ${secs}s`;
+    }
+
+    async function fetchUserStats() {
+        try {
+            const response = await fetch('/api/v1/checks/stats', {
+                headers: { 'X-Auth-Key': authKey }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch user stats');
+            }
+            const stats = await response.json();
+            const summaryDiv = document.getElementById('user-stats-summary');
+
+            const avgInterval = stats.avg_interval_seconds ? formatTimeDifference(stats.avg_interval_seconds).replace('in ', '') : 'N/A';
+            const avgDuration = stats.avg_duration_seconds ? formatDuration(stats.avg_duration_seconds) : 'N/A';
+
+            summaryDiv.innerHTML = `
+                <div class="grid">
+                    <div><strong>Total Checks:</strong> ${stats.total_checks}</div>
+                    <div><strong>Avg. Interval:</strong> ${avgInterval}</div>
+                    <div><strong>Avg. Duration:</strong> ${avgDuration}</div>
+                </div>
+            `;
+        } catch (error) {
+            console.error("Error fetching user stats:", error);
+            const summaryDiv = document.getElementById('user-stats-summary');
+            summaryDiv.innerHTML = `<p style="color: var(--pico-color-red-500);">Could not load user stats.</p>`;
+        }
     }
 
     async function fetchChecks() {
@@ -383,7 +418,9 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchChecks();
+        fetchUserStats();
         setInterval(fetchChecks, 5000);
+        setInterval(fetchUserStats, 10000);
         document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
 
         // Pagination listeners

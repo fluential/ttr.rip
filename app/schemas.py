@@ -65,6 +65,15 @@ class CheckPage(BaseModel):
     pages: int
 
 
+class CheckStats(BaseModel):
+    total_checks: int
+    up_count: int
+    down_count: int
+    new_count: int
+    avg_interval_seconds: Optional[float] = None
+    avg_duration_seconds: Optional[float] = None
+
+
 # Telegram Schemas
 class TelegramSettings(BaseModel):
     telegram_bot_token: Optional[str] = None

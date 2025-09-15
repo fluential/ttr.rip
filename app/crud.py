@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, case
 import logging
 from app.db import models
 from app import schemas, security
@@ -44,6 +44,46 @@ async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: 
 
     result = await db.execute(query)
     return result.scalars().first()
+
+async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.User, str]):
+    # Base query for the user's checks
+    if isinstance(principal, models.User) and principal.is_admin:
+        # Admin stats would be for all checks
+        query = select(models.Check)
+    elif isinstance(principal, models.User):
+        query = select(models.Check).filter(models.Check.owner_id == principal.id)
+    else:
+        query = select(models.Check).filter(models.Check.owner_key == principal)
+
+    stats_query = select(
+        func.count(models.Check.id).label("total_checks"),
+        func.sum(case((models.Check.status == 'up', 1), else_=0)).label("up_count"),
+        func.sum(case((models.Check.status == 'down', 1), else_=0)).label("down_count"),
+        func.sum(case((models.Check.status == 'new', 1), else_=0)).label("new_count"),
+        func.avg(models.Check.interval_seconds).label("avg_interval_seconds"),
+        func.avg(models.Check.last_duration_seconds).label("avg_duration_seconds")
+    ).select_from(query.subquery())
+
+    result = await db.execute(stats_query)
+    stats = result.first()
+    
+    if stats and stats.total_checks > 0:
+        return schemas.CheckStats(
+            total_checks=stats.total_checks,
+            up_count=stats.up_count or 0,
+            down_count=stats.down_count or 0,
+            new_count=stats.new_count or 0,
+            avg_interval_seconds=stats.avg_interval_seconds,
+            avg_duration_seconds=stats.avg_duration_seconds
+        )
+    else:
+        return schemas.CheckStats(
+            total_checks=0,
+            up_count=0,
+            down_count=0,
+            new_count=0
+        )
+
 
 async def update_check_ping(db: AsyncSession, check: models.Check):
     now = datetime.now(timezone.utc)

@@ -10,6 +10,14 @@ from app.db import models as db_models
 
 router = APIRouter()
 
+@router.get("/stats", response_model=schemas.CheckStats)
+async def read_check_stats(
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+):
+    return await crud.get_check_stats_by_owner(db=db, principal=principal)
+
+
 @router.get("", response_model=schemas.CheckPage)
 async def read_checks(
     db: AsyncSession = Depends(db_base.get_db),
