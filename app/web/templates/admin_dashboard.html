@@ -177,8 +177,8 @@
                 <td>${expiresIn}</td>
                 <td>
                     <div class="grid" style="margin-bottom: 0; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                        <button class="outline" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">Edit</button>
-                        <button class="secondary outline" onclick="deleteCheck(${check.id})">Delete</button>
+                        <button class="outline" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">✏️</button>
+                        <button class="secondary outline" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
                     </div>
                 </td>
             `;
