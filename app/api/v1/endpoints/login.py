@@ -56,8 +56,8 @@ async def rotate_api_key(
         try:
             r = get_redis_connection()
             if r:
-                # Blacklist for 10 minutes (600 seconds)
-                r.set(f"blacklist:auth_key:{old_key}", "1", ex=600)
+                # Blacklist for 24 hours (86400 seconds)
+                r.set(f"blacklist:auth_key:{old_key}", "1", ex=86400)
                 logger.info(f"Blacklisted old auth key for user {user.id}: ...{old_key[-4:]}")
         except Exception as e:
             logger.error(f"Failed to blacklist old auth key for user {user.id}: {e}")

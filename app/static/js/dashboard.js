@@ -61,7 +61,8 @@ async function rotateApiKey() {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to rotate key');
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to rotate key');
         }
         
         const data = await response.json();
@@ -69,27 +70,34 @@ async function rotateApiKey() {
         
         // Immediately update the in-memory authKey for subsequent requests
         authKey = newKey;
+        window.AUTH_KEY = newKey; // Also update the global reference if needed elsewhere
         
         // Update cookie
         document.cookie = `auth_key=${newKey}; path=/; max-age=${365*24*60*60}; samesite=Lax`;
         
-        messageDiv.textContent = 'Your access key has been rotated successfully. The page will refresh in 3 seconds...';
+        messageDiv.textContent = 'Your access key has been rotated successfully. Your dashboard has been updated.';
         messageDiv.style.color = 'var(--pico-color-green-500)';
         
-        // Update display
+        // Update display and copy functionality
         const authKeyDisplay = document.getElementById('auth-key-display');
         authKeyDisplay.value = getMaskedAuthKey(newKey);
+        authKeyDisplay.setAttribute('onclick', `copyAuthKey(this, '${newKey}')`);
         
-        // Reload after delay to use new key for a full page context
+        // Refresh the dashboard data with the new key
+        await fetchChecks();
+        await fetchUserStats();
+
+        // Hide the message after a few seconds
         setTimeout(() => {
-            window.location.reload();
-        }, 3000);
+            messageDiv.style.display = 'none';
+        }, 5000);
+
     } catch (error) {
         console.error('Error rotating key:', error);
-        messageDiv.textContent = 'Failed to rotate access key. Please try again.';
+        messageDiv.textContent = `Failed to rotate access key: ${error.message}. Please try again.`;
         messageDiv.style.color = 'var(--pico-color-red-500)';
-        rotateBtn.disabled = false;
     } finally {
+        rotateBtn.disabled = false;
         rotateBtn.removeAttribute('aria-busy');
     }
 }
@@ -253,6 +261,14 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     const response = await fetch(url, {
         headers: { 'X-Auth-Key': authKey }
     });
+
+    if (response.status === 401) {
+        const tableBody = document.querySelector('#checks-table tbody');
+        tableBody.innerHTML = '<tr><td colspan="7" style="color: var(--pico-color-red-500);">Authentication failed. Your key may be invalid or expired. Please log in again.</td></tr>';
+        stopAutoRefreshTimer();
+        return;
+    }
+
     const data = await response.json();
     const checks = data.items;
     const tableBody = document.querySelector('#checks-table tbody');
