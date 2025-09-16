@@ -71,27 +71,24 @@
             </tbody>
         </table>
     </figure>
-    <div class="pagination-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-        <nav id="pagination-controls" aria-label="pagination">
-            <ul>
-                <li><button id="prev-page" class="secondary outline" disabled>Previous</button></li>
-            </ul>
-            <ul>
-                <li><button id="next-page" class="secondary outline" disabled>Next</button></li>
-            </ul>
-        </nav>
-        <div class="page-size-container">
-            <label for="page-size" style="display: inline-block; margin-bottom: 0; margin-right: 0.5rem;">
-                Checks per page:
-            </label>
-            <select id="page-size" style="width: auto; display: inline-block; margin-bottom: 0;">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-            </select>
-        </div>
-    </div>
+    <nav id="pagination-controls" aria-label="pagination" style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+        <ul>
+            <li><button id="prev-page" class="secondary outline" disabled>Previous</button></li>
+        </ul>
+        <ul>
+            <li>
+                <select id="page-size" style="width: auto; display: inline-block; margin-bottom: 0;">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </li>
+        </ul>
+        <ul>
+            <li><button id="next-page" class="secondary outline" disabled>Next</button></li>
+        </ul>
+    </nav>
 </article>
 
 <script>
@@ -595,6 +592,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        width: 100%;
     }
     #pagination-controls ul {
         margin-bottom: 0;
@@ -609,13 +607,6 @@
     }
     .refresh-buttons-container {
         display: inline-flex;
-        align-items: center;
-    }
-    .pagination-container {
-        margin-top: 1rem;
-    }
-    .page-size-container {
-        display: flex;
         align-items: center;
     }
 </style>
