@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 import secrets
@@ -35,6 +35,7 @@ async def login_for_access_token(
 
 @router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
 async def rotate_api_key(
+    response: Response,
     user: db_models.User = Depends(security.get_public_user_from_key),
     db: AsyncSession = Depends(db_base.get_db)
 ):
@@ -62,5 +63,14 @@ async def rotate_api_key(
         except Exception as e:
             logger.error(f"Failed to blacklist old auth key for user {user.id}: {e}")
             # This is not a fatal error for the rotation itself, but should be logged.
+
+    # Set the new key in an HttpOnly cookie on the response
+    response.set_cookie(
+        key="auth_key",
+        value=user.auth_key,
+        httponly=True,
+        max_age=365 * 24 * 60 * 60,  # 1 year
+        samesite="Lax"
+    )
 
     return {"auth_key": user.auth_key}
