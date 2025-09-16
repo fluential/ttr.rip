@@ -1,4 +1,4 @@
-const authKey = window.AUTH_KEY;
+let authKey = window.AUTH_KEY;
 let currentSortBy = 'id';
 let currentSortDir = 'desc';
 let pageSize = 25;
@@ -67,7 +67,10 @@ async function rotateApiKey() {
         const data = await response.json();
         const newKey = data.auth_key;
         
-        // Update cookie and reload
+        // Immediately update the in-memory authKey for subsequent requests
+        authKey = newKey;
+        
+        // Update cookie
         document.cookie = `auth_key=${newKey}; path=/; max-age=${365*24*60*60}; samesite=Lax`;
         
         messageDiv.textContent = 'Your access key has been rotated successfully. The page will refresh in 3 seconds...';
@@ -77,7 +80,7 @@ async function rotateApiKey() {
         const authKeyDisplay = document.getElementById('auth-key-display');
         authKeyDisplay.value = getMaskedAuthKey(newKey);
         
-        // Reload after delay to use new key
+        // Reload after delay to use new key for a full page context
         setTimeout(() => {
             window.location.reload();
         }, 3000);
