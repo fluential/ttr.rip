@@ -92,6 +92,15 @@ document.addEventListener('DOMContentLoaded', () => {
             elem.title = date.toLocaleString();
         }
     });
+
+    // Add client load time to footer
+    const loadTime = performance.now() - window.pageLoadStartTime;
+    const clientTimeElem = document.getElementById('client-load-time');
+    const clientTimeContainer = document.getElementById('client-load-time-container');
+    if (clientTimeElem && clientTimeContainer) {
+        clientTimeElem.textContent = (loadTime / 1000).toFixed(3);
+        clientTimeContainer.style.display = 'inline';
+    }
 });
 </script>
 
