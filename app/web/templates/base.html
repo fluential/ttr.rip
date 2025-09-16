@@ -25,6 +25,18 @@
                 {% if request.path.startswith('/dashboard') or request.path.startswith('/admin/dashboard') %}
                 <li><a href="#new-check-section" id="new-check-link">New Check</a></li>
                 {% endif %}
+                {% if status_pages is defined and status_pages %}
+                <li>
+                    <details role="list" dir="rtl">
+                        <summary aria-haspopup="listbox" role="button">Status Pages</summary>
+                        <ul role="listbox">
+                            {% for page in status_pages %}
+                            <li><a href="/s/{{ page.slug }}" target="_blank">{{ page.name }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                </li>
+                {% endif %}
                 {% if request.cookies.get("auth_token") %}
                     <li><a href="/admin/logout">Admin Logout</a></li>
                 {% elif request.cookies.get("auth_key") %}

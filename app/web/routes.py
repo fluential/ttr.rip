@@ -66,6 +66,11 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
+    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    status_pages = []
+    if user and user.id:
+        status_pages = await crud.get_status_pages_by_owner(db, principal=user)
+
     logger.info(f"Dashboard loading. TELEGRAM_AUTH_ENABLED: {settings.TELEGRAM_AUTH_ENABLED}, TELEGRAM_BOT_NAME: '{settings.TELEGRAM_BOT_NAME}'")
 
     csrf_token = security.generate_csrf_token()
@@ -75,6 +80,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
         "request": request,
         "auth_key": auth_key,
         "csrf_token": csrf_token,
+        "status_pages": status_pages,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
@@ -181,12 +187,14 @@ async def public_integrations(
     # We only need to know if a token exists, not what it is
     has_token = bool(check.telegram_bot_token)
     csrf_token = security.generate_csrf_token()
+    status_pages = await crud.get_status_pages_by_owner(db, principal=user)
 
     context = {
         "request": request,
         "check": check,
         "auth_key": user.auth_key,
         "csrf_token": csrf_token,
+        "status_pages": status_pages,
         "is_admin": False,
         "telegram_bot_token": "",  # Always empty for security
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
@@ -269,16 +277,18 @@ async def logout():
     return response
 
 @admin_router.get("/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, admin_user: db_models.User = Depends(security.get_current_admin_user)):
+async def admin_dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db), admin_user: db_models.User = Depends(security.get_current_admin_user)):
     token = request.cookies.get("auth_token")
     if not token:
         return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
     
+    status_pages = await crud.get_status_pages_by_owner(db=db, principal=admin_user)
     csrf_token = security.generate_csrf_token()
     context = {
         "request": request,
         "api_token": token,
         "csrf_token": csrf_token,
+        "status_pages": status_pages,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
@@ -309,12 +319,14 @@ async def admin_integrations(
     # We only need to know if a token exists, not what it is
     has_token = bool(check.telegram_bot_token)
     csrf_token = security.generate_csrf_token()
+    status_pages = await crud.get_status_pages_by_owner(db=db, principal=admin_user)
 
     context = {
         "request": request,
         "check": check,
         "api_token": token,
         "csrf_token": csrf_token,
+        "status_pages": status_pages,
         "is_admin": True,
         "telegram_bot_token": "",  # Always empty for security
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
