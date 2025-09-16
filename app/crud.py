@@ -74,7 +74,12 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
     return db_user
 
 async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key: str):
-    """Update a user's auth key and re-encrypt any tokens"""
+    """
+    Update a user's auth key. This requires re-encrypting all of the user's secrets
+    (like Telegram tokens) because their encryption is tied to the auth_key.
+    """
+    old_auth_key = user.auth_key
+
     # First get all checks owned by this user that have telegram bot tokens
     result = await db.execute(
         select(models.Check)
@@ -83,21 +88,23 @@ async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key
     )
     checks_with_tokens = result.scalars().all()
     
-    # For each check, decrypt the token and re-encrypt it with the new key
+    logger.info(f"Re-encrypting {len(checks_with_tokens)} tokens for user {user.id} due to auth_key rotation.")
+
+    # For each check, decrypt the token with the old key and re-encrypt it with the new key
     for check in checks_with_tokens:
         try:
-            # Decrypt the token using old key
-            decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
-            # Re-encrypt with new key
-            check.telegram_bot_token = encryption.encrypt_token(decrypted_token)
+            # Decrypt the token using OLD auth key
+            decrypted_token = encryption.decrypt_token(check.telegram_bot_token, old_auth_key)
+            # Re-encrypt with NEW auth key
+            check.telegram_bot_token = encryption.encrypt_token(decrypted_token, new_auth_key)
         except Exception as e:
-            logger.error(f"Failed to re-encrypt token for check {check.id}: {e}")
+            logger.error(f"Failed to re-encrypt token for check {check.id} during auth_key rotation: {e}. This may cause notification failures for this check.")
             # Continue with other checks even if one fails
     
     # Update the user's auth key
     user.auth_key = new_auth_key
     
-    # Commit all changes
+    # Commit all changes (user key and re-encrypted tokens)
     await db.commit()
     await db.refresh(user)
     return user
@@ -427,7 +434,7 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
         if 'telegram_bot_token' in update_data:
             token = update_data.pop('telegram_bot_token') # Remove from dict
             if token: # Only update if a new token is provided
-                db_check.telegram_bot_token = encryption.encrypt_token(token)
+                db_check.telegram_bot_token = encryption.encrypt_token(token, principal.auth_key)
 
         for key, value in update_data.items():
             setattr(db_check, key, value)

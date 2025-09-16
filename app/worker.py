@@ -2,6 +2,7 @@ import asyncio
 import logging
 from celery import Celery
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 import httpx
 from datetime import datetime, timezone
 
@@ -45,10 +46,16 @@ async def _send_telegram_notification(check_id: int, message: str):
     owner_identifier_for_stats = None
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            result = await session.execute(select(Check).filter(Check.id == check_id))
+            # Eagerly load the owner to get access to the auth_key for decryption
+            result = await session.execute(
+                select(Check)
+                .options(selectinload(Check.owner))
+                .filter(Check.id == check_id)
+            )
             check = result.scalars().first()
 
             if not check:
+                logger.warning(f"Could not find check ID {check_id} for sending notification.")
                 return
 
             owner_identifier_for_stats = f"user_id_{check.owner_id}"

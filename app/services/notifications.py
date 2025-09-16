@@ -32,8 +32,12 @@ async def _execute_telegram_send(check: Check, message: str):
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
         return
 
+    if not check.owner or not check.owner.auth_key:
+        logger.error(f"Cannot send notification for check {check.id}: owner or owner auth_key not loaded.")
+        return
+
     try:
-        decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
+        decrypted_token = encryption.decrypt_token(check.telegram_bot_token, check.owner.auth_key)
     except Exception:
         error_message = "Failed to decrypt bot token. Please re-save your settings."
         logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
