@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Base
+from app.db import models as db_models
 from app.db.base import engine, get_db
 from app.api.v1.routes import api_router
 from app.web.routes import router as web_router, admin_router
