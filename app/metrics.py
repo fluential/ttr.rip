@@ -24,7 +24,7 @@ def initialize_metrics(app_version: str):
     
     # Initialize status-based metrics
     for status in ["up", "down", "new"]:
-        CHECKS_TOTAL.labels(status=status)
+        CHECKS_TOTAL.labels(status=status).set(0) # Initialize to 0
 
     # Initialize notification metrics
     for status in ["success", "error"]:
@@ -77,3 +77,15 @@ class DBQueryTimer:
 def get_metrics():
     """Get metrics in Prometheus format"""
     return prometheus_client.generate_latest()
+
+async def initialize_check_counts(session):
+    """Initialize check counts from the database at startup."""
+    from sqlalchemy import text
+    result = await session.execute(text("""
+        SELECT status, COUNT(*) as count 
+        FROM checks 
+        GROUP BY status
+    """))
+    counts = {row[0]: row[1] for row in result}
+    for status in ["up", "down", "new"]:
+        CHECKS_TOTAL.labels(status=status).set(counts.get(status, 0))

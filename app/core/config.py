@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     CLEANUP_INTERVAL_HOURS: int = 24
     
     # Auto-start Celery worker
-    AUTO_START_WORKER: bool = True
+    AUTO_START_EMBEDDED_WORKER: bool = False
     WORKER_CONCURRENCY: int = 50
 
     model_config = SettingsConfigDict(env_file=".env")

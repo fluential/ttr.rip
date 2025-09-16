@@ -44,6 +44,30 @@ services:
       - db
       - redis
 
+  worker:
+    build: .
+    container_name: ttl_rip_worker
+    command: celery -A app.worker.celery_app worker --loglevel=info --pool=threads -c 50
+    volumes:
+      - ./app:/app/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+
+  beat:
+    build: .
+    container_name: ttl_rip_beat
+    command: python beat_runner.py
+    volumes:
+      - ./app:/app/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+
 volumes:
   postgres_data:
   redis_data:

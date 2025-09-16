@@ -45,6 +45,7 @@ class Check(Base):
     interval_seconds: int = Column(Integer)
     grace_seconds: int = Column(Integer)
     last_ping: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    deadline: Optional[datetime] = Column(DateTime(timezone=True), nullable=True, index=True)
     last_start: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     last_duration_seconds: Optional[int] = Column(Integer, nullable=True)
     telegram_bot_token: Optional[str] = Column(String, nullable=True)

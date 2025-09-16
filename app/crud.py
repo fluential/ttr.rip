@@ -18,6 +18,30 @@ from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
+def _calculate_deadline(check: models.Check) -> Optional[datetime]:
+    """Calculates the deadline for a check."""
+    if not check.last_ping and not check.created_at:
+        return None
+    
+    reference_time = check.last_ping or check.created_at
+    if reference_time.tzinfo is None:
+        reference_time = reference_time.replace(tzinfo=timezone.utc)
+        
+    return reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
+
+async def _invalidate_user_stats_cache(user_id: int):
+    """Invalidates the user stats cache in Redis."""
+    if not settings.DEBUG_MODE and settings.REDIS_URL:
+        try:
+            r = get_redis_connection()
+            if r:
+                cache_key = f"user_stats:dashboard:{user_id}"
+                r.delete(cache_key)
+                logger.debug(f"Invalidated cache for user stats: {user_id}")
+        except Exception as e:
+            logger.error(f"Could not invalidate Redis cache for stats: {e}")
+
+
 def _encode_cursor(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -221,7 +245,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             r = get_redis_connection()
             if r:
                 cache_key = f"user_stats:dashboard:{principal.id}"
-                r.set(cache_key, stats_obj.model_dump_json(), ex=settings.STATS_CACHE_TTL_SECONDS)
+                r.set(cache_key, stats_obj.model_dump_json()) # No TTL, rely on invalidation
                 logger.debug(f"Cache set for user stats: {principal.id}")
         except Exception as e:
             logger.error(f"Could not write to Redis cache for stats: {e}")
@@ -251,8 +275,10 @@ async def update_check_ping(db: AsyncSession, check: models.Check):
     check.last_ping = now
     check.status = "up"
     check.last_start = None
+    check.deadline = _calculate_deadline(check)
     await db.commit()
     await db.refresh(check)
+    await _invalidate_user_stats_cache(check.owner_id)
 
     if previous_status == "down":
         logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
@@ -276,6 +302,7 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
     check.last_start = None
     await db.commit()
     await db.refresh(check)
+    await _invalidate_user_stats_cache(check.owner_id)
 
     if previous_status != "down":
         message = f"🔴 Check Failed: [{check.name}] reported a failure."
@@ -294,22 +321,8 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     else:
         query = query.filter(models.Check.owner_id == principal.id)
 
-    is_expires_sort = sort_by == 'expires_at'
-
-    if is_expires_sort:
-        if "sqlite" in settings.DATABASE_URL:
-            sort_column = func.datetime(
-                func.coalesce(models.Check.last_ping, models.Check.created_at),
-                text("'+' || (interval_seconds + grace_seconds) || ' seconds'")
-            ).label("expires_at")
-        else: # Assuming postgres
-            sort_column = (
-                func.coalesce(models.Check.last_ping, models.Check.created_at) +
-                (models.Check.interval_seconds + models.Check.grace_seconds) * text("'1 second'::interval")
-            ).label("expires_at")
-        query = query.add_columns(sort_column)
-    else:
-        sort_column = getattr(models.Check, sort_by, models.Check.id)
+    sort_column = getattr(models.Check, sort_by, models.Check.id)
+    is_expires_sort = False # This logic is no longer needed with the deadline column
 
     cursor_val = _decode_cursor(cursor)
 
@@ -334,13 +347,8 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     
     result = await db.execute(query)
 
-    if is_expires_sort:
-        raw_results = result.all()
-        items = [row.Check for row in raw_results]
-        cursor_values = [row.expires_at for row in raw_results]
-    else:
-        items = result.scalars().all()
-        cursor_values = None
+    items = result.scalars().all()
+    cursor_values = None
 
     next_cursor = None
     prev_cursor = None
@@ -348,37 +356,33 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     if is_prev:
         # Items were fetched in reverse order. We reverse them back for display.
         items.reverse()
-        if cursor_values:
-            cursor_values.reverse()
 
         has_prev_page = len(items) > size
 
         # The 'next' cursor always points to the last item of the page we just fetched.
         if items:
-            next_cursor_val = cursor_values[-1] if is_expires_sort else getattr(items[-1], sort_by)
+            next_cursor_val = getattr(items[-1], sort_by)
             next_cursor = _encode_cursor(next_cursor_val)
 
         if has_prev_page:
             # The extra item is now at the beginning. Trim it for the response.
             items = items[1:]
-            if cursor_values:
-                cursor_values = cursor_values[1:]
             
             # The 'prev' cursor points to the new first item of the page.
             if items:
-                prev_cursor_val = cursor_values[0] if is_expires_sort else getattr(items[0], sort_by)
+                prev_cursor_val = getattr(items[0], sort_by)
                 prev_cursor = _encode_cursor(prev_cursor_val)
         else:
             prev_cursor = None
     else: # is_next
         # The 'prev' cursor always points to the first item of the page.
         if items:
-            prev_cursor_val = cursor_values[0] if is_expires_sort else getattr(items[0], sort_by)
+            prev_cursor_val = getattr(items[0], sort_by)
             prev_cursor = _encode_cursor(prev_cursor_val)
 
         if len(items) > size:
             # The 'next' cursor points to the last item of the page content (not the extra one).
-            next_cursor_val = cursor_values[size - 1] if is_expires_sort else getattr(items[size - 1], sort_by)
+            next_cursor_val = getattr(items[size - 1], sort_by)
             next_cursor = _encode_cursor(next_cursor_val)
             # Trim the extra item from the end for the response.
             items = items[:size]
@@ -410,9 +414,11 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         }
         
         db_check = models.Check(**db_check_data)
+        db_check.deadline = _calculate_deadline(db_check)
         db.add(db_check)
         await db.commit()
         await db.refresh(db_check) # This populates the ID and other DB-defaults
+        await _invalidate_user_stats_cache(principal.id)
         
         # Eagerly load the owner relationship to prevent lazy loading issues
         # during response serialization.
@@ -457,9 +463,14 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
             db_check.status = "down"
         else:
             db_check.status = "up" if db_check.last_ping else "new"
+        
+        # Recalculate deadline if interval or grace period changed
+        if 'interval_seconds' in update_data or 'grace_seconds' in update_data:
+            db_check.deadline = _calculate_deadline(db_check)
 
         await db.commit()
         await db.refresh(db_check)
+        await _invalidate_user_stats_cache(principal.id)
     return db_check
 
 
@@ -554,7 +565,9 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     result = await db.execute(query)
     db_check = result.scalars().first()
     if db_check:
+        owner_id = db_check.owner_id
         await db.delete(db_check)
         await db.commit()
+        await _invalidate_user_stats_cache(owner_id)
         return db_check
     return None

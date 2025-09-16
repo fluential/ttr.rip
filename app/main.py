@@ -37,6 +37,11 @@ async def lifespan(app: FastAPI):
     
     # Initialize metrics with app version
     metrics.initialize_metrics(app_version="1.0.0")
+
+    # Initialize check counts from DB
+    from sqlalchemy.ext.asyncio import AsyncSession
+    async with AsyncSession(engine) as session:
+        await metrics.initialize_check_counts(session)
     
     # Check Redis connection and potentially start worker
     if not settings.DEBUG_MODE:
@@ -47,8 +52,8 @@ async def lifespan(app: FastAPI):
                 logger.info("Successfully connected to Redis for Celery broker.")
                 app.state.redis_connected = True
                 
-                # Start Celery worker if enabled
-                if settings.AUTO_START_WORKER:
+                # Start Celery worker if enabled for testing/dev
+                if settings.AUTO_START_EMBEDDED_WORKER:
                     start_celery_worker()
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
@@ -107,17 +112,6 @@ async def collect_metrics_periodically():
                 except Exception as e:
                     logger.error(f"Error collecting queue metrics: {e}")
             
-            # Update check status counts
-            async with AsyncSession(engine) as session:
-                from sqlalchemy import text
-                result = await session.execute(text("""
-                    SELECT status, COUNT(*) as count 
-                    FROM checks 
-                    GROUP BY status
-                """))
-                for row in result:
-                    metrics.CHECKS_TOTAL.labels(status=row[0]).set(row[1])
-                
         except Exception as e:
             logger.error(f"Error in metrics collection: {e}")
         

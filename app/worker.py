@@ -27,6 +27,12 @@ celery_app.conf.update(
     task_track_started=True,
     task_always_eager=settings.DEBUG_MODE,
     task_default_queue='rtt_celery_queue',
+    beat_schedule={
+        'check-overdue-jobs-every-5-seconds': {
+            'task': 'app.worker.check_overdue_jobs_task',
+            'schedule': 5.0,
+        },
+    },
 )
 
 if settings.DEBUG_MODE:
@@ -80,3 +86,47 @@ def send_telegram_notification_task(check_id: int, message: str):
     # This task is executed by a Celery worker in a synchronous context.
     # It runs the async notification function in a new event loop.
     asyncio.run(_send_telegram_notification(check_id, message))
+
+
+async def _check_overdue_jobs():
+    """The core async logic for finding and processing overdue checks."""
+    from app.services import notifications
+    from app.crud import _invalidate_user_stats_cache
+
+    now_utc = datetime.now(timezone.utc)
+    logger.info("Scheduler task running check cycle...")
+    
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            query = select(Check).where(
+                Check.status.in_(["up", "new"]),
+                Check.deadline < now_utc
+            )
+            
+            result = await session.execute(query)
+            overdue_checks = result.scalars().all()
+
+            if overdue_checks:
+                logger.info(f"Scheduler found {len(overdue_checks)} overdue checks.")
+                owner_ids_to_invalidate = set()
+                for check in overdue_checks:
+                    if check.status != "down":
+                        logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
+                        check.status = "down"
+                        owner_ids_to_invalidate.add(check.owner_id)
+                        message = f"🔴 Check Down: [{check.name}] is overdue."
+                        notifications.schedule_telegram_notification(check, message)
+                
+                await session.commit()
+
+                # Invalidate caches after commit
+                for owner_id in owner_ids_to_invalidate:
+                    await _invalidate_user_stats_cache(owner_id)
+            else:
+                logger.info("Scheduler found no overdue checks.")
+
+
+@celery_app.task(name="app.worker.check_overdue_jobs_task")
+def check_overdue_jobs_task():
+    """Celery task wrapper to run the async scheduler logic."""
+    asyncio.run(_check_overdue_jobs())
