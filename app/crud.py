@@ -363,12 +363,17 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         db_check = models.Check(**db_check_data)
         db.add(db_check)
         await db.commit()
-        await db.refresh(db_check)
         
-        # Attach the owner for the response model.
-        db_check.owner = principal
+        # Eagerly load the owner relationship to prevent lazy loading issues
+        # during response serialization.
+        result = await db.execute(
+            select(models.Check)
+            .options(selectinload(models.Check.owner))
+            .filter(models.Check.id == db_check.id)
+        )
+        final_check = result.scalars().one()
         
-        return db_check
+        return final_check
     except Exception as e:
         logger.error(f"Error in create_check: {e}", exc_info=True)
         await db.rollback()

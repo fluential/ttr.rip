@@ -55,4 +55,4 @@ class Check(Base):
     telegram_last_notification_timestamp: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    owner = relationship("User", back_populates="checks")
+    owner = relationship("User", back_populates="checks", lazy="selectin")
