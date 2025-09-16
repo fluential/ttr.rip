@@ -114,17 +114,25 @@ async def get_public_user_from_key(
 
 
 async def get_current_admin_user(
-    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(db_base.get_db)
+    token_from_header: Optional[str] = Depends(oauth2_scheme),
+    token_from_cookie: Optional[str] = Cookie(None, alias="auth_token"),
+    db: AsyncSession = Depends(db_base.get_db)
 ) -> db_models.User:
     """
     Dependency for admin authentication using JWT.
+    Tries to get token from Authorization header first, then from a cookie.
     Ensures the user is an admin.
     """
+    token = token_from_header or token_from_cookie
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not token:
+        raise credentials_exception
+        
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
