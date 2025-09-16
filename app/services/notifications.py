@@ -71,9 +71,8 @@ async def _execute_telegram_send(check: Check, message: str):
             check.telegram_last_notification_status = "error"
             check.telegram_last_notification_message = error_message
             metrics.record_notification_sent("telegram", "error")
-    
-    finally:
-        check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+        finally:
+            check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
 
 
 async def send_telegram_notification(db: AsyncSession, check: Check, message: str):
