@@ -11,6 +11,8 @@
     # Enable response header to show when caching is active
     header /* {
         X-Cache-Status {http.cache.status}
+        # Add ETag header support
+        ETag {http.response.header.Etag}
     }
 
     # Global rate limiting - 10 req/s with burst of 20
@@ -23,9 +25,9 @@
         }
     }
 
-    # Cache configuration for GET/HEAD requests
+    # Enhanced cache configuration with micro-caching for GET/HEAD requests
     cache {
-        # Default TTL for successful responses
+        # Default micro-caching TTL for successful responses (10s)
         ttl 10s
         
         # Don't cache non-GET/HEAD methods or requests with authorization
@@ -34,13 +36,14 @@
             header Authorization *
         }
         
-        # Cache key based on request attributes
+        # Cache key based on request attributes including ETag support
         key {
             method
             host
             path
             query
             header Accept
+            header If-None-Match
         }
     }
 
@@ -61,28 +64,42 @@
             ttl 1h
         }
         
+        # Add cache control header for browsers
+        header Cache-Control "public, max-age=3600"
+        
         # Standard file server for static files
         file_server
     }
 
-    # Handle API paths
+    # Handle API paths with micro-caching
     handle /api/v1/* {
-        # Only cache GET requests for API endpoints
+        # Micro-caching for API endpoints - 5 seconds
         cache {
+            ttl 5s
+            
+            # Only cache GET requests for API endpoints
             disable_if {
                 not {method} match GET
             }
         }
         
+        # Add cache control header
+        header Cache-Control "public, max-age=5"
+        
         # Pass to FastAPI backend
         reverse_proxy localhost:8000
     }
 
-    # Special handling for ping endpoints (avoid caching)
+    # Special handling for ping endpoints (brief micro-caching)
     handle /ping/* {
+        # Ultra-short micro-caching for ping endpoints (1s)
         cache {
-            disable
+            ttl 1s
         }
+        
+        # Add cache control header
+        header Cache-Control "public, max-age=1"
+        
         reverse_proxy localhost:8000
     }
 
