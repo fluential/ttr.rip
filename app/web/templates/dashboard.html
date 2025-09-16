@@ -70,6 +70,24 @@
 
 <article>
     <header>Current Checks</header>
+    <div class="refresh-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div>
+            <button id="refresh-toggle-btn" class="outline" title="Pause automatic refresh">⏸️</button>
+            <button id="manual-refresh-btn" class="outline" title="Refresh now">🔄</button>
+            <span id="refresh-status">Auto-refresh: <span id="refresh-countdown">5</span>s</span>
+        </div>
+        <div>
+            <label for="page-size" style="display: inline-block; margin-bottom: 0; margin-right: 0.5rem;">
+                Checks per page:
+            </label>
+            <select id="page-size" style="width: auto; display: inline-block; margin-bottom: 0;">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+    </div>
     <figure>
         <table role="grid" id="checks-table">
             <thead>
@@ -102,9 +120,13 @@
     const authKey = "{{ auth_key }}";
     let currentSortBy = 'id';
     let currentSortDir = 'desc';
-    const pageSize = 25;
+    let pageSize = 25;
     let nextCursor = null;
     let prevCursor = null;
+    let autoRefreshEnabled = true;
+    let autoRefreshInterval = 5; // seconds
+    let autoRefreshCountdown = autoRefreshInterval;
+    let autoRefreshTimer = null;
 
     function getMaskedAuthKey(key) {
         if (key.length <= 4) {
@@ -260,6 +282,54 @@
         const secs = Math.round(seconds % 60);
 
         return `${minutes}m ${secs}s`;
+    }
+
+    function startAutoRefreshTimer() {
+        if (autoRefreshTimer) {
+            clearInterval(autoRefreshTimer);
+        }
+
+        const countdownEl = document.getElementById('refresh-countdown');
+        autoRefreshCountdown = autoRefreshInterval;
+        countdownEl.textContent = autoRefreshCountdown;
+
+        autoRefreshTimer = setInterval(() => {
+            autoRefreshCountdown--;
+            countdownEl.textContent = autoRefreshCountdown;
+            
+            if (autoRefreshCountdown <= 0) {
+                autoRefreshCountdown = autoRefreshInterval;
+                countdownEl.textContent = autoRefreshInterval;
+                fetchChecks();
+                fetchUserStats();
+            }
+        }, 1000);
+    }
+
+    function stopAutoRefreshTimer() {
+        if (autoRefreshTimer) {
+            clearInterval(autoRefreshTimer);
+            autoRefreshTimer = null;
+        }
+    }
+
+    function toggleAutoRefresh() {
+        const button = document.getElementById('refresh-toggle-btn');
+        const statusEl = document.getElementById('refresh-status');
+        
+        autoRefreshEnabled = !autoRefreshEnabled;
+        
+        if (autoRefreshEnabled) {
+            button.textContent = '⏸️';
+            button.title = 'Pause automatic refresh';
+            statusEl.innerHTML = `Auto-refresh: <span id="refresh-countdown">${autoRefreshInterval}</span>s`;
+            startAutoRefreshTimer();
+        } else {
+            button.textContent = '▶️';
+            button.title = 'Resume automatic refresh';
+            statusEl.textContent = 'Auto-refresh: paused';
+            stopAutoRefreshTimer();
+        }
     }
 
     async function fetchUserStats() {
@@ -505,6 +575,46 @@
             authKeyDisplay.value = getMaskedAuthKey(authKey);
         }
 
+        // Set up page size selector
+        const pageSizeSelector = document.getElementById('page-size');
+        if (pageSizeSelector) {
+            // Set initial value from localStorage or default
+            const savedPageSize = localStorage.getItem('pageSizePreference');
+            if (savedPageSize) {
+                pageSize = parseInt(savedPageSize);
+                pageSizeSelector.value = pageSize;
+            }
+
+            pageSizeSelector.addEventListener('change', (e) => {
+                pageSize = parseInt(e.target.value);
+                localStorage.setItem('pageSizePreference', pageSize.toString());
+                fetchChecks(); // Refresh with new page size
+            });
+        }
+
+        // Set up refresh controls
+        const refreshToggleBtn = document.getElementById('refresh-toggle-btn');
+        if (refreshToggleBtn) {
+            refreshToggleBtn.addEventListener('click', toggleAutoRefresh);
+        }
+
+        const manualRefreshBtn = document.getElementById('manual-refresh-btn');
+        if (manualRefreshBtn) {
+            manualRefreshBtn.addEventListener('click', () => {
+                fetchChecks();
+                fetchUserStats();
+                
+                // Reset the countdown if auto-refresh is enabled
+                if (autoRefreshEnabled) {
+                    autoRefreshCountdown = autoRefreshInterval;
+                    const countdownEl = document.getElementById('refresh-countdown');
+                    if (countdownEl) {
+                        countdownEl.textContent = autoRefreshInterval;
+                    }
+                }
+            });
+        }
+
         await Promise.all([fetchChecks(), fetchUserStats()]);
         
         const loadTime = performance.now() - window.pageLoadStartTime;
@@ -515,8 +625,11 @@
             clientTimeContainer.style.display = 'inline';
         }
 
-        setInterval(fetchChecks, 5000);
-        setInterval(fetchUserStats, 10000);
+        // Start auto-refresh timer
+        if (autoRefreshEnabled) {
+            startAutoRefreshTimer();
+        }
+
         document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
 
         // Pagination listeners
@@ -582,6 +695,14 @@
     }
     #pagination-controls ul {
         margin-bottom: 0;
+    }
+    #refresh-status {
+        margin-left: 0.5rem;
+        font-size: 0.9rem;
+    }
+    .refresh-controls button {
+        padding: 0.4rem;
+        width: 2.5rem;
     }
 </style>
 {% endblock %}
