@@ -86,8 +86,12 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
 async def telegram_callback(
     request: Request,
     db: AsyncSession = Depends(db_base.get_db),
-    user: db_models.User = Depends(security.get_public_user_from_key),
 ):
+    auth_key = request.cookies.get("auth_key")
+    if not auth_key:
+        raise HTTPException(status_code=401, detail="Authentication key cookie not found.")
+
+    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
     if not user:
         # This should theoretically not happen due to JIT creation and exception in dependency
         raise HTTPException(status_code=404, detail="User not found for the provided auth key.")
@@ -152,9 +156,15 @@ async def public_integrations(
     request: Request,
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
-    user: db_models.User = Depends(security.get_public_user_from_key),
 ):
+    auth_key = request.cookies.get("auth_key")
+    if not auth_key:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
+    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
     if not user:
+        # This could happen if the cookie is for a user that was deleted.
+        # Redirect to home to get a new key.
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
     check = await crud.get_check_by_id_and_owner(db, check_id=check_id, principal=user)

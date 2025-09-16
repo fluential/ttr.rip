@@ -37,21 +37,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 async def get_public_user_from_key(
     x_auth_key: Optional[str] = Header(None, alias="X-Auth-Key"),
-    auth_key_cookie: Optional[str] = Cookie(None, alias="auth_key"),
     db: AsyncSession = Depends(db_base.get_db),
 ) -> db_models.User:
     """
-    Dependency for public, key-based authentication.
+    Dependency for public, key-based authentication via the X-Auth-Key header.
     Handles Just-in-Time user creation for new keys.
-    Checks for X-Auth-Key header first, then auth_key cookie.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid authentication credentials",
     )
 
-    # Prioritize header for API calls, then check cookie for web UI
-    auth_key = x_auth_key or auth_key_cookie
+    auth_key = x_auth_key
 
     if not auth_key:
         raise credentials_exception
