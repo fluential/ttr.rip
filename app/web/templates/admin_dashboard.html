@@ -6,27 +6,6 @@
     <h2>Manage all health checks below.</h2>
 </hgroup>
 
-<details id="new-check-section">
-    <summary>New Check (Admin)</summary>
-    <form id="new-check-form" style="margin-top: 1.5rem;">
-        <div class="grid">
-            <label for="name">
-                Name
-                <input type="text" id="name" name="name" placeholder="Daily Backup" required>
-            </label>
-            <label for="interval_seconds">
-                Interval (seconds)
-                <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
-            </label>
-        </div>
-        <label for="grace_seconds">
-            Grace (seconds)
-            <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
-        </label>
-        <button type="submit">Create Check</button>
-    </form>
-</details>
-
 <article>
     <header>System Status</header>
     <div id="system-status-summary">
@@ -90,6 +69,27 @@
         </ul>
     </nav>
 </article>
+
+<details id="new-check-section">
+    <summary>New Check (Admin)</summary>
+    <form id="new-check-form" style="margin-top: 1.5rem;">
+        <div class="grid">
+            <label for="name">
+                Name
+                <input type="text" id="name" name="name" placeholder="Daily Backup" required>
+            </label>
+            <label for="interval_seconds">
+                Interval (seconds)
+                <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
+            </label>
+        </div>
+        <label for="grace_seconds">
+            Grace (seconds)
+            <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
+        </label>
+        <button type="submit">Create Check</button>
+    </form>
+</details>
 
 <script>
     window.API_TOKEN = "{{ api_token }}";

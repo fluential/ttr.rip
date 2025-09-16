@@ -7,52 +7,6 @@
 </hgroup>
 
 <article>
-    <header>Your Access Key</header>
-    <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
-    <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
-    
-    <div style="margin-top: 1rem; display: flex; justify-content: center;">
-        <button type="button" id="rotate-key-btn" class="secondary outline" onclick="confirmRotateKey()">Rotate Access Key</button>
-    </div>
-
-    <div id="key-rotation-message" style="margin-top: 1rem; text-align: center; display: none;">
-    </div>
-    
-    {% if telegram_auth_enabled %}
-    <div style="text-align: center; margin-top: 1.5rem;">
-        <p>Optionally, link your Telegram account for easier login and recovery.</p>
-        <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                data-telegram-login="{{ telegram_bot_name }}" 
-                data-size="large" 
-                data-auth-url="{{ request.url_for('telegram_callback') }}" 
-                data-request-access="write">
-        </script>
-    </div>
-    {% endif %}
-</article>
-
-<details id="new-check-section">
-    <summary>New Check</summary>
-    <form id="new-check-form" style="margin-top: 1.5rem;">
-        <div class="grid">
-            <label for="name">
-                Name
-                <input type="text" id="name" name="name" placeholder="Daily Backup" required>
-            </label>
-            <label for="interval_seconds">
-                Interval (seconds)
-                <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
-            </label>
-        </div>
-        <label for="grace_seconds">
-            Grace (seconds)
-            <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
-        </label>
-        <button type="submit">Create Check</button>
-    </form>
-</details>
-
-<article>
     <header>Overall Status</header>
     <div id="status-summary" class="grid">
         <div><h3 class="status-up">Up: 0</h3></div>
@@ -113,6 +67,52 @@
             <li><button id="next-page" class="secondary outline" disabled>Next</button></li>
         </ul>
     </nav>
+</article>
+
+<details id="new-check-section">
+    <summary>New Check</summary>
+    <form id="new-check-form" style="margin-top: 1.5rem;">
+        <div class="grid">
+            <label for="name">
+                Name
+                <input type="text" id="name" name="name" placeholder="Daily Backup" required>
+            </label>
+            <label for="interval_seconds">
+                Interval (seconds)
+                <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
+            </label>
+        </div>
+        <label for="grace_seconds">
+            Grace (seconds)
+            <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
+        </label>
+        <button type="submit">Create Check</button>
+    </form>
+</details>
+
+<article>
+    <header>Account Management</header>
+    <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
+    <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
+    
+    <div style="margin-top: 1rem; display: flex; justify-content: center;">
+        <button type="button" id="rotate-key-btn" class="secondary outline" onclick="confirmRotateKey()">Rotate Access Key</button>
+    </div>
+
+    <div id="key-rotation-message" style="margin-top: 1rem; text-align: center; display: none;">
+    </div>
+    
+    {% if telegram_auth_enabled %}
+    <div style="text-align: center; margin-top: 1.5rem; border-top: 1px solid var(--pico-muted-border-color); padding-top: 1.5rem;">
+        <p>Optionally, link your Telegram account for easier login and recovery.</p>
+        <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                data-telegram-login="{{ telegram_bot_name }}" 
+                data-size="large" 
+                data-auth-url="{{ request.url_for('telegram_callback') }}" 
+                data-request-access="write">
+        </script>
+    </div>
+    {% endif %}
 </article>
 
 <script>
