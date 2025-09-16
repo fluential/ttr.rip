@@ -106,3 +106,19 @@ nav ul li a#theme-switcher {
     justify-content: center;
     align-items: center;
 }
+
+/* Status Page Theme */
+.status-box-up { background-color: var(--base2); border-color: var(--green); }
+.status-box-down { background-color: var(--base2); border-color: var(--red); }
+.status-box-new { background-color: var(--base2); border-color: var(--yellow); }
+.status-box-paused { background-color: var(--base2); border-color: var(--base1); }
+
+[data-theme="dark"] .status-box-up { background-color: var(--base02); border-color: var(--green); }
+[data-theme="dark"] .status-box-down { background-color: var(--base02); border-color: var(--red); }
+[data-theme="dark"] .status-box-new { background-color: var(--base02); border-color: var(--yellow); }
+[data-theme="dark"] .status-box-paused { background-color: var(--base02); border-color: var(--base01); }
+
+.status-box-up .status-box-indicator { color: var(--green); }
+.status-box-down .status-box-indicator { color: var(--red); }
+.status-box-new .status-box-indicator { color: var(--yellow); }
+.status-box-paused .status-box-indicator { color: var(--base1); }

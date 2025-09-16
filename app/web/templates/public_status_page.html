@@ -14,14 +14,14 @@
     </h2>
 </hgroup>
 
-{% for check in status_page.checks %}
-<article class="status-card status-card-{{ 'paused' if check.paused else check.status }}">
-    <header class="grid">
-        <div>
-            <strong>{{ check.name }}</strong>
+<div class="status-grid">
+    {% for check in status_page.checks %}
+    <div class="status-box status-box-{{ 'paused' if check.paused else check.status }}">
+        <div class="status-box-header">
+            <span class="status-box-name">{{ check.name }}</span>
         </div>
-        <div style="text-align: right;">
-            <span class="status-text">
+        <div class="status-box-body">
+            <span class="status-box-indicator">
                 {% if check.paused %}
                     PAUSED
                 {% else %}
@@ -29,18 +29,47 @@
                 {% endif %}
             </span>
         </div>
-    </header>
-    <div class="status-details">
-        <small>
-            Last check: 
-            {% if check.last_ping %}
-                {{ check.last_ping.strftime('%Y-%m-%d %H:%M:%S %Z') }}
-            {% else %}
-                Never
-            {% endif %}
-        </small>
+        <div class="status-box-footer">
+            <small>
+                Last check: 
+                {% if check.last_ping %}
+                    <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">{{ check.last_ping.strftime('%Y-%m-%d %H:%M:%S %Z') }}</span>
+                {% else %}
+                    Never
+                {% endif %}
+            </small>
+        </div>
     </div>
-</article>
-{% endfor %}
+    {% endfor %}
+</div>
+
+<script>
+// Simple script to format the last ping time into a relative time string on the client side.
+document.addEventListener('DOMContentLoaded', () => {
+    function formatTimeAgo(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        let interval = seconds / 31536000;
+        if (interval > 1) return Math.floor(interval) + " years ago";
+        interval = seconds / 2592000;
+        if (interval > 1) return Math.floor(interval) + " months ago";
+        interval = seconds / 86400;
+        if (interval > 1) return Math.floor(interval) + " days ago";
+        interval = seconds / 3600;
+        if (interval > 1) return Math.floor(interval) + " hours ago";
+        interval = seconds / 60;
+        if (interval > 1) return Math.floor(interval) + " minutes ago";
+        return Math.floor(seconds) + " seconds ago";
+    }
+
+    document.querySelectorAll('.last-ping-time').forEach(elem => {
+        const timestamp = elem.dataset.timestamp;
+        if (timestamp) {
+            const date = new Date(timestamp);
+            elem.textContent = formatTimeAgo(date);
+            elem.title = date.toLocaleString();
+        }
+    });
+});
+</script>
 
 {% endblock %}

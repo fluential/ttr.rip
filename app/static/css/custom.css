@@ -80,20 +80,60 @@ th[data-sort].sort-desc::after {
 }
 
 /* Public Status Page */
-.status-card {
-    border-left: 5px solid var(--pico-muted-border-color);
-    padding: 1rem;
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.5rem;
 }
-.status-card-up { border-left-color: var(--pico-color-green-500); }
-.status-card-down { border-left-color: var(--pico-color-red-500); }
-.status-card-new { border-left-color: var(--pico-color-yellow-500); }
-.status-card-paused { border-left-color: var(--pico-color-gray-500); }
 
-.status-card .status-text { font-weight: bold; }
-.status-card-up .status-text { color: var(--pico-color-green-500); }
-.status-card-down .status-text { color: var(--pico-color-red-500); }
-.status-card-new .status-text { color: var(--pico-color-yellow-500); }
-.status-card-paused .status-text { color: var(--pico-color-gray-500); }
+.status-box {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 150px;
+    text-align: center;
+    border-radius: var(--pico-border-radius);
+    background-color: var(--pico-card-background-color);
+    border: 1px solid var(--pico-card-border-color);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.status-box:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--pico-card-box-shadow);
+}
+
+.status-box-header {
+    font-weight: bold;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.status-box-body {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.status-box-indicator {
+    font-size: 2rem;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+.status-box-footer {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* Base Status Colors */
+.status-box-up .status-box-indicator { color: var(--pico-color-green-500); }
+.status-box-down .status-box-indicator { color: var(--pico-color-red-500); }
+.status-box-new .status-box-indicator { color: var(--pico-color-yellow-500); }
+.status-box-paused .status-box-indicator { color: var(--pico-color-gray-500); }
 
 #status-page-checks-list {
     max-height: 200px;

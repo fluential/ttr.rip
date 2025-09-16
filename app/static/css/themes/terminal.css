@@ -101,3 +101,24 @@ nav ul li a#theme-switcher {
     justify-content: center;
     align-items: center;
 }
+
+/* Status Page Theme */
+.status-box-up { background-color: rgba(0, 128, 0, 0.1); }
+.status-box-down { background-color: rgba(220, 50, 47, 0.1); }
+.status-box-new { background-color: rgba(181, 137, 0, 0.1); }
+.status-box-paused { background-color: rgba(128, 128, 128, 0.1); }
+
+[data-theme="dark"] .status-box-up { background-color: rgba(255, 191, 0, 0.05); }
+[data-theme="dark"] .status-box-down { background-color: rgba(220, 50, 47, 0.1); }
+[data-theme="dark"] .status-box-new { background-color: rgba(255, 191, 0, 0.1); }
+[data-theme="dark"] .status-box-paused { background-color: rgba(128, 128, 128, 0.1); }
+
+.status-box-up .status-box-indicator { color: #006400; }
+.status-box-down .status-box-indicator { color: #dc322f; }
+.status-box-new .status-box-indicator { color: #b58900; }
+.status-box-paused .status-box-indicator { color: #808080; }
+
+[data-theme="dark"] .status-box-up .status-box-indicator { color: var(--primary); }
+[data-theme="dark"] .status-box-down .status-box-indicator { color: #dc322f; }
+[data-theme="dark"] .status-box-new .status-box-indicator { color: #FFD700; }
+[data-theme="dark"] .status-box-paused .status-box-indicator { color: #808080; }

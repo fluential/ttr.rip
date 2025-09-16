@@ -103,3 +103,19 @@ nav ul li a#theme-switcher {
     justify-content: center;
     align-items: center;
 }
+
+/* Status Page Theme */
+.status-box-up { background-color: rgba(0, 255, 0, 0.1); border-color: #00FF00; }
+.status-box-down { background-color: rgba(255, 0, 0, 0.1); border-color: #FF0000; }
+.status-box-new { background-color: rgba(255, 255, 0, 0.1); border-color: #FFFF00; }
+.status-box-paused { background-color: rgba(128, 128, 128, 0.1); border-color: #808080; }
+
+[data-theme="dark"] .status-box-up { border-color: #00FF00; }
+[data-theme="dark"] .status-box-down { border-color: #FF0000; }
+[data-theme="dark"] .status-box-new { border-color: #FFFF00; }
+[data-theme="dark"] .status-box-paused { border-color: #808080; }
+
+.status-box-up .status-box-indicator { color: #00FF00; }
+.status-box-down .status-box-indicator { color: #FF0000; }
+.status-box-new .status-box-indicator { color: #FFFF00; }
+.status-box-paused .status-box-indicator { color: #808080; }

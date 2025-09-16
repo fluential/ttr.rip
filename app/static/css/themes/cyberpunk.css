@@ -158,3 +158,17 @@ nav ul li a#theme-switcher {
     justify-content: center;
     align-items: center;
 }
+
+/* Status Page Theme */
+.status-box {
+    box-shadow: 0 0 8px var(--primary-focus);
+}
+.status-box-up { background-color: rgba(0, 255, 255, 0.1); border-color: var(--accent-color); }
+.status-box-down { background-color: rgba(255, 0, 255, 0.1); border-color: var(--primary); }
+.status-box-new { background-color: rgba(255, 255, 0, 0.1); border-color: #ffff00; }
+.status-box-paused { background-color: rgba(128, 128, 128, 0.1); border-color: #808080; }
+
+.status-box-up .status-box-indicator { color: var(--accent-color); }
+.status-box-down .status-box-indicator { color: var(--primary); }
+.status-box-new .status-box-indicator { color: #ffff00; }
+.status-box-paused .status-box-indicator { color: #808080; }
