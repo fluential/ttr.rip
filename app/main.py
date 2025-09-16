@@ -199,7 +199,7 @@ def stop_celery_worker():
         celery_worker_process = None
 
 
-app = FastAPI(lifespan=lifespan, title="ttl.rip")
+app = FastAPI(lifespan=lifespan, title="ttr.rip")
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
