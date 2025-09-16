@@ -229,11 +229,13 @@ async def add_process_time_header(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     request.state.process_time = process_time
     
-    # Clean endpoint path to avoid high cardinality in metrics
-    clean_path = path
-    for segment in path.split('/'):
-        if segment.isdigit() or (len(segment) > 20 and not segment.startswith('api')):
-            clean_path = clean_path.replace(segment, '{id}')
+    # Use the route template for the endpoint path to avoid high cardinality
+    route = request.scope.get('route')
+    if route:
+        clean_path = route.path
+    else:
+        # For 404s and other unhandled paths
+        clean_path = "not_found"
     
     # Record API metrics
     metrics.API_REQUESTS.labels(

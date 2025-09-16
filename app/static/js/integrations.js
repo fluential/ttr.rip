@@ -2,6 +2,13 @@ const checkId = window.CHECK_ID;
 const isAdmin = window.IS_ADMIN;
 const apiToken = window.API_TOKEN;
 const authKey = window.AUTH_KEY;
+const csrfToken = window.CSRF_TOKEN;
+
+function getCsrfToken() {
+    const cookies = document.cookie.split(';').map(c => c.trim());
+    const csrfCookie = cookies.find(c => c.startsWith('csrf_token='));
+    return csrfCookie ? csrfCookie.split('=')[1] : null;
+}
 
 function updateIntegrationStatusUI(check) {
     const container = document.getElementById('integration-status-container');
@@ -54,7 +61,8 @@ const data = {
 };
 
 const headers = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': getCsrfToken()
 };
 if (isAdmin) {
     headers['Authorization'] = `Bearer ${apiToken}`;
@@ -92,7 +100,8 @@ formMessage.textContent = 'Queueing test message...';
 formMessage.style.color = 'inherit';
 
 const headers = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': getCsrfToken()
 };
 if (isAdmin) {
     headers['Authorization'] = `Bearer ${apiToken}`;
@@ -129,7 +138,8 @@ formMessage.textContent = 'Sending test connection message...';
 formMessage.style.color = 'inherit';
 
 const headers = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': getCsrfToken()
 };
 if (isAdmin) {
     headers['Authorization'] = `Bearer ${apiToken}`;

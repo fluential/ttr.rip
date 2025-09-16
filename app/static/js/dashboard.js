@@ -1,4 +1,5 @@
 let authKey = window.AUTH_KEY;
+let csrfToken = window.CSRF_TOKEN;
 let currentSortBy = 'id';
 let currentSortDir = 'desc';
 let pageSize = 25;
@@ -8,6 +9,12 @@ let autoRefreshEnabled = true;
 let autoRefreshInterval = 5; // seconds
 let autoRefreshCountdown = autoRefreshInterval;
 let autoRefreshTimer = null;
+
+function getCsrfToken() {
+    const cookies = document.cookie.split(';').map(c => c.trim());
+    const csrfCookie = cookies.find(c => c.startsWith('csrf_token='));
+    return csrfCookie ? csrfCookie.split('=')[1] : null;
+}
 
 function getMaskedAuthKey(key) {
     if (key.length <= 4) {
@@ -56,6 +63,7 @@ async function rotateApiKey() {
             method: 'POST',
             headers: {
                 'X-Auth-Key': authKey,
+                'X-CSRF-Token': getCsrfToken(),
                 'Content-Type': 'application/json'
             }
         });
@@ -426,6 +434,7 @@ async function handleFormSubmit(event) {
 
     const headers = {
         'X-Auth-Key': authKey,
+        'X-CSRF-Token': getCsrfToken(),
         'Content-Type': 'application/json'
     };
 
@@ -457,7 +466,10 @@ async function deleteCheck(checkId) {
 
     const response = await fetch(`/api/v1/checks/${checkId}`, {
         method: 'DELETE',
-        headers: { 'X-Auth-Key': authKey }
+        headers: { 
+            'X-Auth-Key': authKey,
+            'X-CSRF-Token': getCsrfToken()
+        }
     });
 
     if (response.ok) {

@@ -41,7 +41,7 @@ async def home(request: Request):
     response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
     return response
 
-@router.post("/dashboard", response_class=HTMLResponse, dependencies=[Depends(security.verify_csrf_token)])
+@router.post("/dashboard", response_class=HTMLResponse, dependencies=[Depends(security.verify_form_csrf_token)])
 async def login_with_key(request: Request, auth_key: str = Form(...), db: AsyncSession = Depends(db_base.get_db)):
     # We don't need to validate the key here. If it's invalid, the user just won't see any checks.
     # If it's a valid key for an existing user, they'll see their checks.
@@ -68,11 +68,13 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     
     logger.info(f"Dashboard loading. TELEGRAM_AUTH_ENABLED: {settings.TELEGRAM_AUTH_ENABLED}, TELEGRAM_BOT_NAME: '{settings.TELEGRAM_BOT_NAME}'")
 
+    csrf_token = security.generate_csrf_token()
     # No need to check for user existence here. The dashboard will simply show
     # "no checks" if the key is new or invalid. The API calls will handle auth.
     context = {
         "request": request,
         "auth_key": auth_key,
+        "csrf_token": csrf_token,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
@@ -82,6 +84,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     response = templates.TemplateResponse("dashboard.html", context)
     # Refresh cookie on activity
     response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
     return response
 
 
@@ -177,11 +180,13 @@ async def public_integrations(
     # For security, don't populate the bot token in the form
     # We only need to know if a token exists, not what it is
     has_token = bool(check.telegram_bot_token)
+    csrf_token = security.generate_csrf_token()
 
     context = {
         "request": request,
         "check": check,
         "auth_key": user.auth_key,
+        "csrf_token": csrf_token,
         "is_admin": False,
         "telegram_bot_token": "",  # Always empty for security
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
@@ -190,7 +195,9 @@ async def public_integrations(
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
-    return templates.TemplateResponse("integrations.html", context)
+    response = templates.TemplateResponse("integrations.html", context)
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    return response
 
 
 # --- Admin Routes ---
@@ -209,7 +216,7 @@ async def login_page(request: Request):
     response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
     return response
 
-@admin_router.post("/login", response_class=HTMLResponse, dependencies=[Depends(security.verify_csrf_token)])
+@admin_router.post("/login", response_class=HTMLResponse, dependencies=[Depends(security.verify_form_csrf_token)])
 async def handle_login(
     request: Request,
     username: str = Form(...),
@@ -239,14 +246,18 @@ async def admin_dashboard(request: Request, admin_user: db_models.User = Depends
     if not token:
         return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
     
+    csrf_token = security.generate_csrf_token()
     context = {
         "request": request,
         "api_token": token,
+        "csrf_token": csrf_token,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
-    return templates.TemplateResponse("admin_dashboard.html", context)
+    response = templates.TemplateResponse("admin_dashboard.html", context)
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    return response
 
 
 @admin_router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
@@ -269,11 +280,13 @@ async def admin_integrations(
     # For security, don't populate the bot token in the form
     # We only need to know if a token exists, not what it is
     has_token = bool(check.telegram_bot_token)
+    csrf_token = security.generate_csrf_token()
 
     context = {
         "request": request,
         "check": check,
         "api_token": token,
+        "csrf_token": csrf_token,
         "is_admin": True,
         "telegram_bot_token": "",  # Always empty for security
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
@@ -282,4 +295,6 @@ async def admin_integrations(
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
-    return templates.TemplateResponse("integrations.html", context)
+    response = templates.TemplateResponse("integrations.html", context)
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    return response

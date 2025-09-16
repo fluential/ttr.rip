@@ -33,7 +33,7 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
+@router.post("/user/rotate-key", response_model=schemas.UserKeyResponse, dependencies=[Depends(security.verify_api_csrf_token)])
 async def rotate_api_key(
     response: Response,
     user: db_models.User = Depends(security.get_public_user_from_key),

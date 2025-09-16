@@ -49,7 +49,7 @@ async def read_checks(
         size=size
     )
 
-@router.post("", response_model=schemas.Check, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=schemas.Check, status_code=status.HTTP_201_CREATED, dependencies=[Depends(security.verify_api_csrf_token)])
 async def create_check(
     check: schemas.CheckCreate,
     db: AsyncSession = Depends(db_base.get_db),
@@ -57,7 +57,7 @@ async def create_check(
 ):
     return await crud.create_check(db=db, check=check, principal=principal)
 
-@router.put("/{check_id}", response_model=schemas.Check)
+@router.put("/{check_id}", response_model=schemas.Check, dependencies=[Depends(security.verify_api_csrf_token)])
 async def update_check(
     check_id: int,
     check: schemas.CheckUpdate,
@@ -69,7 +69,7 @@ async def update_check(
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
 
-@router.put("/{check_id}/telegram", response_model=schemas.Check)
+@router.put("/{check_id}/telegram", response_model=schemas.Check, dependencies=[Depends(security.verify_api_csrf_token)])
 async def update_check_telegram_settings(
     check_id: int,
     telegram_settings: schemas.TelegramSettingsUpdate,
@@ -81,7 +81,7 @@ async def update_check_telegram_settings(
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
 
-@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK, dependencies=[Depends(security.verify_api_csrf_token)])
 async def test_telegram_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -101,7 +101,7 @@ async def test_telegram_notification(
     await db.refresh(check)
     return check
 
-@router.post("/{check_id}/telegram/test-queue", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{check_id}/telegram/test-queue", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(security.verify_api_csrf_token)])
 async def test_telegram_notification_queue(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -120,7 +120,7 @@ async def test_telegram_notification_queue(
     return {"message": "Test notification queued."}
 
 
-@router.delete("/{check_id}", response_model=schemas.Check)
+@router.delete("/{check_id}", response_model=schemas.Check, dependencies=[Depends(security.verify_api_csrf_token)])
 async def delete_check(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),

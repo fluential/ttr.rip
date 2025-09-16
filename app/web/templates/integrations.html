@@ -72,6 +72,7 @@
     window.IS_ADMIN = {{ 'true' if is_admin else 'false' }};
     window.API_TOKEN = "{{ api_token if is_admin else '' }}";
     window.AUTH_KEY = "{{ auth_key if not is_admin else '' }}";
+    window.CSRF_TOKEN = "{{ csrf_token }}";
 </script>
 <script src="/static/js/integrations.js" defer></script>
 {% endblock %}

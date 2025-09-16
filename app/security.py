@@ -43,7 +43,7 @@ def generate_csrf_token() -> str:
     """Generates a secure, URL-safe token for CSRF protection."""
     return secrets.token_urlsafe(32)
 
-async def verify_csrf_token(
+async def verify_form_csrf_token(
     request: Request,
     csrf_token_form: str = Form(..., alias="csrf_token"),
 ):
@@ -53,6 +53,18 @@ async def verify_csrf_token(
     """
     csrf_token_cookie = request.cookies.get("csrf_token")
     if not csrf_token_cookie or not secrets.compare_digest(csrf_token_cookie, csrf_token_form):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
+
+async def verify_api_csrf_token(
+    request: Request,
+    x_csrf_token: Optional[str] = Header(None, alias="X-CSRF-Token"),
+):
+    """
+    FastAPI dependency to verify the CSRF token from an API request header
+    against the token stored in the cookie. (Double Submit Cookie Pattern)
+    """
+    csrf_token_cookie = request.cookies.get("csrf_token")
+    if not csrf_token_cookie or not x_csrf_token or not secrets.compare_digest(csrf_token_cookie, x_csrf_token):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
 
 
