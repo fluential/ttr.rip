@@ -676,7 +676,9 @@ async def create_status_page(db: AsyncSession, status_page: schemas.StatusPageCr
 
 async def update_status_page(db: AsyncSession, status_page_id: int, status_page_data: schemas.StatusPageUpdate, principal: models.User):
     result = await db.execute(
-        select(models.StatusPage).where(models.StatusPage.id == status_page_id, models.StatusPage.owner_id == principal.id)
+        select(models.StatusPage)
+        .options(selectinload(models.StatusPage.checks))
+        .where(models.StatusPage.id == status_page_id, models.StatusPage.owner_id == principal.id)
     )
     db_status_page = result.scalars().first()
     if not db_status_page:
