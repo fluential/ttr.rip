@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, case, or_, and_, text
 from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.exc import IntegrityError
 import logging
 from app.db import models
 from app import schemas, security
@@ -427,17 +428,28 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
 async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: models.User):
     """
     Creates a check. If the principal (user) is not yet persisted in the database,
-    it creates the user first.
+    it creates the user first. Handles race conditions for user creation.
     """
-    try:
-        # If the principal doesn't have an ID, it's a new user that needs to be created.
-        if not principal.id:
-            logger.info(f"Creating new user for auth_key ...{principal.auth_key[-4:]}")
+    # If the principal doesn't have an ID, it's a new user that needs to be created.
+    if not principal.id:
+        try:
+            logger.info(f"Attempting to create new user for auth_key ...{principal.auth_key[-4:]}")
             user_schema = schemas.UserCreate(auth_key=principal.auth_key)
-            # The `create_user` function will add, commit, and refresh.
             principal = await create_user(db, user=user_schema)
             logger.info(f"New user created with ID: {principal.id}")
+        except IntegrityError:
+            await db.rollback() # Rollback the failed user creation
+            logger.warning(f"Race condition detected for user creation with auth_key ...{principal.auth_key[-4:]}. Refetching user.")
+            principal = await get_user_by_auth_key(db, auth_key=principal.auth_key)
+            if not principal:
+                # This should be virtually impossible if an IntegrityError occurred, but as a safeguard:
+                logger.error(f"Failed to refetch user after IntegrityError for auth_key ...{principal.auth_key[-4:]}")
+                raise Exception("Could not create or find user for check creation.")
+        except Exception:
+            await db.rollback()
+            raise
 
+    try:
         # Now, principal is guaranteed to be a persisted User object.
         db_check_data = {
             **check.model_dump(),
@@ -449,11 +461,9 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         db_check.deadline = _calculate_deadline(db_check)
         db.add(db_check)
         await db.commit()
-        await db.refresh(db_check) # This populates the ID and other DB-defaults
+        await db.refresh(db_check)
         _update_redis_stats_counters(principal.id, old_status=None, new_status="new")
         
-        # Eagerly load the owner relationship to prevent lazy loading issues
-        # during response serialization.
         result = await db.execute(
             select(models.Check)
             .options(selectinload(models.Check.owner))
@@ -463,7 +473,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         
         return final_check
     except Exception as e:
-        logger.error(f"Error in create_check: {e}", exc_info=True)
+        logger.error(f"Error during check creation phase: {e}", exc_info=True)
         await db.rollback()
         raise
 
