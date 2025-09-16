@@ -9,7 +9,7 @@
 <article>
     <header>Your Access Key</header>
     <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
-    <input type="password" class="ping-url" value="{{ auth_key }}" readonly onclick="copyUrl(this)" style="text-align: center; font-size: 1.1rem;">
+    <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
     
     {% if telegram_auth_enabled %}
     <div style="text-align: center; margin-top: 1.5rem;">
@@ -101,45 +101,48 @@
     let currentSortDir = 'desc';
     const pageSize = 25;
 
-    function copyUrl(element) {
-        // Store the original value on the element itself to prevent the "Copied!" bug.
-        if (!element.dataset.originalValue) {
-            element.dataset.originalValue = element.value;
+    function getMaskedAuthKey(key) {
+        if (key.length <= 4) {
+            return '****';
         }
-        const valueToCopy = element.dataset.originalValue;
+        return '****************************' + key.slice(-4);
+    }
 
-        // Prevent re-triggering if a copy is in progress.
+    function copyAuthKey(element, fullKey) {
         if (element.dataset.copying) {
             return;
         }
         element.dataset.copying = 'true';
 
-        const isPasswordField = element.type === 'password';
-
-        navigator.clipboard.writeText(valueToCopy).then(() => {
+        navigator.clipboard.writeText(fullKey).then(() => {
             element.value = 'Copied!';
             setTimeout(() => {
-                if (isPasswordField) {
-                    // This is the auth key field. Show masked version.
-                    element.type = 'text';
-                    element.value = `****************************${valueToCopy.slice(-4)}`;
-                    
-                    const revertToPassword = () => {
-                        element.type = 'password';
-                        element.value = valueToCopy;
-                        delete element.dataset.copying;
-                        element.removeEventListener('blur', revertToPassword);
-                    };
-                    element.addEventListener('blur', revertToPassword, { once: true });
-                } else {
-                    // This is a regular text field (e.g., Ping URL). Just restore original value.
-                    element.value = valueToCopy;
-                    delete element.dataset.copying;
-                }
+                element.value = getMaskedAuthKey(fullKey);
+                delete element.dataset.copying;
+            }, 1200);
+        }).catch(err => {
+            console.error('Failed to copy auth key: ', err);
+            element.value = getMaskedAuthKey(fullKey); // Restore on error
+            delete element.dataset.copying;
+        });
+    }
+
+    function copyUrl(element) {
+        if (element.dataset.copying) {
+            return;
+        }
+        element.dataset.copying = 'true';
+        const originalValue = element.value;
+
+        navigator.clipboard.writeText(originalValue).then(() => {
+            element.value = 'Copied!';
+            setTimeout(() => {
+                element.value = originalValue;
+                delete element.dataset.copying;
             }, 1200);
         }).catch(err => {
             console.error('Failed to copy text: ', err);
-            element.value = valueToCopy; // Restore on error
+            element.value = originalValue; // Restore on error
             delete element.dataset.copying;
         });
     }
@@ -439,6 +442,12 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
+        // Set the initial masked value for the auth key
+        const authKeyDisplay = document.getElementById('auth-key-display');
+        if (authKeyDisplay) {
+            authKeyDisplay.value = getMaskedAuthKey(authKey);
+        }
+
         await Promise.all([fetchChecks(), fetchUserStats()]);
         
         const loadTime = performance.now() - window.pageLoadStartTime;
