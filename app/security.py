@@ -47,7 +47,8 @@ async def get_auth_principal(
     )
     user: Optional[db_models.User] = None
 
-    if token:
+    # Fix: Check if token is a string before attempting to decode it
+    if token and isinstance(token, str):
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             username: str = payload.get("sub")

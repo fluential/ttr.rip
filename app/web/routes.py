@@ -164,7 +164,8 @@ async def public_integrations(
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
     # Manually get principal, which will create user if needed.
-    user = await security.get_auth_principal(x_auth_key=auth_key, db=db)
+    # Fix: Pass None as token to avoid Depends object being passed
+    user = await security.get_auth_principal(token=None, x_auth_key=auth_key, db=db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
