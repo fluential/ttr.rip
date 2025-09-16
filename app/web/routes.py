@@ -173,20 +173,17 @@ async def public_integrations(
     if not check:
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
 
-    decrypted_token = ""
-    if check.telegram_bot_token:
-        try:
-            decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
-        except Exception:
-            # If decryption fails (e.g., key changed, old data), treat as empty.
-            decrypted_token = ""
+    # For security, don't populate the bot token in the form
+    # We only need to know if a token exists, not what it is
+    has_token = bool(check.telegram_bot_token)
 
     context = {
         "request": request,
         "check": check,
         "auth_key": auth_key,
         "is_admin": False,
-        "telegram_bot_token": decrypted_token,
+        "telegram_bot_token": "",  # Always empty for security
+        "has_telegram_bot_token": has_token,  # Just indicate if one exists
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
@@ -263,19 +260,17 @@ async def admin_integrations(
     if not check:
         return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
 
-    decrypted_token = ""
-    if check.telegram_bot_token:
-        try:
-            decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
-        except Exception:
-            decrypted_token = ""
+    # For security, don't populate the bot token in the form
+    # We only need to know if a token exists, not what it is
+    has_token = bool(check.telegram_bot_token)
 
     context = {
         "request": request,
         "check": check,
         "api_token": token,
         "is_admin": True,
-        "telegram_bot_token": decrypted_token,
+        "telegram_bot_token": "",  # Always empty for security
+        "has_telegram_bot_token": has_token,  # Just indicate if one exists
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
