@@ -6,7 +6,7 @@ from typing import Union, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, case, or_, and_, text
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 import logging
 from app.db import models
 from app import schemas, security
@@ -95,7 +95,7 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: models
 
 
 async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: models.User):
-    query = select(models.Check).filter(models.Check.id == check_id)
+    query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
     # Admin can see any check
@@ -104,6 +104,20 @@ async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: 
     return result.scalars().first()
 
 async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
+    # --- Caching Layer ---
+    if not settings.DEBUG_MODE and settings.REDIS_URL:
+        try:
+            import redis
+            r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
+            cache_key = f"user_stats:dashboard:{principal.id}"
+            cached_stats = r.get(cache_key)
+            if cached_stats:
+                logger.debug(f"Cache hit for user stats: {principal.id}")
+                return schemas.CheckStats.model_validate_json(cached_stats)
+        except Exception as e:
+            logger.error(f"Could not read from Redis cache for stats: {e}")
+    # --- End Caching Layer ---
+
     # Base query for the user's checks
     if principal.is_admin:
         # Admin stats would be for all checks
@@ -141,7 +155,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             processed_notifications = "N/A"
 
     if stats and stats.total_checks > 0:
-        return schemas.CheckStats(
+        stats_obj = schemas.CheckStats(
             total_checks=stats.total_checks,
             up_count=stats.up_count or 0,
             down_count=stats.down_count or 0,
@@ -152,7 +166,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             processed_notifications=processed_notifications
         )
     else:
-        return schemas.CheckStats(
+        stats_obj = schemas.CheckStats(
             total_checks=0,
             up_count=0,
             down_count=0,
@@ -160,6 +174,20 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             user_queued_notifications=user_queued_notifications,
             processed_notifications=processed_notifications
         )
+
+    # --- Caching Layer ---
+    if not settings.DEBUG_MODE and settings.REDIS_URL:
+        try:
+            import redis
+            r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
+            cache_key = f"user_stats:dashboard:{principal.id}"
+            r.set(cache_key, stats_obj.model_dump_json(), ex=settings.STATS_CACHE_TTL_SECONDS)
+            logger.debug(f"Cache set for user stats: {principal.id}")
+        except Exception as e:
+            logger.error(f"Could not write to Redis cache for stats: {e}")
+    # --- End Caching Layer ---
+
+    return stats_obj
 
 
 async def update_check_ping(db: AsyncSession, check: models.Check):
@@ -279,10 +307,14 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
     db.add(db_check)
     await db.commit()
     await db.refresh(db_check)
+    
+    # Manually set the relationship to prevent lazy loading during serialization
+    db_check.owner = principal
+    
     return db_check
 
 async def update_check(db: AsyncSession, check_id: int, check_data: schemas.CheckUpdate, principal: models.User):
-    query = select(models.Check).filter(models.Check.id == check_id)
+    query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
     # For admin, no owner filter is applied, can edit any check.
@@ -321,7 +353,7 @@ async def link_telegram_to_user(db: AsyncSession, user: models.User, login_data:
 
 
 async def update_check_telegram_settings(db: AsyncSession, check_id: int, settings_data: schemas.TelegramSettingsUpdate, principal: models.User):
-    query = select(models.Check).filter(models.Check.id == check_id)
+    query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
     # For admin, no owner filter is applied.
@@ -356,5 +388,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     if db_check:
         await db.delete(db_check)
         await db.commit()
+        # Manually set owner for the returned object to be serializable
+        db_check.owner = principal
         return db_check
     return None
