@@ -32,12 +32,10 @@ async def login_for_access_token(
 
 @router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
 async def rotate_api_key(
-    x_auth_key: str = Header(..., alias="X-Auth-Key"),
+    user: db_models.User = Depends(security.get_public_user_from_key),
     db: AsyncSession = Depends(db_base.get_db)
 ):
     """Rotate the user's API key"""
-    # Get current user
-    user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

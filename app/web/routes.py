@@ -86,16 +86,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
 async def telegram_callback(
     request: Request,
     db: AsyncSession = Depends(db_base.get_db),
+    user: db_models.User = Depends(security.get_public_user_from_key),
 ):
-    auth_key = request.cookies.get("auth_key")
-    if not auth_key:
-        raise HTTPException(status_code=403, detail="Not authenticated. Please log in with your key first.")
-
-    # The get_auth_principal dependency will create the user if it doesn't exist.
-    # We need to manually call it here to get the user principal.
-    user = await security.get_auth_principal(x_auth_key=auth_key, db=db)
     if not user:
-        # This should theoretically not happen due to JIT creation
+        # This should theoretically not happen due to JIT creation and exception in dependency
         raise HTTPException(status_code=404, detail="User not found for the provided auth key.")
 
     query_params = dict(request.query_params)
@@ -158,14 +152,8 @@ async def public_integrations(
     request: Request,
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
+    user: db_models.User = Depends(security.get_public_user_from_key),
 ):
-    auth_key = request.cookies.get("auth_key")
-    if not auth_key:
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    
-    # Manually get principal, which will create user if needed.
-    # Fix: Pass None as token to avoid Depends object being passed
-    user = await security.get_auth_principal(token=None, x_auth_key=auth_key, db=db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
@@ -180,7 +168,7 @@ async def public_integrations(
     context = {
         "request": request,
         "check": check,
-        "auth_key": auth_key,
+        "auth_key": user.auth_key,
         "is_admin": False,
         "telegram_bot_token": "",  # Always empty for security
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
@@ -229,7 +217,7 @@ async def logout():
     return response
 
 @admin_router.get("/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request):
+async def admin_dashboard(request: Request, admin_user: db_models.User = Depends(security.get_current_admin_user)):
     token = request.cookies.get("auth_token")
     if not token:
         return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
@@ -249,6 +237,7 @@ async def admin_integrations(
     request: Request,
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
+    admin_user: db_models.User = Depends(security.get_current_admin_user),
 ):
     token = request.cookies.get("auth_token")
     if not token:

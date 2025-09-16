@@ -288,7 +288,7 @@ async def fail_check(uuid: str, db: AsyncSession = Depends(get_db)):
 @app.get("/metrics", status_code=status.HTTP_200_OK)
 async def get_metrics(
     response: Response,
-    current_user: db_models.User = Depends(security.get_current_user)
+    current_user: db_models.User = Depends(security.get_current_admin_user)
 ):
     """Expose Prometheus metrics endpoint"""
     if not current_user.is_admin:

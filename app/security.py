@@ -35,59 +35,45 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-async def get_auth_principal(
-    token: Optional[str] = Depends(oauth2_scheme),
+async def get_public_user_from_key(
     x_auth_key: Optional[str] = Header(None, alias="X-Auth-Key"),
     db: AsyncSession = Depends(db_base.get_db),
 ) -> db_models.User:
+    """
+    Dependency for public, key-based authentication.
+    Handles Just-in-Time user creation for new keys.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+        detail="Invalid authentication credentials",
     )
-    user: Optional[db_models.User] = None
+    if not x_auth_key:
+        raise credentials_exception
 
-    # Fix: Check if token is a string before attempting to decode it
-    if token and isinstance(token, str):
+    user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
+    if not user:
         try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            username: str = payload.get("sub")
-            if username is None:
+            # Just-in-time user creation for auth_key users
+            user_schema = schemas.UserCreate(auth_key=x_auth_key)
+            user = await crud.create_user(db, user=user_schema)
+        except IntegrityError:
+            await db.rollback()
+            # The user was likely created by a concurrent request. Fetch it.
+            user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
+            if not user:
+                # This would be a very strange state, but handle it.
+                logger.error(f"Failed to create or find user for auth_key ...{x_auth_key[-4:]} after IntegrityError.")
                 raise credentials_exception
-            token_data = schemas.TokenData(username=username)
-        except JWTError:
-            raise credentials_exception
-        user = await crud.get_user_by_username(db, username=token_data.username)
-        if user is None: # Admin user must exist
-            raise credentials_exception
-        return user
-
-    if x_auth_key:
-        user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
-        if not user:
-            try:
-                # Just-in-time user creation for auth_key users
-                user_schema = schemas.UserCreate(auth_key=x_auth_key)
-                user = await crud.create_user(db, user=user_schema)
-            except IntegrityError:
-                await db.rollback()
-                # The user was likely created by a concurrent request. Fetch it.
-                user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
-                if not user:
-                    # This would be a very strange state, but handle it.
-                    logger.error(f"Failed to create or find user for auth_key ...{x_auth_key[-4:]} after IntegrityError.")
-                    raise credentials_exception
-        return user
-    
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-    )
+    return user
 
 
-async def get_current_user(
+async def get_current_admin_user(
     token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(db_base.get_db)
-):
+) -> db_models.User:
+    """
+    Dependency for admin authentication using JWT.
+    Ensures the user is an admin.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -101,8 +87,9 @@ async def get_current_user(
         token_data = schemas.TokenData(username=username)
     except JWTError:
         raise credentials_exception
+    
     user = await crud.get_user_by_username(db, username=token_data.username)
-    if user is None:
+    if user is None or not user.is_admin:
         raise credentials_exception
     return user
 
