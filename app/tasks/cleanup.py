@@ -38,9 +38,9 @@ async def cleanup_inactive_checks(db: AsyncSession, inactive_threshold: datetime
     inactive_checks_query = (
         select(models.Check)
         .where(or_(
-            models.Check.last_ping_time < inactive_threshold,
+            models.Check.last_ping < inactive_threshold,
             and_(
-                models.Check.last_ping_time.is_(None),
+                models.Check.last_ping.is_(None),
                 models.Check.created_at < inactive_threshold
             )
         ))
@@ -93,7 +93,7 @@ async def cleanup_inactive_users(db: AsyncSession, inactive_threshold: datetime)
     # First find users with no checks
     users_with_no_checks_query = (
         select(models.User)
-        .outerjoin(models.Check, models.User.id == models.Check.user_id)
+        .outerjoin(models.Check, models.User.id == models.Check.owner_id)
         .where(
             and_(
                 models.User.created_at < inactive_threshold,
@@ -112,12 +112,12 @@ async def cleanup_inactive_users(db: AsyncSession, inactive_threshold: datetime)
     # First get users with at least one active check
     users_with_active_checks_query = (
         select(models.User.id)
-        .join(models.Check, models.User.id == models.Check.user_id)
+        .join(models.Check, models.User.id == models.Check.owner_id)
         .where(
             or_(
-                models.Check.last_ping_time >= inactive_threshold,
+                models.Check.last_ping >= inactive_threshold,
                 and_(
-                    models.Check.last_ping_time.is_(None),
+                    models.Check.last_ping.is_(None),
                     models.Check.created_at >= inactive_threshold
                 )
             )
@@ -131,7 +131,7 @@ async def cleanup_inactive_users(db: AsyncSession, inactive_threshold: datetime)
     # Now find users with checks, but all inactive
     users_with_only_inactive_checks_query = (
         select(models.User)
-        .join(models.Check, models.User.id == models.Check.user_id)
+        .join(models.Check, models.User.id == models.Check.owner_id)
         .where(
             and_(
                 models.User.created_at < inactive_threshold,

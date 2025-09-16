@@ -66,13 +66,6 @@ async def _send_telegram_notification(check_id: int, message: str):
             
             await session.commit()
 
-    if owner_identifier_for_stats and not settings.DEBUG_MODE:
-        try:
-            r = get_redis_connection()
-            if r:
-                r.incr(f"user_stats:processed_notifications:{owner_identifier_for_stats}")
-        except Exception as e:
-            logger.error(f"Could not increment processed notification count for check {check_id}: {e}")
 
 @celery_app.task(name="send_telegram_notification_task")
 def send_telegram_notification_task(check_id: int, message: str):

@@ -233,7 +233,6 @@ async function fetchUserStats() {
                 <div><strong>Avg. Interval:</strong> ${avgInterval}</div>
                 <div><strong>Avg. Duration:</strong> ${avgDuration}</div>
                 <div><strong>Notifications Queued:</strong> ${stats.user_queued_notifications}</div>
-                <div><strong>Notifications Processed:</strong> ${stats.processed_notifications}</div>
             </div>
         `;
     } catch (error) {

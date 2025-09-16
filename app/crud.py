@@ -180,19 +180,6 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
 
     user_queued_notifications = await get_user_queued_notification_count(db, principal)
     
-    processed_notifications: Union[int, str] = 0
-    if not settings.DEBUG_MODE:
-        try:
-            r = get_redis_connection()
-            if r:
-                owner_identifier = f"user_id_{principal.id}"
-                
-                count = r.get(f"user_stats:processed_notifications:{owner_identifier}")
-                processed_notifications = int(count) if count else 0
-        except Exception as e:
-            logger.error(f"Could not get processed notification count for principal: {e}")
-            processed_notifications = "N/A"
-
     if stats and stats.total_checks > 0:
         stats_obj = schemas.CheckStats(
             total_checks=stats.total_checks,
@@ -201,8 +188,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             new_count=stats.new_count or 0,
             avg_interval_seconds=stats.avg_interval_seconds,
             avg_duration_seconds=stats.avg_duration_seconds,
-            user_queued_notifications=user_queued_notifications,
-            processed_notifications=processed_notifications
+            user_queued_notifications=user_queued_notifications
         )
     else:
         stats_obj = schemas.CheckStats(
@@ -210,8 +196,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             up_count=0,
             down_count=0,
             new_count=0,
-            user_queued_notifications=user_queued_notifications,
-            processed_notifications=processed_notifications
+            user_queued_notifications=user_queued_notifications
         )
 
     # --- Caching Layer ---
