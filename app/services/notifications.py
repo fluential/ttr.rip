@@ -4,7 +4,6 @@ import asyncio
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Check
-from app.worker import send_telegram_notification_task
 from app.core.config import settings
 from app.core import encryption
 from app import metrics
@@ -100,4 +99,5 @@ def schedule_telegram_notification(check: Check, message: str):
         except RuntimeError:
             logger.error("Failed to schedule direct telegram notification: no running event loop.")
     else:
+        from app.worker import send_telegram_notification_task
         send_telegram_notification_task.delay(check.id, message)
