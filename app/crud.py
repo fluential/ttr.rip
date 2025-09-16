@@ -363,6 +363,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         db_check = models.Check(**db_check_data)
         db.add(db_check)
         await db.commit()
+        await db.refresh(db_check) # This populates the ID and other DB-defaults
         
         # Eagerly load the owner relationship to prevent lazy loading issues
         # during response serialization.
