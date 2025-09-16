@@ -12,6 +12,7 @@ from app.core.logging_config import setup_logging
 from app.core import encryption
 from app import metrics
 from app.core.redis_pool import get_redis_connection
+from app.services.notifications import _execute_telegram_send
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -60,51 +61,9 @@ async def _send_telegram_notification(check_id: int, message: str):
                 except Exception as e:
                     logger.error(f"Could not decrement queued notification count for check {check_id}: {e}")
 
-            if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
-                return
-
-            try:
-                decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
-            except Exception:
-                error_message = "Failed to decrypt bot token. Please re-save your settings."
-                logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}) in worker: {error_message}")
-                check.telegram_last_notification_status = "error"
-                check.telegram_last_notification_message = error_message
-                check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
-                metrics.record_notification_sent("telegram", "error")
-                await session.commit()
-                return
-
-            url = f"https://api.telegram.org/bot{decrypted_token}/sendMessage"
-            payload = {
-                "chat_id": check.telegram_chat_id,
-                "text": message,
-                "disable_web_page_preview": True,
-            }
-
-            async with httpx.AsyncClient() as client:
-                try:
-                    response = await client.post(url, json=payload)
-                    response_text = response.text
-                    response.raise_for_status()
-                    logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id}). Response: {response_text}")
-                    check.telegram_last_notification_status = "ok"
-                    check.telegram_last_notification_message = "Successfully sent."
-                    metrics.record_notification_sent("telegram", "success")
-                except httpx.HTTPStatusError as e:
-                    error_message = f"Error: {e.response.status_code} {e.response.text}"
-                    logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
-                    check.telegram_last_notification_status = "error"
-                    check.telegram_last_notification_message = error_message
-                    metrics.record_notification_sent("telegram", "error")
-                except Exception as e:
-                    error_message = f"An unexpected error occurred: {e}"
-                    logger.error(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}", exc_info=True)
-                    check.telegram_last_notification_status = "error"
-                    check.telegram_last_notification_message = error_message
-                    metrics.record_notification_sent("telegram", "error")
+            # Call the centralized sending logic
+            await _execute_telegram_send(check, message)
             
-            check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
             await session.commit()
 
     if owner_identifier_for_stats and not settings.DEBUG_MODE:

@@ -24,8 +24,12 @@ def format_duration(seconds: int) -> str:
     
     return f"{minutes}m {secs}s"
 
-async def send_telegram_notification(db: AsyncSession, check: Check, message: str):
-    """Sends a notification to the configured Telegram chat and updates the status."""
+async def _execute_telegram_send(check: Check, message: str):
+    """
+    Core logic to send a Telegram notification.
+    This function handles token decryption, API request, and updates the check object in-memory.
+    The caller is responsible for database session management (commit).
+    """
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
         return
 
@@ -36,7 +40,6 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
         logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
         check.telegram_last_notification_status = "error"
         check.telegram_last_notification_message = error_message
-        check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
         metrics.record_notification_sent("telegram", "error")
         return
 
@@ -69,7 +72,13 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
             check.telegram_last_notification_message = error_message
             metrics.record_notification_sent("telegram", "error")
     
-    check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+    finally:
+        check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+
+
+async def send_telegram_notification(db: AsyncSession, check: Check, message: str):
+    """Sends a notification to the configured Telegram chat and updates the status."""
+    await _execute_telegram_send(check, message)
     # The calling function is responsible for the commit
 
 
