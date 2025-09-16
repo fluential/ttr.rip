@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.tasks import cleanup  # Add this import
 from app import metrics  # Add metrics import
+from app.core.redis_pool import get_redis_connection
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -40,16 +41,15 @@ async def lifespan(app: FastAPI):
     # Check Redis connection and potentially start worker
     if not settings.DEBUG_MODE:
         try:
-            import redis
-            r = redis.from_url(str(settings.REDIS_URL))
-            r.ping()
-            logger.info("Successfully connected to Redis for Celery broker.")
-            app.state.redis_connected = True
-            
-            # Start Celery worker if enabled
-            if settings.AUTO_START_WORKER:
-                start_celery_worker()
+            r = get_redis_connection()
+            if r:
+                r.ping()
+                logger.info("Successfully connected to Redis for Celery broker.")
+                app.state.redis_connected = True
                 
+                # Start Celery worker if enabled
+                if settings.AUTO_START_WORKER:
+                    start_celery_worker()
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
     
@@ -93,17 +93,17 @@ async def collect_metrics_periodically():
             # Update queue metrics if Redis is available
             if not settings.DEBUG_MODE:
                 try:
-                    import redis
-                    r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-                    queue_name = 'rtt_celery_queue'
-                    queue_size = r.llen(queue_name)
-                    metrics.record_queue_size(queue_name, queue_size)
-                    
-                    # Update worker count
-                    from app.services.queue_stats import get_queue_stats
-                    stats = get_queue_stats()
-                    if isinstance(stats["workers_online"], int):
-                        metrics.record_workers_count(stats["workers_online"])
+                    r = get_redis_connection()
+                    if r:
+                        queue_name = 'rtt_celery_queue'
+                        queue_size = r.llen(queue_name)
+                        metrics.record_queue_size(queue_name, queue_size)
+                        
+                        # Update worker count
+                        from app.services.queue_stats import get_queue_stats
+                        stats = get_queue_stats()
+                        if isinstance(stats["workers_online"], int):
+                            metrics.record_workers_count(stats["workers_online"])
                 except Exception as e:
                     logger.error(f"Error collecting queue metrics: {e}")
             

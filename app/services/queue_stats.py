@@ -1,6 +1,7 @@
 import logging
 from app.worker import celery_app
 from app.core.config import settings
+from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,17 @@ def get_queue_stats():
         }
 
     try:
-        # Use redis client to check connection and queue length
-        import redis
-        r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
+        # Use redis pool to check connection and queue length
+        r = get_redis_connection()
+        if not r:
+            return {
+                "broker_status": "Redis (Connection failed)",
+                "workers_online": "N/A",
+                "total_queued": "N/A",
+                "total_active": "N/A",
+                "total_reserved": "N/A",
+            }
+            
         r.ping()  # Check connection
         queue_name = celery_app.conf.get('task_default_queue', 'celery')
         total_queued = r.llen(queue_name)

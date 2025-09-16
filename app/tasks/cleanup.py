@@ -7,6 +7,7 @@ from sqlalchemy.future import select
 
 from app.db import models, base
 from app.core.config import settings
+from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,24 @@ async def cleanup_inactive_checks(db: AsyncSession, inactive_threshold: datetime
     
     await db.commit()
     logger.info(f"Successfully deleted {len(check_ids)} inactive checks")
+
+    # Clean up Redis entries for these checks
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                # Delete any Redis entries associated with these checks
+                # This is just an example - you might have other patterns to clean up
+                pipe = r.pipeline()
+                for check_id in check_ids:
+                    key_pattern = f"check:{check_id}:*"
+                    keys = r.keys(key_pattern)
+                    if keys:
+                        pipe.delete(*keys)
+                pipe.execute()
+                logger.info(f"Cleaned up Redis entries for {len(check_ids)} deleted checks")
+        except Exception as e:
+            logger.error(f"Error cleaning up Redis entries for deleted checks: {e}")
 
 async def cleanup_inactive_users(db: AsyncSession, inactive_threshold: datetime):
     """
@@ -137,6 +156,34 @@ async def cleanup_inactive_users(db: AsyncSession, inactive_threshold: datetime)
     user_ids = [user.id for user in inactive_users]
     user_auth_keys = [f"...{user.auth_key[-4:]}" for user in inactive_users]
     logger.info(f"Deleting {len(user_ids)} inactive users: {list(zip(user_ids, user_auth_keys))}")
+    
+    # Clean up Redis entries for these users
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                pipe = r.pipeline()
+                for user_id in user_ids:
+                    # Clean up user-related Redis entries
+                    owner_identifier = f"user_id_{user_id}"
+                    
+                    # Clean up notification counters
+                    pipe.delete(f"user_stats:queued_notifications:{owner_identifier}")
+                    pipe.delete(f"user_stats:processed_notifications:{owner_identifier}")
+                    
+                    # Clean up user stats cache
+                    pipe.delete(f"user_stats:dashboard:{user_id}")
+                    
+                    # Find and delete any other user-related keys
+                    user_key_pattern = f"*{owner_identifier}*"
+                    keys = r.keys(user_key_pattern)
+                    if keys:
+                        pipe.delete(*keys)
+                
+                pipe.execute()
+                logger.info(f"Cleaned up Redis entries for {len(user_ids)} users to be deleted")
+        except Exception as e:
+            logger.error(f"Error cleaning up Redis entries for users: {e}")
     
     # Delete the inactive users
     for user in inactive_users:

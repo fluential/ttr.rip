@@ -14,6 +14,7 @@ from app.services import notifications
 from app.core import encryption
 from app.worker import celery_app
 from app.core.config import settings
+from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +112,9 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: models
         return 0
 
     try:
-        import redis
-        r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
+        r = get_redis_connection()
+        if not r:
+            return "N/A"
         
         owner_identifier = f"user_id_{principal.id}"
         
@@ -136,13 +138,13 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # --- Caching Layer ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
-            import redis
-            r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-            cache_key = f"user_stats:dashboard:{principal.id}"
-            cached_stats = r.get(cache_key)
-            if cached_stats:
-                logger.debug(f"Cache hit for user stats: {principal.id}")
-                return schemas.CheckStats.model_validate_json(cached_stats)
+            r = get_redis_connection()
+            if r:
+                cache_key = f"user_stats:dashboard:{principal.id}"
+                cached_stats = r.get(cache_key)
+                if cached_stats:
+                    logger.debug(f"Cache hit for user stats: {principal.id}")
+                    return schemas.CheckStats.model_validate_json(cached_stats)
         except Exception as e:
             logger.error(f"Could not read from Redis cache for stats: {e}")
     # --- End Caching Layer ---
@@ -173,12 +175,12 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     processed_notifications: Union[int, str] = 0
     if not settings.DEBUG_MODE:
         try:
-            import redis
-            r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-            owner_identifier = f"user_id_{principal.id}"
-            
-            count = r.get(f"user_stats:processed_notifications:{owner_identifier}")
-            processed_notifications = int(count) if count else 0
+            r = get_redis_connection()
+            if r:
+                owner_identifier = f"user_id_{principal.id}"
+                
+                count = r.get(f"user_stats:processed_notifications:{owner_identifier}")
+                processed_notifications = int(count) if count else 0
         except Exception as e:
             logger.error(f"Could not get processed notification count for principal: {e}")
             processed_notifications = "N/A"
@@ -207,11 +209,11 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # --- Caching Layer ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
-            import redis
-            r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-            cache_key = f"user_stats:dashboard:{principal.id}"
-            r.set(cache_key, stats_obj.model_dump_json(), ex=settings.STATS_CACHE_TTL_SECONDS)
-            logger.debug(f"Cache set for user stats: {principal.id}")
+            r = get_redis_connection()
+            if r:
+                cache_key = f"user_stats:dashboard:{principal.id}"
+                r.set(cache_key, stats_obj.model_dump_json(), ex=settings.STATS_CACHE_TTL_SECONDS)
+                logger.debug(f"Cache set for user stats: {principal.id}")
         except Exception as e:
             logger.error(f"Could not write to Redis cache for stats: {e}")
     # --- End Caching Layer ---

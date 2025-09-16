@@ -11,6 +11,7 @@ from app.db.models import Check
 from app.core.logging_config import setup_logging
 from app.core import encryption
 from app import metrics
+from app.core.redis_pool import get_redis_connection
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -30,10 +31,10 @@ if settings.DEBUG_MODE:
     logger.info("DEBUG_MODE is on. Celery will run tasks eagerly without a broker.")
 else:
     try:
-        import redis
-        r = redis.from_url(str(settings.REDIS_URL))
-        r.ping()
-        logger.info("Celery worker successfully connected to Redis.")
+        r = get_redis_connection()
+        if r:
+            r.ping()
+            logger.info("Celery worker successfully connected to Redis.")
     except Exception as e:
         logger.error(f"Celery worker failed to connect to Redis: {e}. Tasks may not be processed.")
 
@@ -53,9 +54,9 @@ async def _send_telegram_notification(check_id: int, message: str):
 
             if owner_identifier_for_stats and not settings.DEBUG_MODE:
                 try:
-                    import redis
-                    r = redis.from_url(str(settings.REDIS_URL))
-                    r.decr(f"user_stats:queued_notifications:{owner_identifier_for_stats}")
+                    r = get_redis_connection()
+                    if r:
+                        r.decr(f"user_stats:queued_notifications:{owner_identifier_for_stats}")
                 except Exception as e:
                     logger.error(f"Could not decrement queued notification count for check {check_id}: {e}")
 
@@ -108,9 +109,9 @@ async def _send_telegram_notification(check_id: int, message: str):
 
     if owner_identifier_for_stats and not settings.DEBUG_MODE:
         try:
-            import redis
-            r = redis.from_url(str(settings.REDIS_URL))
-            r.incr(f"user_stats:processed_notifications:{owner_identifier_for_stats}")
+            r = get_redis_connection()
+            if r:
+                r.incr(f"user_stats:processed_notifications:{owner_identifier_for_stats}")
         except Exception as e:
             logger.error(f"Could not increment processed notification count for check {check_id}: {e}")
 

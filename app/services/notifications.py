@@ -8,6 +8,7 @@ from app.worker import send_telegram_notification_task
 from app.core.config import settings
 from app.core import encryption
 from app import metrics
+from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +77,10 @@ def schedule_telegram_notification(check: Check, message: str):
     """Enqueues a task to send a Telegram notification."""
     if not settings.DEBUG_MODE:
         try:
-            import redis
-            r = redis.from_url(str(settings.REDIS_URL))
-            owner_identifier = f"user_id_{check.owner_id}"
-            
-            r.incr(f"user_stats:queued_notifications:{owner_identifier}")
+            r = get_redis_connection()
+            if r:
+                owner_identifier = f"user_id_{check.owner_id}"
+                r.incr(f"user_stats:queued_notifications:{owner_identifier}")
         except Exception as e:
             logger.error(f"Could not increment queued notification count for check {check.id}: {e}")
 
