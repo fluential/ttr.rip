@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     DEBUG_MODE: bool = False
     SCHEDULER_INTERVAL_SECONDS: int = 5
+    STATS_CACHE_TTL_SECONDS: int = 10
 
     # For "Login with Telegram" feature
     TELEGRAM_BOT_NAME: str = ""
