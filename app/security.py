@@ -76,7 +76,9 @@ async def get_public_user_from_key(
 ) -> db_models.User:
     """
     Dependency for public, key-based authentication via the X-Auth-Key header.
-    Uses a cache-aside pattern to reduce DB load.
+    If a user is found, it is returned.
+    If not, a temporary, in-memory-only User object is returned.
+    The user is only persisted to the DB upon a meaningful action (e.g., creating a check).
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -84,61 +86,28 @@ async def get_public_user_from_key(
     )
 
     auth_key = x_auth_key
+
     if not auth_key:
         raise credentials_exception
 
-    r = get_redis_connection() if not settings.DEBUG_MODE else None
-
-    # --- Blacklist Check (always hits Redis) ---
-    if r:
+    # --- Blacklist Check ---
+    if not settings.DEBUG_MODE:
         try:
-            if r.exists(f"blacklist:auth_key:{auth_key}"):
+            r = get_redis_connection()
+            if r and r.exists(f"blacklist:auth_key:{auth_key}"):
                 logger.warning(f"Authentication attempt with blacklisted key: ...{auth_key[-4:]}")
                 raise credentials_exception
         except Exception as e:
-            logger.error(f"Redis blacklist check failed during auth: {e}")
-            raise credentials_exception # Fail closed
+            logger.error(f"Redis check failed during auth: {e}")
+            # Fail closed: if we can't check the blacklist, deny access.
+            raise credentials_exception
     # --- End Blacklist Check ---
 
-    # --- Cache-Aside Auth Check ---
-    if r:
-        try:
-            cache_key = f"auth_cache:{auth_key}"
-            cached_user_data = r.get(cache_key)
-            if cached_user_data:
-                logger.debug(f"Auth cache hit for key ...{auth_key[-4:]}")
-                if cached_user_data == "not_found":
-                    # Return a temporary user object for JIT creation, but we avoided a DB hit.
-                    return db_models.User(auth_key=auth_key)
-                
-                user_id, is_admin_str = cached_user_data.split(":")
-                # Return a temporary user object with just enough info for authorization.
-                # This avoids a DB hit for every request.
-                return db_models.User(id=int(user_id), auth_key=auth_key, is_admin=(is_admin_str == '1'))
-        except Exception as e:
-            logger.error(f"Redis auth cache check failed: {e}")
-            # If cache fails, we proceed to DB but don't raise an error.
-    # --- End Cache-Aside Auth Check ---
-
-    logger.debug(f"Auth cache miss for key ...{auth_key[-4:]}. Querying DB.")
     user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
-
-    # --- Populate Cache ---
-    if r:
-        try:
-            cache_key = f"auth_cache:{auth_key}"
-            if user:
-                # Cache user ID and admin status for 5 minutes
-                r.set(cache_key, f"{user.id}:{1 if user.is_admin else 0}", ex=300)
-            else:
-                # Cache the "not found" status to prevent repeated queries for invalid keys
-                r.set(cache_key, "not_found", ex=300)
-        except Exception as e:
-            logger.error(f"Failed to write to auth cache: {e}")
-    # --- End Populate Cache ---
-
     if not user:
-        # User does not exist. Return a temporary, non-persistent User object for JIT creation.
+        # User does not exist. Return a temporary, non-persistent User object.
+        # This allows read-only operations to proceed for a new key without a DB write.
+        # The user will be created in the DB when they perform a write action (e.g., create_check).
         return db_models.User(auth_key=auth_key)
     
     return user
