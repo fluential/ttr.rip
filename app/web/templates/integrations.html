@@ -47,7 +47,10 @@
         <div class="grid">
             <label for="telegram_bot_token">
                 Bot Token
-                <input type="password" id="telegram_bot_token" name="telegram_bot_token" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" value="{{ telegram_bot_token or '' }}">
+                <input type="password" id="telegram_bot_token" name="telegram_bot_token" placeholder="{{ telegram_bot_token_placeholder }}" value="{{ telegram_bot_token or '' }}">
+                {% if has_telegram_bot_token %}
+                <small>Leave empty to keep the existing token. Enter a new value to replace it.</small>
+                {% endif %}
             </label>
             <label for="telegram_chat_id">
                 Chat ID
