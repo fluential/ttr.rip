@@ -245,7 +245,16 @@
             const row = document.createElement('tr');
             const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
             const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
-            const owner = check.owner_key || `admin (id: ${check.owner_id})`;
+            
+            let owner = `User ID: ${check.owner_id}`;
+            if (check.owner) {
+                if (check.owner.is_admin && check.owner.username) {
+                    owner = `admin (${check.owner.username})`;
+                } else if (check.owner.auth_key) {
+                    owner = `key: ...${check.owner.auth_key.slice(-4)}`;
+                }
+            }
+
 
             const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
             const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);

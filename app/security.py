@@ -36,12 +36,14 @@ async def get_auth_principal(
     token: Optional[str] = Depends(oauth2_scheme),
     x_auth_key: Optional[str] = Header(None, alias="X-Auth-Key"),
     db: AsyncSession = Depends(db_base.get_db),
-):
+) -> db_models.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    user: Optional[db_models.User] = None
+
     if token:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -52,13 +54,14 @@ async def get_auth_principal(
         except JWTError:
             raise credentials_exception
         user = await crud.get_user_by_username(db, username=token_data.username)
-        if user is None or not user.is_admin:
+        if user is None: # Admin user must exist
             raise credentials_exception
         return user
 
     if x_auth_key:
-        if len(x_auth_key) == 32:
-            return x_auth_key
+        user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
+        if user:
+            return user
     
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -104,9 +107,9 @@ async def get_telegram_session_data(
 
     try:
         payload = jwt.decode(telegram_session, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        check_id: int = payload.get("check_id")
+        # Simplified: just check for presence of telegram_user_id
         telegram_user_id: int = payload.get("telegram_user_id")
-        if check_id is None or telegram_user_id is None:
+        if telegram_user_id is None:
             return {} # Invalid payload
         return payload
     except JWTError:

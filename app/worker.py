@@ -48,10 +48,7 @@ async def _send_telegram_notification(check_id: int, message: str):
             if not check:
                 return
 
-            if check.owner_key:
-                owner_identifier_for_stats = check.owner_key
-            elif check.owner_id:
-                owner_identifier_for_stats = f"user_id_{check.owner_id}"
+            owner_identifier_for_stats = f"user_id_{check.owner_id}"
 
             if owner_identifier_for_stats and not settings.DEBUG_MODE:
                 try:

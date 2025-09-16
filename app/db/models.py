@@ -17,9 +17,19 @@ class User(Base):
     __tablename__ = "users"
 
     id: int = Column(Integer, primary_key=True, index=True)
-    username: str = Column(String, unique=True, index=True)
-    hashed_password: str = Column(String)
-    is_admin: bool = Column(Boolean, default=False)
+
+    # For admin users
+    username: Optional[str] = Column(String, unique=True, index=True, nullable=True)
+    hashed_password: Optional[str] = Column(String, nullable=True)
+    is_admin: bool = Column(Boolean, default=False, nullable=False)
+
+    # For anonymous/telegram users
+    auth_key: Optional[str] = Column(String, unique=True, index=True, nullable=True)
+
+    # For telegram-linked users
+    telegram_user_id: Optional[int] = Column(Integer, unique=True, index=True, nullable=True)
+    telegram_first_name: Optional[str] = Column(String, nullable=True)
+    telegram_username: Optional[str] = Column(String, nullable=True)
 
     checks = relationship("Check", back_populates="owner")
 
@@ -43,22 +53,6 @@ class Check(Base):
     telegram_last_notification_status: Optional[str] = Column(String, nullable=True)
     telegram_last_notification_message: Optional[str] = Column(String, nullable=True)
     telegram_last_notification_timestamp: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    owner_id: Optional[int] = Column(Integer, ForeignKey("users.id"), nullable=True)
-    owner_key: Optional[str] = Column(String, index=True, nullable=True)
+    owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     owner = relationship("User", back_populates="checks")
-    telegram_auth = relationship("TelegramAuth", back_populates="check", uselist=False, cascade="all, delete-orphan")
-
-
-class TelegramAuth(Base):
-    __tablename__ = "telegram_auths"
-
-    id: int = Column(Integer, primary_key=True, index=True)
-    telegram_user_id: int = Column(Integer, index=True)
-    first_name: str = Column(String)
-    username: Optional[str] = Column(String, nullable=True)
-    auth_date: int = Column(Integer)
-    hash: str = Column(String)
-    check_id: int = Column(Integer, ForeignKey("checks.id"), unique=True, nullable=False)
-
-    check = relationship("Check", back_populates="telegram_auth")

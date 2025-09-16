@@ -35,27 +35,38 @@ async def home(request: Request):
     return response
 
 @router.post("/dashboard", response_class=HTMLResponse)
-async def login_with_key(request: Request, auth_key: str = Form(...)):
-    if auth_key and len(auth_key) == 32:
+async def login_with_key(request: Request, auth_key: str = Form(...), db: AsyncSession = Depends(db_base.get_db)):
+    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    if user:
         response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
         response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
         return response
     return RedirectResponse(url="/?error=1", status_code=status.HTTP_302_FOUND)
 
 @router.get("/new", response_class=HTMLResponse)
-async def new_anonymous_user(request: Request):
+async def new_anonymous_user(request: Request, db: AsyncSession = Depends(db_base.get_db)):
     auth_key = generate_auth_key()
+    user_schema = schemas.UserCreate(auth_key=auth_key)
+    await crud.create_user(db, user=user_schema)
+    
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
     return response
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
+async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)):
     auth_key = request.cookies.get("auth_key")
-    if not auth_key or len(auth_key) != 32:
+    if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
+    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    if not user:
+        # Invalid cookie, clear it and redirect to home
+        response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+        response.delete_cookie("auth_key")
+        return response
+
     context = {
         "request": request,
         "auth_key": auth_key,
@@ -72,36 +83,33 @@ async def dashboard(request: Request):
 @router.get("/telegram/callback", response_class=HTMLResponse, name="telegram_callback")
 async def telegram_callback(
     request: Request,
-    check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
 ):
-    query_params = {k: v for k, v in request.query_params.items() if k not in ['check_id']}
-    
+    auth_key = request.cookies.get("auth_key")
+    if not auth_key:
+        raise HTTPException(status_code=403, detail="Not authenticated. Please log in with your key first.")
+
+    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found for the provided auth key.")
+
+    query_params = dict(request.query_params)
     if not security.validate_telegram_hash(query_params.copy()):
         raise HTTPException(status_code=400, detail="Invalid hash from Telegram")
 
     login_data = schemas.TelegramLoginData(**query_params)
     
-    check = await db.get(db_models.Check, check_id)
-    if not check:
-        raise HTTPException(status_code=404, detail="Check not found")
+    # Check if this telegram ID is already linked to another user
+    existing_telegram_user = await crud.get_user_by_telegram_id(db, login_data.id)
+    if existing_telegram_user and existing_telegram_user.id != user.id:
+        # This is a complex state - for now, we prevent linking.
+        # A more advanced implementation could offer to merge accounts.
+        raise HTTPException(status_code=409, detail="This Telegram account is already linked to a different user.")
 
-    await crud.create_or_update_telegram_auth(db, check_id=check_id, login_data=login_data)
+    await crud.link_telegram_to_user(db, user=user, login_data=login_data)
 
-    session_token = security.create_telegram_session_token({
-        "telegram_user_id": login_data.id,
-        "check_id": check_id
-    })
-
-    # Determine redirect URL based on whether it was an admin or public user
-    if check.owner_id: # Admin-owned check
-        redirect_url = f"/admin/check/{check_id}/integrations"
-    else: # Public key-owned check
-        redirect_url = f"/check/{check_id}/integrations"
-
-    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="telegram_session", value=session_token, httponly=True, samesite="lax")
-    return response
+    # Redirect back to the dashboard
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
@@ -109,23 +117,18 @@ async def public_integrations(
     request: Request,
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
-    telegram_session: dict = Depends(security.get_telegram_session_data)
 ):
     auth_key = request.cookies.get("auth_key")
     if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
-    check = await crud.get_check_by_id_and_owner(db, check_id=check_id, principal=auth_key)
+    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    if not user:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+
+    check = await crud.get_check_by_id_and_owner(db, check_id=check_id, principal=user)
     if not check:
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-
-    is_telegram_authed = not settings.TELEGRAM_AUTH_ENABLED or bool(
-        telegram_session
-        and telegram_session.get("check_id") == check_id
-        and telegram_session.get("telegram_user_id")
-    )
-
-    auth_url = request.url_for('telegram_callback').include_query_params(check_id=check.id)
 
     decrypted_token = ""
     if check.telegram_bot_token:
@@ -140,10 +143,6 @@ async def public_integrations(
         "check": check,
         "auth_key": auth_key,
         "is_admin": False,
-        "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
-        "telegram_auth_url": str(auth_url),
-        "is_telegram_authed": is_telegram_authed,
-        "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
@@ -209,7 +208,6 @@ async def admin_integrations(
     request: Request,
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
-    telegram_session: dict = Depends(security.get_telegram_session_data)
 ):
     token = request.cookies.get("auth_token")
     if not token:
@@ -221,14 +219,6 @@ async def admin_integrations(
 
     if not check:
         return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
-
-    is_telegram_authed = not settings.TELEGRAM_AUTH_ENABLED or bool(
-        telegram_session
-        and telegram_session.get("check_id") == check_id
-        and telegram_session.get("telegram_user_id")
-    )
-
-    auth_url = request.url_for('telegram_callback').include_query_params(check_id=check.id)
 
     decrypted_token = ""
     if check.telegram_bot_token:
@@ -242,10 +232,6 @@ async def admin_integrations(
         "check": check,
         "api_token": token,
         "is_admin": True,
-        "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
-        "telegram_auth_url": str(auth_url),
-        "is_telegram_authed": is_telegram_authed,
-        "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_token": decrypted_token,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,

@@ -13,14 +13,21 @@ class TokenData(BaseModel):
 
 # User Schemas
 class UserBase(BaseModel):
-    username: str
+    username: Optional[str] = None
 
 class UserCreate(UserBase):
-    password: str
+    password: Optional[str] = None
     is_admin: bool = False
+    auth_key: Optional[str] = None
 
 class User(UserBase):
     id: int
+    is_admin: bool
+    auth_key: Optional[str] = None
+    telegram_user_id: Optional[int] = None
+    telegram_first_name: Optional[str] = None
+    telegram_username: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -50,8 +57,8 @@ class Check(CheckBase):
     telegram_last_notification_status: Optional[str] = None
     telegram_last_notification_message: Optional[str] = None
     telegram_last_notification_timestamp: Optional[datetime] = None
-    owner_id: Optional[int] = None
-    owner_key: Optional[str] = None
+    owner_id: int
+    owner: Optional[User] = None # Include owner details
 
     class Config:
         from_attributes = True
@@ -93,13 +100,3 @@ class TelegramLoginData(BaseModel):
     auth_date: int
     hash: str
     photo_url: Optional[str] = None
-
-
-class TelegramAuth(BaseModel):
-    telegram_user_id: int
-    first_name: str
-    username: Optional[str] = None
-    auth_date: int
-
-    class Config:
-        from_attributes = True

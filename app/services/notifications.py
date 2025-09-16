@@ -73,15 +73,9 @@ def schedule_telegram_notification(check: Check, message: str):
         try:
             import redis
             r = redis.from_url(str(settings.REDIS_URL))
-            if check.owner_key:
-                owner_identifier = check.owner_key
-            elif check.owner_id:
-                owner_identifier = f"user_id_{check.owner_id}"
-            else:
-                owner_identifier = None
+            owner_identifier = f"user_id_{check.owner_id}"
             
-            if owner_identifier:
-                r.incr(f"user_stats:queued_notifications:{owner_identifier}")
+            r.incr(f"user_stats:queued_notifications:{owner_identifier}")
         except Exception as e:
             logger.error(f"Could not increment queued notification count for check {check.id}: {e}")
 

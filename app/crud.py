@@ -5,7 +5,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, case
+from sqlalchemy import func, case, or_
+from sqlalchemy.orm import selectinload
 import logging
 from app.db import models
 from app import schemas, security
@@ -21,12 +22,24 @@ async def get_user_by_username(db: AsyncSession, username: str):
     result = await db.execute(select(models.User).filter(models.User.username == username))
     return result.scalars().first()
 
+async def get_user_by_auth_key(db: AsyncSession, auth_key: str):
+    result = await db.execute(select(models.User).filter(models.User.auth_key == auth_key))
+    return result.scalars().first()
+
+async def get_user_by_telegram_id(db: AsyncSession, telegram_user_id: int):
+    result = await db.execute(select(models.User).filter(models.User.telegram_user_id == telegram_user_id))
+    return result.scalars().first()
+
 async def create_user(db: AsyncSession, user: schemas.UserCreate):
-    hashed_password = security.get_password_hash(user.password)
+    hashed_password = None
+    if user.password:
+        hashed_password = security.get_password_hash(user.password)
+    
     db_user = models.User(
         username=user.username,
         hashed_password=hashed_password,
-        is_admin=user.is_admin
+        is_admin=user.is_admin,
+        auth_key=user.auth_key
     )
     db.add(db_user)
     await db.commit()
@@ -38,7 +51,7 @@ async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
     result = await db.execute(select(models.Check).filter(models.Check.uuid == check_uuid))
     return result.scalars().first()
 
-async def get_user_queued_notification_count(db: AsyncSession, principal: Union[models.User, str]) -> Union[int, str]:
+async def get_user_queued_notification_count(db: AsyncSession, principal: models.User) -> Union[int, str]:
     if settings.DEBUG_MODE:
         return 0
 
@@ -46,10 +59,7 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: Union[
         import redis
         r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
         
-        if isinstance(principal, models.User):
-            owner_identifier = f"user_id_{principal.id}"
-        else:
-            owner_identifier = principal
+        owner_identifier = f"user_id_{principal.id}"
         
         count = r.get(f"user_stats:queued_notifications:{owner_identifier}")
         return int(count) if count else 0
@@ -58,26 +68,22 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: Union[
         return "N/A"
 
 
-async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: Union[models.User, str]):
+async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: models.User):
     query = select(models.Check).filter(models.Check.id == check_id)
-    if isinstance(principal, models.User) and not principal.is_admin:
+    if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
-    elif not isinstance(principal, models.User):
-        query = query.filter(models.Check.owner_key == principal)
     # Admin can see any check
 
     result = await db.execute(query)
     return result.scalars().first()
 
-async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.User, str]):
+async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # Base query for the user's checks
-    if isinstance(principal, models.User) and principal.is_admin:
+    if principal.is_admin:
         # Admin stats would be for all checks
         query = select(models.Check)
-    elif isinstance(principal, models.User):
-        query = select(models.Check).filter(models.Check.owner_id == principal.id)
     else:
-        query = select(models.Check).filter(models.Check.owner_key == principal)
+        query = select(models.Check).filter(models.Check.owner_id == principal.id)
 
     stats_query = select(
         func.count(models.Check.id).label("total_checks"),
@@ -98,10 +104,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: Union[models.Use
         try:
             import redis
             r = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-            if isinstance(principal, models.User):
-                owner_identifier = f"user_id_{principal.id}"
-            else:
-                owner_identifier = principal
+            owner_identifier = f"user_id_{principal.id}"
             
             count = r.get(f"user_stats:processed_notifications:{owner_identifier}")
             processed_notifications = int(count) if count else 0
@@ -184,16 +187,12 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
 
     return check
 
-async def get_checks_by_owner(db: AsyncSession, principal: Union[models.User, str], page: int = 1, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc'):
+async def get_checks_by_owner(db: AsyncSession, principal: models.User, page: int = 1, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc'):
     # Base query
-    if isinstance(principal, models.User) and principal.is_admin:
-        query = select(models.Check)
-    elif isinstance(principal, models.User):
-        # Non-admin user (not currently possible but for future)
-        query = select(models.Check).filter(models.Check.owner_id == principal.id)
+    if principal.is_admin:
+        query = select(models.Check).options(selectinload(models.Check.owner))
     else:
-        # Public user identified by auth key
-        query = select(models.Check).filter(models.Check.owner_key == principal)
+        query = select(models.Check).filter(models.Check.owner_id == principal.id)
 
     # Add total count to the main query using a window function
     query = query.add_columns(func.count(models.Check.id).over().label("total_count"))
@@ -219,15 +218,12 @@ async def get_checks_by_owner(db: AsyncSession, principal: Union[models.User, st
 
     return items, total
 
-async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: Union[models.User, str]):
+async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: models.User):
     db_check_data = {
         **check.model_dump(),
         "uuid": str(uuid.uuid4()),
+        "owner_id": principal.id
     }
-    if isinstance(principal, models.User):
-        db_check_data["owner_id"] = principal.id
-    else:
-        db_check_data["owner_key"] = principal
 
     db_check = models.Check(**db_check_data)
     db.add(db_check)
@@ -235,12 +231,10 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
     await db.refresh(db_check)
     return db_check
 
-async def update_check(db: AsyncSession, check_id: int, check_data: schemas.CheckUpdate, principal: Union[models.User, str]):
+async def update_check(db: AsyncSession, check_id: int, check_data: schemas.CheckUpdate, principal: models.User):
     query = select(models.Check).filter(models.Check.id == check_id)
-    if isinstance(principal, models.User) and not principal.is_admin:
+    if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
-    elif not isinstance(principal, models.User):
-        query = query.filter(models.Check.owner_key == principal)
     # For admin, no owner filter is applied, can edit any check.
 
     result = await db.execute(query)
@@ -267,41 +261,19 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
     return db_check
 
 
-async def create_or_update_telegram_auth(db: AsyncSession, check_id: int, login_data: schemas.TelegramLoginData):
-    # Find existing auth for this check
-    result = await db.execute(select(models.TelegramAuth).filter(models.TelegramAuth.check_id == check_id))
-    db_auth = result.scalars().first()
-
-    if db_auth:
-        # Update existing auth record
-        db_auth.telegram_user_id = login_data.id
-        db_auth.first_name = login_data.first_name
-        db_auth.username = login_data.username
-        db_auth.auth_date = login_data.auth_date
-        db_auth.hash = login_data.hash
-    else:
-        # Create new auth record
-        db_auth = models.TelegramAuth(
-            check_id=check_id,
-            telegram_user_id=login_data.id,
-            first_name=login_data.first_name,
-            username=login_data.username,
-            auth_date=login_data.auth_date,
-            hash=login_data.hash,
-        )
-        db.add(db_auth)
-    
+async def link_telegram_to_user(db: AsyncSession, user: models.User, login_data: schemas.TelegramLoginData):
+    user.telegram_user_id = login_data.id
+    user.telegram_first_name = login_data.first_name
+    user.telegram_username = login_data.username
     await db.commit()
-    await db.refresh(db_auth)
-    return db_auth
+    await db.refresh(user)
+    return user
 
 
-async def update_check_telegram_settings(db: AsyncSession, check_id: int, settings_data: schemas.TelegramSettingsUpdate, principal: Union[models.User, str]):
+async def update_check_telegram_settings(db: AsyncSession, check_id: int, settings_data: schemas.TelegramSettingsUpdate, principal: models.User):
     query = select(models.Check).filter(models.Check.id == check_id)
-    if isinstance(principal, models.User) and not principal.is_admin:
+    if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
-    elif not isinstance(principal, models.User):
-        query = query.filter(models.Check.owner_key == principal)
     # For admin, no owner filter is applied.
 
     result = await db.execute(query)
@@ -323,12 +295,10 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
     return db_check
 
 
-async def delete_check(db: AsyncSession, check_id: int, principal: Union[models.User, str]):
+async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     query = select(models.Check).filter(models.Check.id == check_id)
-    if isinstance(principal, models.User) and not principal.is_admin:
+    if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
-    elif not isinstance(principal, models.User):
-        query = query.filter(models.Check.owner_key == principal)
     # For admin, no owner filter is applied.
 
     result = await db.execute(query)

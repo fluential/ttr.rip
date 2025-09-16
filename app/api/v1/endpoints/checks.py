@@ -13,7 +13,7 @@ router = APIRouter()
 @router.get("/stats", response_model=schemas.CheckStats)
 async def read_check_stats(
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    principal: db_models.User = Depends(security.get_auth_principal),
 ):
     return await crud.get_check_stats_by_owner(db=db, principal=principal)
 
@@ -21,7 +21,7 @@ async def read_check_stats(
 @router.get("", response_model=schemas.CheckPage)
 async def read_checks(
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    principal: db_models.User = Depends(security.get_auth_principal),
     page: int = Query(1, ge=1),
     size: int = Query(25, ge=1, le=100),
     sort_by: str = Query('id'),
@@ -54,7 +54,7 @@ async def read_checks(
 async def create_check(
     check: schemas.CheckCreate,
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    principal: db_models.User = Depends(security.get_auth_principal),
 ):
     return await crud.create_check(db=db, check=check, principal=principal)
 
@@ -63,7 +63,7 @@ async def update_check(
     check_id: int,
     check: schemas.CheckUpdate,
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    principal: db_models.User = Depends(security.get_auth_principal),
 ):
     updated_check = await crud.update_check(db=db, check_id=check_id, check_data=check, principal=principal)
     if not updated_check:
@@ -75,13 +75,8 @@ async def update_check_telegram_settings(
     check_id: int,
     telegram_settings: schemas.TelegramSettingsUpdate,
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
-    telegram_session: dict = Depends(security.get_telegram_session_data),
+    principal: db_models.User = Depends(security.get_auth_principal),
 ):
-    if settings.TELEGRAM_AUTH_ENABLED:
-        if not telegram_session or telegram_session.get("check_id") != check_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Telegram authentication required")
-
     updated_check = await crud.update_check_telegram_settings(db=db, check_id=check_id, settings_data=telegram_settings, principal=principal)
     if not updated_check:
         raise HTTPException(status_code=404, detail="Check not found")
@@ -91,7 +86,7 @@ async def update_check_telegram_settings(
 async def test_telegram_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    principal: db_models.User = Depends(security.get_auth_principal),
 ):
     check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
     if not check:
@@ -110,7 +105,7 @@ async def test_telegram_notification(
 async def test_telegram_notification_queue(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    principal: db_models.User = Depends(security.get_auth_principal),
 ):
     check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
     if not check:
@@ -128,7 +123,7 @@ async def test_telegram_notification_queue(
 async def delete_check(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
-    principal: Union[db_models.User, str] = Depends(security.get_auth_principal),
+    principal: db_models.User = Depends(security.get_auth_principal),
 ):
     deleted_check = await crud.delete_check(db=db, check_id=check_id, principal=principal)
     if not deleted_check:
