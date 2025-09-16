@@ -72,16 +72,44 @@
         file_server
     }
 
-    # Handle API paths with micro-caching and user-specific rate limiting
-    handle /api/v1/checks {
-        # Stricter limit for check creation (POST)
-        @create_check method POST
-        rate_limit @create_check {
-            zone create_check {
-                key {http.request.header.X-Auth-Key}
-                events 10     # 10 creations per minute per auth key
+    # Handle login attempts to prevent brute-forcing
+    handle /api/v1/token {
+        @login method POST
+        rate_limit @login {
+            zone login_attempts {
+                key {remote_host}
+                events 10    # 10 login attempts per minute per IP
                 window 60s
                 burst 5
+            }
+        }
+        reverse_proxy localhost:8000
+    }
+
+    # Handle sensitive user actions like key rotation and account deletion
+    handle /api/v1/user/* {
+        @user_actions method POST DELETE
+        rate_limit @user_actions {
+            zone user_actions {
+                key {http.request.header.X-Auth-Key}
+                events 5     # 5 sensitive actions per hour per user
+                window 1h
+                burst 2
+            }
+        }
+        reverse_proxy localhost:8000
+    }
+
+    # Handle check creation (which also handles new user creation)
+    handle /api/v1/checks {
+        # Stricter limit for check creation (POST), keyed by IP to prevent new user spam
+        @create_check method POST
+        rate_limit @create_check {
+            zone create_check_by_ip {
+                key {remote_host}
+                events 2     # 2 creations per minute per IP
+                window 60s
+                burst 2
             }
         }
         
