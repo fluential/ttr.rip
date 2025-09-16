@@ -60,8 +60,11 @@ async def get_auth_principal(
 
     if x_auth_key:
         user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
-        if user:
-            return user
+        if not user:
+            # Just-in-time user creation for auth_key users
+            user_schema = schemas.UserCreate(auth_key=x_auth_key)
+            user = await crud.create_user(db, user=user_schema)
+        return user
     
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

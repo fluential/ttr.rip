@@ -36,18 +36,17 @@ async def home(request: Request):
 
 @router.post("/dashboard", response_class=HTMLResponse)
 async def login_with_key(request: Request, auth_key: str = Form(...), db: AsyncSession = Depends(db_base.get_db)):
-    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
-    if user:
-        response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-        response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
-        return response
-    return RedirectResponse(url="/?error=1", status_code=status.HTTP_302_FOUND)
+    # We don't need to validate the key here. If it's invalid, the user just won't see any checks.
+    # If it's a valid key for an existing user, they'll see their checks.
+    # If it's a new key, a user will be created when they create their first check.
+    response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
+    return response
 
 @router.get("/new", response_class=HTMLResponse)
 async def new_anonymous_user(request: Request, db: AsyncSession = Depends(db_base.get_db)):
     auth_key = generate_auth_key()
-    user_schema = schemas.UserCreate(auth_key=auth_key)
-    await crud.create_user(db, user=user_schema)
+    # We no longer create the user here. It will be created just-in-time.
     
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
@@ -60,13 +59,8 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
-    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
-    if not user:
-        # Invalid cookie, clear it and redirect to home
-        response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-        response.delete_cookie("auth_key")
-        return response
-
+    # No need to check for user existence here. The dashboard will simply show
+    # "no checks" if the key is new or invalid. The API calls will handle auth.
     context = {
         "request": request,
         "auth_key": auth_key,
@@ -89,8 +83,11 @@ async def telegram_callback(
     if not auth_key:
         raise HTTPException(status_code=403, detail="Not authenticated. Please log in with your key first.")
 
-    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    # The get_auth_principal dependency will create the user if it doesn't exist.
+    # We need to manually call it here to get the user principal.
+    user = await security.get_auth_principal(x_auth_key=auth_key, db=db)
     if not user:
+        # This should theoretically not happen due to JIT creation
         raise HTTPException(status_code=404, detail="User not found for the provided auth key.")
 
     query_params = dict(request.query_params)
@@ -122,7 +119,8 @@ async def public_integrations(
     if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
-    user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    # Manually get principal, which will create user if needed.
+    user = await security.get_auth_principal(x_auth_key=auth_key, db=db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
