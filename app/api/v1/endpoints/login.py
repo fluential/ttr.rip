@@ -50,13 +50,13 @@ async def delete_user_account(
     
     await crud.delete_user_and_data(db, user=user)
     
-    # Add the key to the Redis blacklist with a 1-hour TTL
+    # Add the key to the Redis blacklist with a 24-hour TTL
     if not settings.DEBUG_MODE:
         try:
             r = get_redis_connection()
             if r:
-                # Blacklist for 1 hour (3600 seconds)
-                r.set(f"blacklist:auth_key:{auth_key_to_blacklist}", "1", ex=3600)
+                # Blacklist for 24 hours (86400 seconds)
+                r.set(f"blacklist:auth_key:{auth_key_to_blacklist}", "1", ex=86400)
                 logger.info(f"Blacklisted auth key for deleted user {user.id}: ...{auth_key_to_blacklist[-4:]}")
         except Exception as e:
             logger.error(f"Failed to blacklist auth key for deleted user {user.id}: {e}")
