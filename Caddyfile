@@ -107,9 +107,9 @@
         rate_limit @create_check {
             zone create_check_by_ip {
                 key {remote_host}
-                events 2     # 2 creations per minute per IP
+                events 15    # 15 creations per minute per IP, to prevent user spam while allowing normal use
                 window 60s
-                burst 2
+                burst 5
             }
         }
         
