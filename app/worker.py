@@ -91,7 +91,7 @@ def send_telegram_notification_task(check_id: int, message: str):
 async def _check_overdue_jobs():
     """The core async logic for finding and processing overdue checks."""
     from app.services import notifications
-    from app.crud import _invalidate_user_stats_cache
+    from app.crud import _update_redis_stats_counters
 
     now_utc = datetime.now(timezone.utc)
     logger.info("Scheduler task running check cycle...")
@@ -108,20 +108,17 @@ async def _check_overdue_jobs():
 
             if overdue_checks:
                 logger.info(f"Scheduler found {len(overdue_checks)} overdue checks.")
-                owner_ids_to_invalidate = set()
                 for check in overdue_checks:
                     if check.status != "down":
+                        old_status = check.status
                         logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
                         check.status = "down"
-                        owner_ids_to_invalidate.add(check.owner_id)
                         message = f"🔴 Check Down: [{check.name}] is overdue."
                         notifications.schedule_telegram_notification(check, message)
+                        # Update counters immediately after deciding to change status
+                        _update_redis_stats_counters(check.owner_id, old_status, "down")
                 
                 await session.commit()
-
-                # Invalidate caches after commit
-                for owner_id in owner_ids_to_invalidate:
-                    await _invalidate_user_stats_cache(owner_id)
             else:
                 logger.info("Scheduler found no overdue checks.")
 

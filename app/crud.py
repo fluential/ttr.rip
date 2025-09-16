@@ -29,17 +29,37 @@ def _calculate_deadline(check: models.Check) -> Optional[datetime]:
         
     return reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
 
-async def _invalidate_user_stats_cache(user_id: int):
-    """Invalidates the user stats cache in Redis."""
-    if not settings.DEBUG_MODE and settings.REDIS_URL:
-        try:
-            r = get_redis_connection()
-            if r:
-                cache_key = f"user_stats:dashboard:{user_id}"
-                r.delete(cache_key)
-                logger.debug(f"Invalidated cache for user stats: {user_id}")
-        except Exception as e:
-            logger.error(f"Could not invalidate Redis cache for stats: {e}")
+def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_status: Optional[str]):
+    """Atomically updates user stats counters in Redis."""
+    if settings.DEBUG_MODE or not settings.REDIS_URL or old_status == new_status:
+        return
+
+    try:
+        r = get_redis_connection()
+        if not r:
+            return
+        
+        pipe = r.pipeline()
+        key = f"user_stats:counters:{user_id}"
+
+        # Decrement old status counter if it exists
+        if old_status:
+            pipe.hincrby(key, old_status, -1)
+        
+        # Increment new status counter if it exists
+        if new_status:
+            pipe.hincrby(key, new_status, 1)
+        
+        # Update total count
+        if old_status and not new_status: # Deletion
+            pipe.hincrby(key, "total", -1)
+        elif not old_status and new_status: # Creation
+            pipe.hincrby(key, "total", 1)
+        
+        pipe.execute()
+        logger.debug(f"Updated Redis stats for user {user_id}: {old_status} -> {new_status}")
+    except Exception as e:
+        logger.error(f"Could not update Redis stats counters for user {user_id}: {e}")
 
 
 def _encode_cursor(value: Any) -> Optional[str]:
@@ -183,28 +203,43 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     if not principal.id:
         return schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0)
 
-    # --- Caching Layer ---
+    # --- Redis Counter Strategy ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
             r = get_redis_connection()
             if r:
-                cache_key = f"user_stats:dashboard:{principal.id}"
-                cached_stats = r.get(cache_key)
-                if cached_stats:
-                    logger.debug(f"Cache hit for user stats: {principal.id}")
-                    return schemas.CheckStats.model_validate_json(cached_stats)
+                key = f"user_stats:counters:{principal.id}"
+                # HGETALL returns strings, so we need to convert them
+                cached_counters = r.hgetall(key)
+                if cached_counters:
+                    logger.debug(f"Redis counter hit for user stats: {principal.id}")
+                    # Averages are not stored in counters, so we still need a DB query for them.
+                    # This is a compromise to keep counter logic simple.
+                    avg_query = select(
+                        func.avg(models.Check.interval_seconds).label("avg_interval_seconds"),
+                        func.avg(models.Check.last_duration_seconds).label("avg_duration_seconds")
+                    ).filter(models.Check.owner_id == principal.id)
+                    
+                    result = await db.execute(avg_query)
+                    averages = result.first()
+
+                    return schemas.CheckStats(
+                        total_checks=int(cached_counters.get("total", 0)),
+                        up_count=int(cached_counters.get("up", 0)),
+                        down_count=int(cached_counters.get("down", 0)),
+                        new_count=int(cached_counters.get("new", 0)),
+                        avg_interval_seconds=averages.avg_interval_seconds if averages else None,
+                        avg_duration_seconds=averages.avg_duration_seconds if averages else None,
+                        user_queued_notifications=await get_user_queued_notification_count(db, principal)
+                    )
         except Exception as e:
-            logger.error(f"Could not read from Redis cache for stats: {e}")
-    # --- End Caching Layer ---
+            logger.error(f"Could not read from Redis counters for stats: {e}")
+    # --- End Redis Counter Strategy ---
 
-    # Base query for the user's checks
-    if principal.is_admin:
-        # Admin stats would be for all checks
-        base_query = select(models.Check)
-    else:
-        base_query = select(models.Check).filter(models.Check.owner_id == principal.id)
+    # Fallback to DB query if Redis fails, is disabled, or counters are not hydrated.
+    logger.info(f"Falling back to DB query for user stats: {principal.id}")
+    base_query = select(models.Check).filter(models.Check.owner_id == principal.id)
 
-    # Create a subquery from the base query to apply aggregations
     subquery = base_query.subquery()
     stats_query = select(
         func.count(subquery.c.id).label("total_checks"),
@@ -217,8 +252,6 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
 
     result = await db.execute(stats_query)
     stats = result.first()
-
-    user_queued_notifications = await get_user_queued_notification_count(db, principal)
     
     if stats and stats.total_checks > 0:
         stats_obj = schemas.CheckStats(
@@ -228,28 +261,27 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             new_count=stats.new_count or 0,
             avg_interval_seconds=stats.avg_interval_seconds,
             avg_duration_seconds=stats.avg_duration_seconds,
-            user_queued_notifications=user_queued_notifications
+            user_queued_notifications=await get_user_queued_notification_count(db, principal)
         )
     else:
-        stats_obj = schemas.CheckStats(
-            total_checks=0,
-            up_count=0,
-            down_count=0,
-            new_count=0,
-            user_queued_notifications=user_queued_notifications
-        )
+        stats_obj = schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0)
 
-    # --- Caching Layer ---
+    # --- Rehydrate Redis Counters ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
             r = get_redis_connection()
             if r:
-                cache_key = f"user_stats:dashboard:{principal.id}"
-                r.set(cache_key, stats_obj.model_dump_json()) # No TTL, rely on invalidation
-                logger.debug(f"Cache set for user stats: {principal.id}")
+                key = f"user_stats:counters:{principal.id}"
+                pipe = r.pipeline()
+                pipe.hset(key, "total", stats_obj.total_checks)
+                pipe.hset(key, "up", stats_obj.up_count)
+                pipe.hset(key, "down", stats_obj.down_count)
+                pipe.hset(key, "new", stats_obj.new_count)
+                pipe.execute()
+                logger.info(f"Rehydrated Redis counters for user {principal.id}")
         except Exception as e:
-            logger.error(f"Could not write to Redis cache for stats: {e}")
-    # --- End Caching Layer ---
+            logger.error(f"Could not rehydrate Redis counters for user {principal.id}: {e}")
+    # --- End Rehydration ---
 
     return stats_obj
 
@@ -278,7 +310,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check):
     check.deadline = _calculate_deadline(check)
     await db.commit()
     await db.refresh(check)
-    await _invalidate_user_stats_cache(check.owner_id)
+    _update_redis_stats_counters(check.owner_id, previous_status, "up")
 
     if previous_status == "down":
         logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
@@ -302,7 +334,7 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
     check.last_start = None
     await db.commit()
     await db.refresh(check)
-    await _invalidate_user_stats_cache(check.owner_id)
+    _update_redis_stats_counters(check.owner_id, previous_status, "down")
 
     if previous_status != "down":
         message = f"🔴 Check Failed: [{check.name}] reported a failure."
@@ -418,7 +450,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         db.add(db_check)
         await db.commit()
         await db.refresh(db_check) # This populates the ID and other DB-defaults
-        await _invalidate_user_stats_cache(principal.id)
+        _update_redis_stats_counters(principal.id, old_status=None, new_status="new")
         
         # Eagerly load the owner relationship to prevent lazy loading issues
         # during response serialization.
@@ -459,10 +491,12 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
             reference_time = reference_time.replace(tzinfo=timezone.utc)
         deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
 
+        old_status = db_check.status
         if now > deadline:
-            db_check.status = "down"
+            new_status = "down"
         else:
-            db_check.status = "up" if db_check.last_ping else "new"
+            new_status = "up" if db_check.last_ping else "new"
+        db_check.status = new_status
         
         # Recalculate deadline if interval or grace period changed
         if 'interval_seconds' in update_data or 'grace_seconds' in update_data:
@@ -470,7 +504,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
 
         await db.commit()
         await db.refresh(db_check)
-        await _invalidate_user_stats_cache(principal.id)
+        _update_redis_stats_counters(principal.id, old_status, new_status)
     return db_check
 
 
@@ -513,19 +547,24 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
 
 async def delete_user_and_data(db: AsyncSession, user: models.User):
     """
-    Deletes a user and all of their associated checks.
+    Deletes a user and all of their associated checks using bulk operations.
     """
     if not user or not user.id:
         return
 
-    # Get all checks for the user
-    checks_to_delete = await get_all_checks_by_owner(db, principal=user)
-    check_ids = [c.id for c in checks_to_delete]
-    logger.info(f"Deleting {len(checks_to_delete)} checks for user {user.id} as part of account deletion.")
+    # Get check IDs for Redis cleanup before deleting
+    result = await db.execute(select(models.Check.id).filter(models.Check.owner_id == user.id))
+    check_ids = result.scalars().all()
     
-    for check in checks_to_delete:
-        await db.delete(check)
+    logger.info(f"Deleting {len(check_ids)} checks for user {user.id} as part of account deletion.")
     
+    # Bulk delete checks
+    if check_ids:
+        await db.execute(
+            text("DELETE FROM checks WHERE owner_id = :owner_id"),
+            {"owner_id": user.id}
+        )
+
     # Now delete the user
     logger.info(f"Deleting user {user.id} (auth_key: ...{user.auth_key[-4:]}).")
     await db.delete(user)
@@ -538,14 +577,15 @@ async def delete_user_and_data(db: AsyncSession, user: models.User):
             r = get_redis_connection()
             if r:
                 pipe = r.pipeline()
-                # Clean up user stats cache
-                pipe.delete(f"user_stats:dashboard:{user.id}")
+                # Clean up user stats counters
+                pipe.delete(f"user_stats:counters:{user.id}")
                 # Clean up check-related keys (if any)
-                for check_id in check_ids:
-                    key_pattern = f"check:{check_id}:*"
-                    keys = r.keys(key_pattern)
-                    if keys:
-                        pipe.delete(*keys)
+                if check_ids:
+                    for check_id in check_ids:
+                        key_pattern = f"check:{check_id}:*"
+                        keys = r.keys(key_pattern)
+                        if keys:
+                            pipe.delete(*keys)
                 pipe.execute()
                 logger.info(f"Cleaned up Redis entries for deleted user {user.id}")
         except Exception as e:
@@ -566,8 +606,9 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     db_check = result.scalars().first()
     if db_check:
         owner_id = db_check.owner_id
+        old_status = db_check.status
         await db.delete(db_check)
         await db.commit()
-        await _invalidate_user_stats_cache(owner_id)
+        _update_redis_stats_counters(owner_id, old_status=old_status, new_status=None)
         return db_check
     return None

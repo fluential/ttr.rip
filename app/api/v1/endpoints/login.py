@@ -50,16 +50,20 @@ async def delete_user_account(
     
     await crud.delete_user_and_data(db, user=user)
     
-    # Add the key to the Redis blacklist with a 24-hour TTL
+    # Add the key to the Redis blacklist and invalidate auth cache
     if not settings.DEBUG_MODE:
         try:
             r = get_redis_connection()
             if r:
+                pipe = r.pipeline()
                 # Blacklist for 24 hours (86400 seconds)
-                r.set(f"blacklist:auth_key:{auth_key_to_blacklist}", "1", ex=86400)
-                logger.info(f"Blacklisted auth key for deleted user {user.id}: ...{auth_key_to_blacklist[-4:]}")
+                pipe.set(f"blacklist:auth_key:{auth_key_to_blacklist}", "1", ex=86400)
+                # Invalidate the auth cache for this key
+                pipe.delete(f"auth_cache:{auth_key_to_blacklist}")
+                pipe.execute()
+                logger.info(f"Blacklisted and cleared auth cache for key of deleted user {user.id}: ...{auth_key_to_blacklist[-4:]}")
         except Exception as e:
-            logger.error(f"Failed to blacklist auth key for deleted user {user.id}: {e}")
+            logger.error(f"Failed to update Redis for deleted user {user.id}: {e}")
 
     # Clear the auth cookie
     response.delete_cookie("auth_key")
@@ -85,16 +89,20 @@ async def rotate_api_key(
     # Update the user in the database
     user = await crud.update_user_auth_key(db, user=user, new_auth_key=new_key)
     
-    # Add the old key to the Redis blacklist with a TTL
+    # Add the old key to the Redis blacklist and invalidate its auth cache
     if not settings.DEBUG_MODE:
         try:
             r = get_redis_connection()
             if r:
+                pipe = r.pipeline()
                 # Blacklist for 24 hours (86400 seconds)
-                r.set(f"blacklist:auth_key:{old_key}", "1", ex=86400)
-                logger.info(f"Blacklisted old auth key for user {user.id}: ...{old_key[-4:]}")
+                pipe.set(f"blacklist:auth_key:{old_key}", "1", ex=86400)
+                # Invalidate the auth cache for the old key
+                pipe.delete(f"auth_cache:{old_key}")
+                pipe.execute()
+                logger.info(f"Blacklisted and cleared auth cache for old key of user {user.id}: ...{old_key[-4:]}")
         except Exception as e:
-            logger.error(f"Failed to blacklist old auth key for user {user.id}: {e}")
+            logger.error(f"Failed to update Redis for key rotation for user {user.id}: {e}")
             # This is not a fatal error for the rotation itself, but should be logged.
 
     # Set the new key in an HttpOnly cookie on the response
