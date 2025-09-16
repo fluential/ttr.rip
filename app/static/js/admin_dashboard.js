@@ -57,25 +57,24 @@ function formatTimeDifference(seconds) {
     seconds = Math.abs(seconds);
 
     if (seconds < 1) {
-        return isPast ? '0s ago' : 'in 0s';
+        return isPast ? '0 seconds ago' : 'in 0 seconds';
     }
 
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
     const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
+    seconds %= 3600;
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
 
     const parts = [];
-    if (hours > 0) {
-        parts.push(`${hours}h`);
-    }
-    if (minutes > 0) {
-        parts.push(`${minutes}m`);
-    }
-    if (secs > 0 || parts.length === 0) {
-        parts.push(`${secs}s`);
-    }
+    if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
+    if (hours > 0) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+    if (minutes > 0) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs} second${secs !== 1 ? 's' : ''}`);
 
-    const result = parts.join(' ');
+    // Show only the two most significant parts for brevity
+    const result = parts.slice(0, 2).join(' ');
 
     return isPast ? `${result} ago` : `in ${result}`;
 }
@@ -84,14 +83,26 @@ function formatDuration(seconds) {
     if (seconds === null || seconds === undefined || isNaN(seconds)) return 'N/A';
     if (seconds < 0) return 'N/A';
 
+    if (seconds < 1) {
+        return "less than a second";
+    }
     if (seconds < 60) {
-        return `${seconds}s`;
+        const s = Math.round(seconds);
+        return `${s} second${s !== 1 ? 's' : ''}`;
     }
 
     const minutes = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+    const secs = Math.round(seconds % 60);
 
-    return `${minutes}m ${secs}s`;
+    const parts = [];
+    if (minutes > 0) {
+        parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+    }
+    if (secs > 0) {
+        parts.push(`${secs} second${secs !== 1 ? 's' : ''}`);
+    }
+    
+    return parts.join(' ');
 }
 
 function startAutoRefreshTimer() {
