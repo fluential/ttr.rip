@@ -110,6 +110,158 @@ async function rotateApiKey() {
     }
 }
 
+// --- Status Page Functions ---
+
+let allChecksForStatusPage = [];
+
+async function fetchStatusPages() {
+    try {
+        const response = await fetch('/api/v1/status-pages', {
+            headers: { 'X-Auth-Key': authKey }
+        });
+        if (!response.ok) throw new Error('Failed to fetch status pages');
+        const statusPages = await response.json();
+        renderStatusPages(statusPages);
+    } catch (error) {
+        console.error('Error fetching status pages:', error);
+        document.getElementById('status-pages-list').innerHTML = `<p style="color: var(--pico-color-red-500);">Could not load status pages.</p>`;
+    }
+}
+
+function renderStatusPages(statusPages) {
+    const listDiv = document.getElementById('status-pages-list');
+    if (statusPages.length === 0) {
+        listDiv.innerHTML = '<p>No status pages found. Create one below!</p>';
+        return;
+    }
+
+    listDiv.innerHTML = statusPages.map(page => `
+        <div class="grid" style="align-items: center;">
+            <div>
+                <strong>${page.name}</strong><br>
+                <small><a href="/s/${page.slug}" target="_blank">/s/${page.slug}</a></small>
+            </div>
+            <div style="text-align: right;">
+                <button class="outline action-button" title="Edit" onclick="editStatusPage(event, ${page.id}, '${page.name.replace(/'/g, "\\'")}', '${page.slug.replace(/'/g, "\\'")}', [${page.checks.map(c => c.id)}])">✏️</button>
+                <button class="secondary outline action-button" title="Delete" onclick="deleteStatusPage(${page.id})">🗑️</button>
+            </div>
+        </div>
+    `).join('<hr>');
+}
+
+function populateCheckCheckboxes(selectedCheckIds = []) {
+    const container = document.getElementById('status-page-checks-list');
+    if (allChecksForStatusPage.length === 0) {
+        container.innerHTML = '<p>No checks available to add to a status page.</p>';
+        return;
+    }
+    container.innerHTML = allChecksForStatusPage.map(check => `
+        <label for="sp-check-${check.id}">
+            <input type="checkbox" id="sp-check-${check.id}" name="check_ids" value="${check.id}" ${selectedCheckIds.includes(check.id) ? 'checked' : ''}>
+            ${check.name}
+        </label>
+    `).join('');
+}
+
+function editStatusPage(event, id, name, slug, checkIds) {
+    event.stopPropagation();
+    const details = document.getElementById('new-status-page-section');
+    details.open = true;
+    
+    const form = document.getElementById('new-status-page-form');
+    form.querySelector('#status-page-name').value = name;
+    form.querySelector('#status-page-slug').value = slug;
+    populateCheckCheckboxes(checkIds);
+    
+    form.dataset.editingId = id;
+    details.querySelector('summary').textContent = 'Edit Status Page';
+    form.querySelector('button[type="submit"]').textContent = 'Update Status Page';
+    
+    let cancelButton = form.querySelector('.cancel-edit');
+    if (!cancelButton) {
+        cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'secondary outline cancel-edit';
+        cancelButton.textContent = 'Cancel';
+        cancelButton.style.marginLeft = '1rem';
+        cancelButton.onclick = cancelStatusPageEdit;
+        form.querySelector('button[type="submit"]').insertAdjacentElement('afterend', cancelButton);
+    }
+    form.scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelStatusPageEdit() {
+    const form = document.getElementById('new-status-page-form');
+    form.reset();
+    delete form.dataset.editingId;
+    
+    const details = document.getElementById('new-status-page-section');
+    details.querySelector('summary').textContent = 'New Status Page';
+    details.open = false;
+    
+    form.querySelector('button[type="submit"]').textContent = 'Create Status Page';
+    const cancelButton = form.querySelector('.cancel-edit');
+    if (cancelButton) cancelButton.remove();
+    populateCheckCheckboxes(); // Reset checkboxes
+}
+
+async function handleStatusPageFormSubmit(event) {
+    event.preventDefault();
+    const form = event.target;
+    const editingId = form.dataset.editingId;
+
+    const selectedChecks = Array.from(form.querySelectorAll('input[name="check_ids"]:checked')).map(cb => parseInt(cb.value));
+
+    const data = {
+        name: form.querySelector('#status-page-name').value,
+        slug: form.querySelector('#status-page-slug').value,
+        check_ids: selectedChecks
+    };
+
+    const headers = {
+        'X-Auth-Key': authKey,
+        'X-CSRF-Token': getCsrfToken(),
+        'Content-Type': 'application/json'
+    };
+
+    let response;
+    let url = '/api/v1/status-pages';
+    let method = 'POST';
+
+    if (editingId) {
+        url += `/${editingId}`;
+        method = 'PUT';
+    }
+
+    response = await fetch(url, { method, headers, body: JSON.stringify(data) });
+
+    if (response.ok) {
+        cancelStatusPageEdit();
+        fetchStatusPages();
+    } else {
+        const error = await response.json();
+        alert(`Failed to ${editingId ? 'update' : 'create'} status page: ${error.detail}`);
+    }
+}
+
+async function deleteStatusPage(pageId) {
+    if (!confirm('Are you sure you want to delete this status page?')) return;
+
+    const response = await fetch(`/api/v1/status-pages/${pageId}`, {
+        method: 'DELETE',
+        headers: { 
+            'X-Auth-Key': authKey,
+            'X-CSRF-Token': getCsrfToken()
+        }
+    });
+
+    if (response.ok) {
+        fetchStatusPages();
+    } else {
+        alert('Failed to delete status page.');
+    }
+}
+
 async function fetchOperationalMetrics() {
     try {
         const response = await fetch('/api/v1/metrics/summary');
@@ -447,6 +599,8 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
 
     const data = await response.json();
     const checks = data.items;
+    allChecksForStatusPage = checks; // Cache for status page form
+    populateCheckCheckboxes(); // Populate form now that we have checks
     const tableBody = document.querySelector('#checks-table tbody');
     const statusSummary = document.getElementById('status-summary');
     
@@ -723,7 +877,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics()]);
+    await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics(), fetchStatusPages()]);
     
     const loadTime = performance.now() - window.pageLoadStartTime;
     const clientTimeElem = document.getElementById('client-load-time');
@@ -739,6 +893,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
+    document.getElementById('new-status-page-form').addEventListener('submit', handleStatusPageFormSubmit);
 
     // Account Management listeners
     const importBtn = document.getElementById('import-btn');

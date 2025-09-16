@@ -200,6 +200,34 @@ async def public_integrations(
     return response
 
 
+@router.get("/s/{slug}", response_class=HTMLResponse)
+async def public_status_page(
+    slug: str,
+    request: Request,
+    db: AsyncSession = Depends(db_base.get_db),
+):
+    status_page = await crud.get_status_page_by_slug(db, slug=slug)
+    if not status_page or not status_page.is_public:
+        raise HTTPException(status_code=404, detail="Status page not found")
+
+    # Calculate overall status
+    overall_status = "up"
+    if any(c.status == "down" and not c.paused for c in status_page.checks):
+        overall_status = "down"
+    elif not status_page.checks:
+        overall_status = "empty"
+
+    context = {
+        "request": request,
+        "status_page": status_page,
+        "overall_status": overall_status,
+        "process_time": getattr(request.state, "process_time", 0),
+        "redis_connected": request.app.state.redis_connected,
+        "debug_mode": settings.DEBUG_MODE,
+    }
+    return templates.TemplateResponse("public_status_page.html", context)
+
+
 # --- Admin Routes ---
 
 @admin_router.get("/login", response_class=HTMLResponse)

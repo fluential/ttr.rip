@@ -629,3 +629,84 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         _update_redis_stats_counters(owner_id, old_status=old_status, new_status=None)
         return db_check
     return None
+
+
+# Status Page CRUD
+async def get_status_page_by_slug(db: AsyncSession, slug: str):
+    result = await db.execute(
+        select(models.StatusPage)
+        .options(selectinload(models.StatusPage.checks))
+        .filter(models.StatusPage.slug == slug)
+    )
+    return result.scalars().first()
+
+async def get_status_pages_by_owner(db: AsyncSession, principal: models.User):
+    if not principal.id:
+        return []
+    result = await db.execute(
+        select(models.StatusPage)
+        .options(selectinload(models.StatusPage.checks))
+        .filter(models.StatusPage.owner_id == principal.id)
+        .order_by(models.StatusPage.name)
+    )
+    return result.scalars().all()
+
+async def create_status_page(db: AsyncSession, status_page: schemas.StatusPageCreate, principal: models.User):
+    # Check for slug uniqueness
+    existing = await db.execute(select(models.StatusPage).filter(models.StatusPage.slug == status_page.slug))
+    if existing.scalars().first():
+        raise IntegrityError("Status page with this slug already exists.", params=None, orig=None)
+
+    db_status_page = models.StatusPage(
+        name=status_page.name,
+        slug=status_page.slug,
+        owner_id=principal.id
+    )
+
+    if status_page.check_ids:
+        checks_result = await db.execute(
+            select(models.Check).where(models.Check.id.in_(status_page.check_ids), models.Check.owner_id == principal.id)
+        )
+        db_status_page.checks = checks_result.scalars().all()
+
+    db.add(db_status_page)
+    await db.commit()
+    await db.refresh(db_status_page)
+    return db_status_page
+
+async def update_status_page(db: AsyncSession, status_page_id: int, status_page_data: schemas.StatusPageUpdate, principal: models.User):
+    result = await db.execute(
+        select(models.StatusPage).where(models.StatusPage.id == status_page_id, models.StatusPage.owner_id == principal.id)
+    )
+    db_status_page = result.scalars().first()
+    if not db_status_page:
+        return None
+
+    # Check for slug uniqueness if it's being changed
+    if status_page_data.slug != db_status_page.slug:
+        existing_result = await db.execute(select(models.StatusPage).filter(models.StatusPage.slug == status_page_data.slug))
+        if existing_result.scalars().first():
+            raise IntegrityError("Status page with this slug already exists.", params=None, orig=None)
+
+    db_status_page.name = status_page_data.name
+    db_status_page.slug = status_page_data.slug
+
+    if status_page_data.check_ids is not None:
+        checks_result = await db.execute(
+            select(models.Check).where(models.Check.id.in_(status_page_data.check_ids), models.Check.owner_id == principal.id)
+        )
+        db_status_page.checks = checks_result.scalars().all()
+
+    await db.commit()
+    await db.refresh(db_status_page)
+    return db_status_page
+
+async def delete_status_page(db: AsyncSession, status_page_id: int, principal: models.User):
+    result = await db.execute(
+        select(models.StatusPage).where(models.StatusPage.id == status_page_id, models.StatusPage.owner_id == principal.id)
+    )
+    db_status_page = result.scalars().first()
+    if db_status_page:
+        await db.delete(db_status_page)
+        await db.commit()
+    return db_status_page

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
+import uuid
 from sqlalchemy import (
     Column,
     Integer,
@@ -7,11 +8,20 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Boolean,
+    Table,
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 
 class Base(DeclarativeBase):
     pass
+
+# Association Table for the many-to-many relationship between StatusPage and Check
+status_page_checks = Table(
+    "status_page_checks",
+    Base.metadata,
+    Column("status_page_id", Integer, ForeignKey("status_pages.id"), primary_key=True),
+    Column("check_id", Integer, ForeignKey("checks.id"), primary_key=True),
+)
 
 class User(Base):
     __tablename__ = "users"
@@ -31,7 +41,22 @@ class User(Base):
     telegram_first_name: Optional[str] = Column(String, nullable=True)
     telegram_username: Optional[str] = Column(String, nullable=True)
 
-    checks = relationship("Check", back_populates="owner")
+    checks = relationship("Check", back_populates="owner", cascade="all, delete-orphan")
+    status_pages = relationship("StatusPage", back_populates="owner", cascade="all, delete-orphan")
+
+
+class StatusPage(Base):
+    __tablename__ = "status_pages"
+
+    id: int = Column(Integer, primary_key=True, index=True)
+    uuid: str = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
+    name: str = Column(String, index=True)
+    slug: str = Column(String, unique=True, index=True)
+    is_public: bool = Column(Boolean, default=True, nullable=False)
+    owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    owner = relationship("User", back_populates="status_pages")
+    checks = relationship("Check", secondary=status_page_checks, back_populates="status_pages")
 
 
 class Check(Base):
@@ -59,3 +84,4 @@ class Check(Base):
     owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     owner = relationship("User", back_populates="checks", lazy="selectin")
+    status_pages = relationship("StatusPage", secondary=status_page_checks, back_populates="checks")

@@ -78,3 +78,27 @@ th[data-sort].sort-desc::after {
     --background-color: #c62828;
     --border-color: #c62828;
 }
+
+/* Public Status Page */
+.status-card {
+    border-left: 5px solid var(--pico-muted-border-color);
+    padding: 1rem;
+}
+.status-card-up { border-left-color: var(--pico-color-green-500); }
+.status-card-down { border-left-color: var(--pico-color-red-500); }
+.status-card-new { border-left-color: var(--pico-color-yellow-500); }
+.status-card-paused { border-left-color: var(--pico-color-gray-500); }
+
+.status-card .status-text { font-weight: bold; }
+.status-card-up .status-text { color: var(--pico-color-green-500); }
+.status-card-down .status-text { color: var(--pico-color-red-500); }
+.status-card-new .status-text { color: var(--pico-color-yellow-500); }
+.status-card-paused .status-text { color: var(--pico-color-gray-500); }
+
+#status-page-checks-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--pico-form-element-border-color);
+    padding: 0.5rem;
+    margin-top: 0.5rem;
+}

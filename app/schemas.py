@@ -68,6 +68,48 @@ class CheckImportResponse(BaseModel):
     errors: list[str]
 
 
+class CheckSimpleForStatusPage(BaseModel):
+    id: int
+    uuid: str
+    name: str
+    status: str
+    paused: bool
+    last_ping: Optional[datetime] = None
+    last_duration_seconds: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+# Status Page Schemas
+class StatusPageBase(BaseModel):
+    name: str
+    slug: str
+
+class StatusPageCreate(StatusPageBase):
+    check_ids: list[int] = []
+
+class StatusPageUpdate(StatusPageBase):
+    check_ids: list[int] = []
+
+class StatusPage(StatusPageBase):
+    id: int
+    uuid: str
+    is_public: bool
+    owner_id: int
+    checks: list[CheckSimpleForStatusPage]
+
+    class Config:
+        from_attributes = True
+
+class StatusPagePublic(StatusPageBase):
+    name: str
+    checks: list[CheckSimpleForStatusPage]
+
+    class Config:
+        from_attributes = True
+
+
 class Check(CheckBase):
     id: int
     uuid: str

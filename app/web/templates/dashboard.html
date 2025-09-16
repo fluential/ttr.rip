@@ -135,6 +135,35 @@
     {% endif %}
 </article>
 
+<article>
+    <header>Status Pages</header>
+    <div id="status-pages-list">
+        <p>Loading status pages...</p>
+    </div>
+    <details id="new-status-page-section">
+        <summary>New Status Page</summary>
+        <form id="new-status-page-form" style="margin-top: 1.5rem;">
+            <div class="grid">
+                <label for="status-page-name">
+                    Name
+                    <input type="text" id="status-page-name" name="name" placeholder="My Project Status" required>
+                </label>
+                <label for="status-page-slug">
+                    Slug (URL)
+                    <input type="text" id="status-page-slug" name="slug" placeholder="my-project-status" required pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens are allowed.">
+                </label>
+            </div>
+            <fieldset>
+                <legend>Checks to include</legend>
+                <div id="status-page-checks-list">
+                    <p>Loading checks...</p>
+                </div>
+            </fieldset>
+            <button type="submit">Create Status Page</button>
+        </form>
+    </details>
+</article>
+
 <script>
     window.AUTH_KEY = "{{ auth_key }}";
     window.CSRF_TOKEN = "{{ csrf_token }}";

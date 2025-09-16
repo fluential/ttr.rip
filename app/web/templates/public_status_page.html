@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<hgroup>
+    <h1>{{ status_page.name }}</h1>
+    <h2>
+        {% if overall_status == 'up' %}
+            <span class="status-up">🟢 All systems operational.</span>
+        {% elif overall_status == 'down' %}
+            <span class="status-down">🔴 One or more systems are down.</span>
+        {% else %}
+            <span class="status-new">⚪ No checks configured for this page.</span>
+        {% endif %}
+    </h2>
+</hgroup>
+
+{% for check in status_page.checks %}
+<article class="status-card status-card-{{ 'paused' if check.paused else check.status }}">
+    <header class="grid">
+        <div>
+            <strong>{{ check.name }}</strong>
+        </div>
+        <div style="text-align: right;">
+            <span class="status-text">
+                {% if check.paused %}
+                    PAUSED
+                {% else %}
+                    {{ check.status.upper() }}
+                {% endif %}
+            </span>
+        </div>
+    </header>
+    <div class="status-details">
+        <small>
+            Last check: 
+            {% if check.last_ping %}
+                {{ check.last_ping.strftime('%Y-%m-%d %H:%M:%S %Z') }}
+            {% else %}
+                Never
+            {% endif %}
+        </small>
+    </div>
+</article>
+{% endfor %}
+
+{% endblock %}
