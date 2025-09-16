@@ -451,7 +451,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     if not principal.id:
         return None
 
-    query = select(models.Check).filter(models.Check.id == check_id)
+    query = select(models.Check).filter(models.Check.id == check_id).options(selectinload(models.Check.owner))
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
     # For admin, no owner filter is applied.
@@ -459,20 +459,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     result = await db.execute(query)
     db_check = result.scalars().first()
     if db_check:
-        # Store relevant owner information before deleting
-        owner_id = db_check.owner_id
-        
-        # Delete the check
         await db.delete(db_check)
         await db.commit()
-        
-        # Get the owner from the database after deletion
-        owner_result = await db.execute(select(models.User).filter(models.User.id == owner_id))
-        owner = owner_result.scalars().first()
-        
-        # Set the owner on the deleted check for the response
-        if owner:
-            db_check.owner = owner
-        
         return db_check
     return None
