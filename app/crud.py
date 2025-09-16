@@ -328,38 +328,35 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
 
 
 async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: models.User):
-    # Extract the ID from principal immediately to avoid async access issues
-    principal_id = principal.id
-    
-    db_check_data = {
-        **check.model_dump(),
-        "uuid": str(uuid.uuid4()),
-        "owner_id": principal_id
-    }
-
-    db_check = models.Check(**db_check_data)
-    db.add(db_check)
-    await db.commit()
-    await db.refresh(db_check)
-    
-    # Extract all needed attributes from principal to avoid async access issues
-    owner_dict = {
-        "id": principal_id,
-        "username": principal.username,
-        "is_admin": principal.is_admin,
-        "auth_key": principal.auth_key,
-        "telegram_user_id": principal.telegram_user_id,
-        "telegram_first_name": principal.telegram_first_name,
-        "telegram_username": principal.telegram_username
-    }
-    
-    # Create a new User instance to avoid async access issues with the ORM
-    owner = models.User(**owner_dict)
-    
-    # Set the owner attribute
-    db_check.owner = owner
-    
-    return db_check
+    # Get all needed attributes synchronously from principal upfront
+    # This prevents lazy loading which causes the MissingGreenlet error
+    # Get all the values directly using getattr to avoid SQLAlchemy lazy loading
+    try:
+        # Extract values directly to avoid lazy loading
+        principal_id = principal.id
+        
+        # Create the check
+        db_check_data = {
+            **check.model_dump(),
+            "uuid": str(uuid.uuid4()),
+            "owner_id": principal_id
+        }
+        
+        db_check = models.Check(**db_check_data)
+        db.add(db_check)
+        await db.commit()
+        await db.refresh(db_check)
+        
+        # Manually load the User model into the owner relationship
+        # For the owner relationship, we need to run a separate query
+        result = await db.execute(select(models.User).filter(models.User.id == principal_id))
+        owner = result.scalars().first()
+        db_check.owner = owner
+        
+        return db_check
+    except Exception as e:
+        logger.error(f"Error in create_check: {e}")
+        raise
 
 async def update_check(db: AsyncSession, check_id: int, check_data: schemas.CheckUpdate, principal: models.User):
     query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
@@ -434,25 +431,20 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     result = await db.execute(query)
     db_check = result.scalars().first()
     if db_check:
+        # Store relevant owner information before deleting
+        owner_id = db_check.owner_id
+        
+        # Delete the check
         await db.delete(db_check)
         await db.commit()
         
-        # Extract all needed attributes from principal to avoid async access issues
-        principal_id = principal.id
-        owner_dict = {
-            "id": principal_id,
-            "username": principal.username,
-            "is_admin": principal.is_admin,
-            "auth_key": principal.auth_key,
-            "telegram_user_id": principal.telegram_user_id,
-            "telegram_first_name": principal.telegram_first_name,
-            "telegram_username": principal.telegram_username
-        }
+        # Get the owner from the database after deletion
+        owner_result = await db.execute(select(models.User).filter(models.User.id == owner_id))
+        owner = owner_result.scalars().first()
         
-        # Create a new User instance to avoid async access issues with the ORM
-        owner = models.User(**owner_dict)
+        # Set the owner on the deleted check for the response
+        if owner:
+            db_check.owner = owner
         
-        # Set the owner attribute
-        db_check.owner = owner
         return db_check
     return None
