@@ -91,16 +91,31 @@
         reverse_proxy localhost:8000
     }
 
-    # Add useful response headers
+    # Comprehensive security headers for all responses
     header /* {
-        # Security headers
+        # HSTS: Tell browsers to always use HTTPS
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        
+        # Prevent MIME type sniffing
         X-Content-Type-Options "nosniff"
+        
+        # Control how your site can be framed
         X-Frame-Options "DENY"
+        
+        # Referrer policy to control information sent in Referer header
         Referrer-Policy "strict-origin-when-cross-origin"
+        
+        # Content Security Policy to mitigate XSS attacks
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; media-src 'self'; frame-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
+        
+        # Feature Policy to limit which browser features your site can use
+        Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), accelerometer=(), gyroscope=(), interest-cohort=()"
+        
+        # Legacy XSS protection - less relevant for modern browsers but still useful
         X-XSS-Protection "1; mode=block"
         
-        # Remove Server header
+        # Remove unnecessary headers
         -Server
+        -X-Powered-By
     }
 }
