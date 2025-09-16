@@ -1,6 +1,7 @@
 from typing import List, Union
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app import crud, schemas, security
 from app.services import notifications
@@ -9,6 +10,7 @@ from app.db import base as db_base
 from app.db import models as db_models
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/stats", response_model=schemas.CheckStats)
 async def read_check_stats(
@@ -95,6 +97,7 @@ async def test_telegram_notification(
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
         raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
 
+    logger.info(f"Sending test Telegram notification for check ID {check_id} on behalf of user {principal.id}.")
     message = f"🔔 This is a test notification for your check '[{check.name}]'."
     await notifications.send_telegram_notification(db, check, message)
     await db.commit()
@@ -114,6 +117,7 @@ async def test_telegram_notification_queue(
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
         raise HTTPException(status_code=400, detail="Telegram settings are incomplete. Please save your settings first.")
 
+    logger.info(f"Queueing test Telegram notification for check ID {check_id} on behalf of user {principal.id}.")
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
     notifications.schedule_telegram_notification(check, message)
     return {"message": "Test notification queued."}

@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.core.config import settings
 from app.db import base as db_base
@@ -15,6 +16,7 @@ from app import crud, schemas
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/token", auto_error=False)
+logger = logging.getLogger(__name__)
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -121,6 +123,7 @@ async def get_telegram_session_data(
 
 def validate_telegram_hash(auth_data: Dict[str, Any]) -> bool:
     if not settings.TELEGRAM_BOT_TOKEN:
+        logger.error("Cannot validate Telegram hash: TELEGRAM_BOT_TOKEN is not set.")
         return False
 
     hash_from_telegram = auth_data.pop('hash')
@@ -133,4 +136,7 @@ def validate_telegram_hash(auth_data: Dict[str, Any]) -> bool:
     secret_key = hashlib.sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
     calculated_hash = hmac.new(secret_key, msg=data_check_string.encode(), digestmod=hashlib.sha256).hexdigest()
     
-    return hmac.compare_digest(calculated_hash, hash_from_telegram)
+    is_valid = hmac.compare_digest(calculated_hash, hash_from_telegram)
+    if not is_valid:
+        logger.warning("Invalid Telegram hash received.")
+    return is_valid

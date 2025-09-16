@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+import logging
 
 from app.db import base as db_base
 from app.db import models as db_models
@@ -15,6 +16,7 @@ from app.core import encryption
 router = APIRouter()
 admin_router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/web/templates")
+logger = logging.getLogger(__name__)
 
 def generate_auth_key() -> str:
     """Generates a secure, URL-safe token."""
@@ -67,6 +69,8 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
+        "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
+        "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
     }
     response = templates.TemplateResponse("dashboard.html", context)
     # Refresh cookie on activity
@@ -91,6 +95,7 @@ async def telegram_callback(
         raise HTTPException(status_code=404, detail="User not found for the provided auth key.")
 
     query_params = dict(request.query_params)
+    logger.info(f"Handling Telegram auth callback for user ID {user.id} with auth_key ...{user.auth_key[-4:]}")
     if not security.validate_telegram_hash(query_params.copy()):
         raise HTTPException(status_code=400, detail="Invalid hash from Telegram")
 
@@ -101,9 +106,11 @@ async def telegram_callback(
     if existing_telegram_user and existing_telegram_user.id != user.id:
         # This is a complex state - for now, we prevent linking.
         # A more advanced implementation could offer to merge accounts.
+        logger.warning(f"Telegram ID {login_data.id} is already linked to user {existing_telegram_user.id}. Preventing link for user {user.id}.")
         raise HTTPException(status_code=409, detail="This Telegram account is already linked to a different user.")
 
     await crud.link_telegram_to_user(db, user=user, login_data=login_data)
+    logger.info(f"Successfully linked Telegram account {login_data.username} (ID: {login_data.id}) to user {user.id}.")
 
     # Redirect back to the dashboard
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
