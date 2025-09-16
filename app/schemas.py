@@ -49,6 +49,24 @@ class CheckCreate(CheckBase):
 class CheckUpdate(CheckBase):
     pass
 
+
+class CheckExport(BaseModel):
+    name: str
+    interval_seconds: int
+    grace_seconds: int
+    telegram_enabled: bool
+    telegram_chat_id: Optional[str] = None
+    telegram_bot_token: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class CheckImportResponse(BaseModel):
+    imported_count: int
+    failed_count: int
+    errors: list[str]
+
+
 class Check(CheckBase):
     id: int
     uuid: str

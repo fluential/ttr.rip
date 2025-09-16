@@ -109,6 +109,15 @@ async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key
     await db.refresh(user)
     return user
 
+async def get_all_checks_by_owner(db: AsyncSession, principal: models.User):
+    """Gets all checks for a given principal, without pagination."""
+    if not principal.id:
+        return []
+
+    query = select(models.Check).filter(models.Check.owner_id == principal.id)
+    result = await db.execute(query)
+    return result.scalars().all()
+
 # Check CRUD
 async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
     result = await db.execute(select(models.Check).filter(models.Check.uuid == check_uuid))

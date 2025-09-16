@@ -110,6 +110,64 @@ async function rotateApiKey() {
     }
 }
 
+async function handleImport(file) {
+    const importBtn = document.getElementById('import-btn');
+    const messageDiv = document.getElementById('import-message');
+
+    if (!file) {
+        return;
+    }
+
+    importBtn.disabled = true;
+    importBtn.setAttribute('aria-busy', 'true');
+    messageDiv.textContent = 'Importing checks...';
+    messageDiv.style.display = 'block';
+    messageDiv.style.color = 'inherit';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/api/v1/checks/import', {
+            method: 'POST',
+            headers: {
+                'X-Auth-Key': authKey,
+                'X-CSRF-Token': getCsrfToken(),
+            },
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.detail || 'Import failed');
+        }
+
+        let message = `Import complete. ${result.imported_count} checks imported successfully.`;
+        if (result.failed_count > 0) {
+            message += ` ${result.failed_count} checks failed.`;
+            console.error('Import errors:', result.errors);
+        }
+        
+        messageDiv.textContent = message;
+        messageDiv.style.color = result.failed_count > 0 ? 'var(--pico-color-orange-500)' : 'var(--pico-color-green-500)';
+
+        // Refresh the dashboard to show new checks
+        await fetchChecks();
+        await fetchUserStats();
+
+    } catch (error) {
+        console.error('Error importing checks:', error);
+        messageDiv.textContent = `Failed to import checks: ${error.message}. Please check the file and try again.`;
+        messageDiv.style.color = 'var(--pico-color-red-500)';
+    } finally {
+        importBtn.disabled = false;
+        importBtn.removeAttribute('aria-busy');
+        // Clear the file input value so the user can select the same file again
+        document.getElementById('import-file-input').value = '';
+    }
+}
+
 function copyUrl(element) {
     if (element.dataset.copying) {
         return;
@@ -542,6 +600,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
+
+    // Import/Export listeners
+    const importBtn = document.getElementById('import-btn');
+    const importFileInput = document.getElementById('import-file-input');
+    if (importBtn && importFileInput) {
+        importBtn.addEventListener('click', () => {
+            importFileInput.click();
+        });
+        importFileInput.addEventListener('change', (event) => {
+            handleImport(event.target.files[0]);
+        });
+    }
 
     // Pagination listeners
     document.getElementById('prev-page')?.addEventListener('click', () => {

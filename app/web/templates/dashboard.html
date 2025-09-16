@@ -95,11 +95,16 @@
     <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
     <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
     
-    <div style="margin-top: 1rem; display: flex; justify-content: center;">
+    <div style="margin-top: 1rem;" class="grid">
         <button type="button" id="rotate-key-btn" class="secondary outline" onclick="confirmRotateKey()">Rotate Access Key</button>
+        <a href="/api/v1/checks/export" role="button" class="secondary outline">Export Checks</a>
+        <button type="button" id="import-btn" class="secondary outline">Import Checks</button>
+        <input type="file" id="import-file-input" style="display: none;" accept=".json">
     </div>
 
     <div id="key-rotation-message" style="margin-top: 1rem; text-align: center; display: none;">
+    </div>
+    <div id="import-message" style="margin-top: 1rem; text-align: center; display: none;">
     </div>
     
     {% if telegram_auth_enabled %}

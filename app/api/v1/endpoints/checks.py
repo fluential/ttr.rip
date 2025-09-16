@@ -1,7 +1,9 @@
 from typing import List, Union, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+import json
 
 from app import crud, schemas, security
 from app.services import notifications
@@ -130,3 +132,77 @@ async def delete_check(
     if not deleted_check:
         raise HTTPException(status_code=404, detail="Check not found")
     return deleted_check
+
+
+@router.get("/export", response_class=JSONResponse)
+async def export_checks(
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    if not principal.id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    checks = await crud.get_all_checks_by_owner(db=db, principal=principal)
+    
+    export_data = [schemas.CheckExport.model_validate(c).model_dump() for c in checks]
+
+    headers = {
+        'Content-Disposition': 'attachment; filename="ttr_rip_checks_export.json"'
+    }
+    return JSONResponse(content=export_data, headers=headers)
+
+
+@router.post("/import", response_model=schemas.CheckImportResponse)
+async def import_checks(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    if not file.content_type == "application/json":
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a JSON file.")
+
+    contents = await file.read()
+    try:
+        data = json.loads(contents)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON file.")
+
+    if not isinstance(data, list):
+        raise HTTPException(status_code=400, detail="JSON file should contain a list of checks.")
+
+    imported_count = 0
+    failed_count = 0
+    errors = []
+
+    for i, check_data in enumerate(data):
+        try:
+            # Validate with the export schema
+            check_to_import = schemas.CheckExport.model_validate(check_data)
+            
+            # Create the basic check
+            check_create = schemas.CheckCreate(
+                name=check_to_import.name,
+                interval_seconds=check_to_import.interval_seconds,
+                grace_seconds=check_to_import.grace_seconds,
+            )
+            new_check = await crud.create_check(db=db, check=check_create, principal=principal)
+            
+            # Manually set telegram properties and commit
+            # This bypasses the re-encryption logic in the standard update endpoint
+            new_check.telegram_bot_token = check_to_import.telegram_bot_token
+            new_check.telegram_chat_id = check_to_import.telegram_chat_id
+            new_check.telegram_enabled = check_to_import.telegram_enabled
+            
+            await db.commit()
+            
+            imported_count += 1
+        except Exception as e:
+            await db.rollback() # Rollback on error for this check
+            failed_count += 1
+            errors.append(f"Check #{i+1} ('{check_data.get('name', 'N/A')}'): {str(e)}")
+
+    return schemas.CheckImportResponse(
+        imported_count=imported_count,
+        failed_count=failed_count,
+        errors=errors,
+    )
