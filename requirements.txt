@@ -13,3 +13,4 @@ python-jose[cryptography]
 httpx
 celery
 redis
+prometheus-client

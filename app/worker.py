@@ -10,6 +10,7 @@ from app.db.base import AsyncSessionLocal
 from app.db.models import Check
 from app.core.logging_config import setup_logging
 from app.core import encryption
+from app import metrics
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ async def _send_telegram_notification(check_id: int, message: str):
                 check.telegram_last_notification_status = "error"
                 check.telegram_last_notification_message = error_message
                 check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+                metrics.record_notification_sent("telegram", "error")
                 await session.commit()
                 return
 
@@ -87,16 +89,19 @@ async def _send_telegram_notification(check_id: int, message: str):
                     logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id}). Response: {response_text}")
                     check.telegram_last_notification_status = "ok"
                     check.telegram_last_notification_message = "Successfully sent."
+                    metrics.record_notification_sent("telegram", "success")
                 except httpx.HTTPStatusError as e:
                     error_message = f"Error: {e.response.status_code} {e.response.text}"
                     logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
                     check.telegram_last_notification_status = "error"
                     check.telegram_last_notification_message = error_message
+                    metrics.record_notification_sent("telegram", "error")
                 except Exception as e:
                     error_message = f"An unexpected error occurred: {e}"
                     logger.error(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}", exc_info=True)
                     check.telegram_last_notification_status = "error"
                     check.telegram_last_notification_message = error_message
+                    metrics.record_notification_sent("telegram", "error")
             
             check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
             await session.commit()

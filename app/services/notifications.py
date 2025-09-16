@@ -7,6 +7,7 @@ from app.db.models import Check
 from app.worker import send_telegram_notification_task
 from app.core.config import settings
 from app.core import encryption
+from app import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
         check.telegram_last_notification_status = "error"
         check.telegram_last_notification_message = error_message
         check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
+        metrics.record_notification_sent("telegram", "error")
         return
 
     url = f"https://api.telegram.org/bot{decrypted_token}/sendMessage"
@@ -52,16 +54,19 @@ async def send_telegram_notification(db: AsyncSession, check: Check, message: st
             logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id}). Response: {response_text}")
             check.telegram_last_notification_status = "ok"
             check.telegram_last_notification_message = "Successfully sent."
+            metrics.record_notification_sent("telegram", "success")
         except httpx.HTTPStatusError as e:
             error_message = f"Error: {e.response.status_code} {e.response.text}"
             logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
             check.telegram_last_notification_status = "error"
             check.telegram_last_notification_message = error_message
+            metrics.record_notification_sent("telegram", "error")
         except Exception as e:
             error_message = f"An unexpected error occurred: {e}"
             logger.error(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}", exc_info=True)
             check.telegram_last_notification_status = "error"
             check.telegram_last_notification_message = error_message
+            metrics.record_notification_sent("telegram", "error")
     
     check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
     # The calling function is responsible for the commit
