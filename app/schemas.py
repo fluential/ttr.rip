@@ -19,6 +19,9 @@ class UserCreate(UserBase):
     password: Optional[str] = None
     is_admin: bool = False
     auth_key: Optional[str] = None
+    telegram_user_id: Optional[int] = None
+    telegram_first_name: Optional[str] = None
+    telegram_username: Optional[str] = None
 
 class User(UserBase):
     id: int

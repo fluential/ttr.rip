@@ -17,7 +17,7 @@
     
     {% if telegram_auth_enabled %}
     <div style="text-align: center; margin-top: 1.5rem; border-top: 1px solid var(--pico-muted-border-color); padding-top: 1.5rem;">
-        <p>Or, if you have linked your account:</p>
+        <p>Or, sign up / login with Telegram:</p>
         <script async src="https://telegram.org/js/telegram-widget.js?22" 
                 data-telegram-login="{{ telegram_bot_name }}" 
                 data-size="large" 
@@ -27,12 +27,8 @@
     </div>
     {% endif %}
 
-    {% if "error" in request.query_params %}
-        {% if request.query_params.error == "telegram_not_linked" %}
-            <p><small style="color: var(--pico-color-red-500);">This Telegram account is not linked to any key. Please log in with your key and link it from the dashboard first.</small></p>
-        {% else %}
-            <p><small style="color: var(--pico-color-red-500);">Invalid key provided.</small></p>
-        {% endif %}
+    {% if "error" in request.query_params and request.query_params.error != "telegram_not_linked" %}
+        <p><small style="color: var(--pico-color-red-500);">Invalid key provided.</small></p>
     {% endif %}
 </article>
 {% endblock %}

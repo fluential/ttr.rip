@@ -39,7 +39,10 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
         username=user.username,
         hashed_password=hashed_password,
         is_admin=user.is_admin,
-        auth_key=user.auth_key
+        auth_key=user.auth_key,
+        telegram_user_id=user.telegram_user_id,
+        telegram_first_name=user.telegram_first_name,
+        telegram_username=user.telegram_username,
     )
     db.add(db_user)
     await db.commit()

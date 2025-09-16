@@ -133,11 +133,21 @@ async def telegram_login_callback(
     login_data = schemas.TelegramLoginData(**query_params)
     
     user = await crud.get_user_by_telegram_id(db, telegram_user_id=login_data.id)
+    
     if not user:
-        logger.warning(f"Telegram login failed: No user found for Telegram ID {login_data.id}")
-        return RedirectResponse(url="/?error=telegram_not_linked", status_code=status.HTTP_302_FOUND)
+        logger.info(f"Telegram login from new user: {login_data.username} (ID: {login_data.id}). Creating new user.")
+        auth_key = generate_auth_key()
+        user_schema = schemas.UserCreate(
+            auth_key=auth_key,
+            telegram_user_id=login_data.id,
+            telegram_first_name=login_data.first_name,
+            telegram_username=login_data.username,
+        )
+        user = await crud.create_user(db, user=user_schema)
+        logger.info(f"Successfully created new user {user.id} for Telegram user {login_data.username}.")
+    else:
+        logger.info(f"Telegram login successful for existing user {user.id} (Telegram ID: {login_data.id})")
 
-    logger.info(f"Telegram login successful for user {user.id} (Telegram ID: {login_data.id})")
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     response.set_cookie(key="auth_key", value=user.auth_key, httponly=True, max_age=365*24*60*60) # 1 year
     return response
