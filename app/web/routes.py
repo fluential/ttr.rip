@@ -61,6 +61,8 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
+    logger.info(f"Dashboard loading. TELEGRAM_AUTH_ENABLED: {settings.TELEGRAM_AUTH_ENABLED}, TELEGRAM_BOT_NAME: '{settings.TELEGRAM_BOT_NAME}'")
+
     # No need to check for user existence here. The dashboard will simply show
     # "no checks" if the key is new or invalid. The API calls will handle auth.
     context = {
