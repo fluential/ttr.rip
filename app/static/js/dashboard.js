@@ -110,6 +110,32 @@ async function rotateApiKey() {
     }
 }
 
+async function fetchOperationalMetrics() {
+    try {
+        const response = await fetch('/api/v1/metrics/summary');
+        if (!response.ok) {
+            throw new Error('Failed to fetch operational metrics');
+        }
+        const metrics = await response.json();
+        const summaryDiv = document.getElementById('operational-metrics-summary');
+
+        const avgLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
+
+        summaryDiv.innerHTML = `
+            <div class="grid">
+                <div><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
+                <div><strong>API Requests:</strong> ${metrics.total_api_requests || 0}</div>
+                <div><strong>Avg. API Latency:</strong> ${avgLatency} ms</div>
+                <div><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
+            </div>
+        `;
+    } catch (error) {
+        console.error("Error fetching operational metrics:", error);
+        const summaryDiv = document.getElementById('operational-metrics-summary');
+        summaryDiv.innerHTML = `<p style="color: var(--pico-color-red-500);">Could not load operational metrics.</p>`;
+    }
+}
+
 function confirmDeleteAccount() {
     const confirmation = prompt('This action is irreversible. You will lose all your checks and your access key will be blacklisted for one hour. To confirm, type "DELETE" in the box below.');
     if (confirmation === 'DELETE') {
@@ -343,6 +369,7 @@ function startAutoRefreshTimer() {
             countdownEl.textContent = autoRefreshInterval;
             fetchChecks();
             fetchUserStats();
+            fetchOperationalMetrics();
         }
     }, 1000);
 }
@@ -655,6 +682,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         manualRefreshBtn.addEventListener('click', () => {
             fetchChecks();
             fetchUserStats();
+            fetchOperationalMetrics();
             
             // Reset the countdown if auto-refresh is enabled
             if (autoRefreshEnabled) {
@@ -667,7 +695,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    await Promise.all([fetchChecks(), fetchUserStats()]);
+    await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics()]);
     
     const loadTime = performance.now() - window.pageLoadStartTime;
     const clientTimeElem = document.getElementById('client-load-time');
