@@ -49,13 +49,13 @@ th[data-sort].sort-desc::after {
 
 /* Account Management Buttons */
 .btn-rotate {
-    --pico-background-color: var(--pico-color-green-500) !important;
-    --pico-border-color: var(--pico-color-green-500) !important;
+    --pico-background-color: var(--pico-color-orange-500) !important;
+    --pico-border-color: var(--pico-color-orange-500) !important;
     --pico-color: white !important;
 }
 .btn-rotate:hover {
-    --pico-background-color: var(--pico-color-green-600) !important;
-    --pico-border-color: var(--pico-color-green-600) !important;
+    --pico-background-color: var(--pico-color-orange-600) !important;
+    --pico-border-color: var(--pico-color-orange-600) !important;
 }
 
 .btn-export, .btn-import {
