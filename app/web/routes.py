@@ -253,9 +253,8 @@ async def admin_integrations(
     if not token:
         return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
     
-    # We fetch without owner check; API calls from the page will be authenticated.
-    result = await db.execute(select(db_models.Check).filter(db_models.Check.id == check_id))
-    check = result.scalars().first()
+    # Use the authorization-aware CRUD function for defense in depth.
+    check = await crud.get_check_by_id_and_owner(db, check_id=check_id, principal=admin_user)
 
     if not check:
         return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
