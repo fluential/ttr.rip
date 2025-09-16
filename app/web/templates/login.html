@@ -7,6 +7,7 @@
         <h2>Enter your credentials to continue</h2>
     </hgroup>
     <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="text" name="username" placeholder="Username" aria-label="Username" required>
         <input type="password" name="password" placeholder="Password" aria-label="Password" required>
         <button type="submit">Login</button>

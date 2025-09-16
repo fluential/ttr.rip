@@ -1,8 +1,9 @@
 import hmac
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
-from fastapi import Depends, HTTPException, status, Header, Cookie
+from fastapi import Depends, HTTPException, status, Header, Cookie, Form, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -34,6 +35,27 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+# --- CSRF Protection ---
+
+def generate_csrf_token() -> str:
+    """Generates a secure, URL-safe token for CSRF protection."""
+    return secrets.token_urlsafe(32)
+
+async def verify_csrf_token(
+    request: Request,
+    csrf_token_form: str = Form(..., alias="csrf_token"),
+):
+    """
+    FastAPI dependency to verify the CSRF token from a form submission
+    against the token stored in the request state (set by middleware or another dependency).
+    """
+    csrf_token_cookie = request.cookies.get("csrf_token")
+    if not csrf_token_cookie or not secrets.compare_digest(csrf_token_cookie, csrf_token_form):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
+
+
+# --- Authentication Dependencies ---
 
 async def get_public_user_from_key(
     x_auth_key: Optional[str] = Header(None, alias="X-Auth-Key"),

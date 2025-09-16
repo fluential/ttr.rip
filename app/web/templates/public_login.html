@@ -10,6 +10,7 @@
         Login with your existing key or get a new one to start monitoring.
     </p>
     <form method="post" action="/dashboard">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="text" name="auth_key" placeholder="Enter your access key" aria-label="Access Key" required>
         <button type="submit">Login with Key</button>
     </form>

@@ -26,6 +26,7 @@ def generate_auth_key() -> str:
 
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    csrf_token = security.generate_csrf_token()
     context = {
         "request": request,
         "process_time": getattr(request.state, "process_time", 0),
@@ -33,18 +34,20 @@ async def home(request: Request):
         "debug_mode": settings.DEBUG_MODE,
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
+        "csrf_token": csrf_token,
     }
     response = templates.TemplateResponse("public_login.html", context)
     response.delete_cookie("auth_key")
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
     return response
 
-@router.post("/dashboard", response_class=HTMLResponse)
+@router.post("/dashboard", response_class=HTMLResponse, dependencies=[Depends(security.verify_csrf_token)])
 async def login_with_key(request: Request, auth_key: str = Form(...), db: AsyncSession = Depends(db_base.get_db)):
     # We don't need to validate the key here. If it's invalid, the user just won't see any checks.
     # If it's a valid key for an existing user, they'll see their checks.
     # If it's a new key, a user will be created when they create their first check.
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
     return response
 
 @router.get("/new", response_class=HTMLResponse)
@@ -53,7 +56,7 @@ async def new_anonymous_user(request: Request, db: AsyncSession = Depends(db_bas
     # We no longer create the user here. It will be created just-in-time.
     
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60) # 1 year
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
     return response
 
 
@@ -78,7 +81,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     }
     response = templates.TemplateResponse("dashboard.html", context)
     # Refresh cookie on activity
-    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60)
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
     return response
 
 
@@ -147,7 +150,7 @@ async def telegram_login_callback(
         logger.info(f"Telegram login successful for existing user {user.id} (Telegram ID: {login_data.id})")
 
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="auth_key", value=user.auth_key, httponly=True, max_age=365*24*60*60) # 1 year
+    response.set_cookie(key="auth_key", value=user.auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
     return response
 
 
@@ -194,15 +197,19 @@ async def public_integrations(
 
 @admin_router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    csrf_token = security.generate_csrf_token()
     context = {
         "request": request,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
+        "csrf_token": csrf_token,
     }
-    return templates.TemplateResponse("login.html", context)
+    response = templates.TemplateResponse("login.html", context)
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    return response
 
-@admin_router.post("/login", response_class=HTMLResponse)
+@admin_router.post("/login", response_class=HTMLResponse, dependencies=[Depends(security.verify_csrf_token)])
 async def handle_login(
     request: Request,
     username: str = Form(...),
@@ -216,7 +223,7 @@ async def handle_login(
             data={"sub": user.username}, expires_delta=access_token_expires
         )
         response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
-        response.set_cookie(key="auth_token", value=access_token, httponly=True)
+        response.set_cookie(key="auth_token", value=access_token, httponly=True, samesite="Lax")
         return response
     return RedirectResponse(url="/admin/login?error=1", status_code=status.HTTP_302_FOUND)
 

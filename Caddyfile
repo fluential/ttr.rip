@@ -74,6 +74,22 @@
     }
 
     # Handle API paths with micro-caching and user-specific rate limiting
+    handle /api/v1/checks {
+        # Stricter limit for check creation (POST)
+        @create_check method POST
+        rate_limit @create_check {
+            zone create_check {
+                key {http.request.header.X-Auth-Key}
+                events 10     # 10 creations per minute per auth key
+                window 60s
+                burst 5
+            }
+        }
+        
+        # Pass to FastAPI backend
+        reverse_proxy localhost:8000
+    }
+
     handle /api/v1/* {
         # User-specific rate limiting for authenticated requests
         rate_limit {
@@ -135,7 +151,7 @@
         Referrer-Policy "strict-origin-when-cross-origin"
         
         # Content Security Policy to mitigate XSS attacks
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; media-src 'self'; frame-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; object-src 'none'; media-src 'self'; frame-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
         
         # Feature Policy to limit which browser features your site can use
         Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), accelerometer=(), gyroscope=(), interest-cohort=()"
