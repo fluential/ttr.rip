@@ -2,10 +2,10 @@ import uuid
 import json
 import base64
 from datetime import datetime, timezone, timedelta
-from typing import Union
+from typing import Union, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, case, or_
+from sqlalchemy import func, case, or_, and_, text
 from sqlalchemy.orm import selectinload
 import logging
 from app.db import models
@@ -16,6 +16,29 @@ from app.worker import celery_app
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+def _encode_cursor(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        value = value.isoformat()
+    
+    json_str = json.dumps(value)
+    return base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8')
+
+def _decode_cursor(cursor: Optional[str]) -> Any:
+    if cursor is None:
+        return None
+    try:
+        json_str = base64.urlsafe_b64decode(cursor).decode('utf-8')
+        value = json.loads(json_str)
+        # Attempt to convert back to datetime if it's an ISO format string
+        try:
+            return datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            return value
+    except Exception:
+        return None
 
 # User CRUD
 async def get_user_by_username(db: AsyncSession, username: str):
@@ -192,36 +215,58 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
 
     return check
 
-async def get_checks_by_owner(db: AsyncSession, principal: models.User, page: int = 1, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc'):
-    # Base query
+async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc', cursor: Optional[str] = None):
+    query = select(models.Check)
     if principal.is_admin:
-        query = select(models.Check).options(selectinload(models.Check.owner))
+        query = query.options(selectinload(models.Check.owner))
     else:
-        query = select(models.Check).filter(models.Check.owner_id == principal.id)
+        query = query.filter(models.Check.owner_id == principal.id)
 
-    # Add total count to the main query using a window function
-    query = query.add_columns(func.count(models.Check.id).over().label("total_count"))
-
-    # Apply sorting
     sort_column = getattr(models.Check, sort_by, models.Check.id)
+    cursor_val = _decode_cursor(cursor)
+
+    # For reverse direction (prev page), we flip the sort and the operator
+    is_prev = sort_direction.endswith('_prev')
+    if is_prev:
+        sort_direction = 'asc' if sort_direction.startswith('desc') else 'desc'
+    
+    if cursor_val is not None:
+        if (sort_direction == 'desc' and not is_prev) or (sort_direction == 'asc' and is_prev):
+            query = query.where(sort_column < cursor_val)
+        else:
+            query = query.where(sort_column > cursor_val)
+
     if sort_direction == 'asc':
         query = query.order_by(sort_column.asc())
     else:
         query = query.order_by(sort_column.desc())
 
-    # Apply pagination
-    query = query.offset((page - 1) * size).limit(size)
-
+    # Fetch one more than the page size to check if there's a next page
+    query = query.limit(size + 1)
+    
     result = await db.execute(query)
-    rows = result.all()
+    items = result.scalars().all()
 
-    if not rows:
-        return [], 0
+    next_cursor = None
+    prev_cursor = None
 
-    items = [row.Check for row in rows]
-    total = rows[0].total_count
+    if is_prev:
+        # If we're fetching a previous page, the items are in reverse order
+        items.reverse()
+        # The "next" cursor is the first item we fetched (before reversing)
+        next_cursor = _encode_cursor(getattr(items[0], sort_by)) if items else None
+        # The "previous" cursor is the last item if we fetched a full page
+        prev_cursor = _encode_cursor(getattr(items[-1], sort_by)) if len(items) > size else None
+    else:
+        # The "previous" cursor is the first item we fetched
+        prev_cursor = _encode_cursor(getattr(items[0], sort_by)) if items else None
+        # The "next" cursor is the last item if we fetched more than page size
+        if len(items) > size:
+            next_cursor = _encode_cursor(getattr(items[size-1], sort_by))
+            items = items[:size] # Trim the extra item
 
-    return items, total
+    return items, next_cursor, prev_cursor
+
 
 async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: models.User):
     db_check_data = {

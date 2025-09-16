@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Union
+from typing import Optional, Union, Any
 from datetime import datetime
 import uuid
 
@@ -69,10 +69,9 @@ class Check(CheckBase):
 
 class CheckPage(BaseModel):
     items: list[Check]
-    total: int
-    page: int
+    next_cursor: Optional[str] = None
+    prev_cursor: Optional[str] = None
     size: int
-    pages: int
 
 
 class CheckStats(BaseModel):

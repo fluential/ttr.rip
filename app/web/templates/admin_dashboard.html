@@ -68,9 +68,6 @@
         <ul>
             <li><button id="prev-page" class="secondary outline" disabled>Previous</button></li>
         </ul>
-        <ul id="page-info-container">
-            <li><span id="page-info">Page 1 of 1</span></li>
-        </ul>
         <ul>
             <li><button id="next-page" class="secondary outline" disabled>Next</button></li>
         </ul>
@@ -79,10 +76,11 @@
 
 <script>
     const apiToken = "{{ api_token }}";
-    let currentPage = 1;
     let currentSortBy = 'id';
     let currentSortDir = 'desc';
     const pageSize = 25;
+    let nextCursor = null;
+    let prevCursor = null;
 
     function copyUrl(element) {
         element.select();
@@ -190,22 +188,15 @@
         }
     }
 
-    function updatePagination(page, totalPages, totalItems) {
+    function updatePagination(newNextCursor, newPrevCursor) {
         const prevButton = document.getElementById('prev-page');
         const nextButton = document.getElementById('next-page');
-        const pageInfo = document.getElementById('page-info');
+        
+        nextCursor = newNextCursor;
+        prevCursor = newPrevCursor;
 
-        currentPage = page;
-
-        if (pageInfo) {
-            pageInfo.textContent = `Page ${page} of ${totalPages} (${totalItems} total)`;
-        }
-        if (prevButton) {
-            prevButton.disabled = page <= 1;
-        }
-        if (nextButton) {
-            nextButton.disabled = page >= totalPages;
-        }
+        prevButton.disabled = !prevCursor;
+        nextButton.disabled = !nextCursor;
     }
 
     function updateSortIndicators() {
@@ -217,8 +208,11 @@
         });
     }
 
-    async function fetchChecks() {
-        const url = `/api/v1/checks?page=${currentPage}&size=${pageSize}&sort_by=${currentSortBy}&sort_direction=${currentSortDir}`;
+    async function fetchChecks(cursor = null, direction = currentSortDir) {
+        let url = `/api/v1/checks?size=${pageSize}&sort_by=${currentSortBy}&sort_direction=${direction}`;
+        if (cursor) {
+            url += `&cursor=${cursor}`;
+        }
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${apiToken}` }
         });
@@ -237,7 +231,7 @@
                 statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: 0`;
                 statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: 0`;
             }
-            updatePagination(1, 1, 0);
+            updatePagination(null, null);
             return;
         }
 
@@ -304,7 +298,7 @@
             statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: ${statusCounts.down}`;
             statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: ${statusCounts.new}`;
         }
-        updatePagination(data.page, data.pages, data.total);
+        updatePagination(data.next_cursor, data.prev_cursor);
         updateSortIndicators();
     }
 
@@ -428,14 +422,14 @@
 
         // Pagination listeners
         document.getElementById('prev-page')?.addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                fetchChecks();
+            if (prevCursor) {
+                fetchChecks(prevCursor, `${currentSortDir}_prev`);
             }
         });
         document.getElementById('next-page')?.addEventListener('click', () => {
-            currentPage++;
-            fetchChecks();
+            if (nextCursor) {
+                fetchChecks(nextCursor, currentSortDir);
+            }
         });
 
         // Sorting listeners
@@ -448,7 +442,6 @@
                     currentSortBy = sortBy;
                     currentSortDir = 'desc'; // Default to desc for new column
                 }
-                currentPage = 1; // Reset to first page on new sort
                 fetchChecks();
             });
         });
