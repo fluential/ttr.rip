@@ -437,13 +437,12 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
     db_check = result.scalars().first()
     if db_check:
         update_data = settings_data.model_dump(exclude_unset=True)
+        
+        # Handle the bot token separately to avoid clearing it unintentionally
         if 'telegram_bot_token' in update_data:
-            token = update_data['telegram_bot_token']
-            if token:
-                update_data['telegram_bot_token'] = encryption.encrypt_token(token)
-            else:
-                # Store None if the token is cleared
-                update_data['telegram_bot_token'] = None
+            token = update_data.pop('telegram_bot_token') # Remove from dict
+            if token: # Only update if a new token is provided
+                db_check.telegram_bot_token = encryption.encrypt_token(token)
 
         for key, value in update_data.items():
             setattr(db_check, key, value)
