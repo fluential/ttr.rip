@@ -49,31 +49,31 @@ th[data-sort].sort-desc::after {
 
 /* Account Management Buttons */
 .btn-rotate {
-    --pico-background-color: var(--pico-color-orange-500) !important;
-    --pico-border-color: var(--pico-color-orange-500) !important;
-    --pico-color: white !important;
+    --background-color: #f57c00;
+    --border-color: #f57c00;
+    --color: white;
 }
 .btn-rotate:hover {
-    --pico-background-color: var(--pico-color-orange-600) !important;
-    --pico-border-color: var(--pico-color-orange-600) !important;
+    --background-color: #ef6c00;
+    --border-color: #ef6c00;
 }
 
 .btn-export, .btn-import {
-    --pico-background-color: var(--pico-color-blue-500) !important;
-    --pico-border-color: var(--pico-color-blue-500) !important;
-    --pico-color: white !important;
+    --background-color: #1976d2;
+    --border-color: #1976d2;
+    --color: white;
 }
 .btn-export:hover, .btn-import:hover {
-    --pico-background-color: var(--pico-color-blue-600) !important;
-    --pico-border-color: var(--pico-color-blue-600) !important;
+    --background-color: #1565c0;
+    --border-color: #1565c0;
 }
 
 .btn-delete {
-    --pico-background-color: var(--pico-color-red-600) !important;
-    --pico-border-color: var(--pico-color-red-600) !important;
-    --pico-color: white !important;
+    --background-color: #d32f2f;
+    --border-color: #d32f2f;
+    --color: white;
 }
 .btn-delete:hover {
-    --pico-background-color: var(--pico-color-red-700) !important;
-    --pico-border-color: var(--pico-color-red-700) !important;
+    --background-color: #c62828;
+    --border-color: #c62828;
 }
