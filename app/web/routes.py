@@ -31,6 +31,8 @@ async def home(request: Request):
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
+        "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
+        "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
     }
     response = templates.TemplateResponse("public_login.html", context)
     response.delete_cookie("auth_key")
@@ -116,6 +118,29 @@ async def telegram_callback(
 
     # Redirect back to the dashboard
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/telegram/login_callback", response_class=HTMLResponse, name="telegram_login_callback")
+async def telegram_login_callback(
+    request: Request,
+    db: AsyncSession = Depends(db_base.get_db),
+):
+    query_params = dict(request.query_params)
+    logger.info(f"Handling Telegram login callback with params: {query_params}")
+    if not security.validate_telegram_hash(query_params.copy()):
+        raise HTTPException(status_code=400, detail="Invalid hash from Telegram")
+
+    login_data = schemas.TelegramLoginData(**query_params)
+    
+    user = await crud.get_user_by_telegram_id(db, telegram_user_id=login_data.id)
+    if not user:
+        logger.warning(f"Telegram login failed: No user found for Telegram ID {login_data.id}")
+        return RedirectResponse(url="/?error=telegram_not_linked", status_code=status.HTTP_302_FOUND)
+
+    logger.info(f"Telegram login successful for user {user.id} (Telegram ID: {login_data.id})")
+    response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
+    response.set_cookie(key="auth_key", value=user.auth_key, httponly=True, max_age=365*24*60*60) # 1 year
+    return response
 
 
 @router.get("/check/{check_id}/integrations", response_class=HTMLResponse)
