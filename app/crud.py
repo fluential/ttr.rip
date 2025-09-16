@@ -285,7 +285,23 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     else:
         query = query.filter(models.Check.owner_id == principal.id)
 
-    sort_column = getattr(models.Check, sort_by, models.Check.id)
+    is_expires_sort = sort_by == 'expires_at'
+
+    if is_expires_sort:
+        if "sqlite" in settings.DATABASE_URL:
+            sort_column = func.datetime(
+                func.coalesce(models.Check.last_ping, models.Check.created_at),
+                text("'+' || (interval_seconds + grace_seconds) || ' seconds'")
+            ).label("expires_at")
+        else: # Assuming postgres
+            sort_column = (
+                func.coalesce(models.Check.last_ping, models.Check.created_at) +
+                (models.Check.interval_seconds + models.Check.grace_seconds) * text("'1 second'::interval")
+            ).label("expires_at")
+        query = query.add_columns(sort_column)
+    else:
+        sort_column = getattr(models.Check, sort_by, models.Check.id)
+
     cursor_val = _decode_cursor(cursor)
 
     # For reverse direction (prev page), we flip the sort and the operator
@@ -308,7 +324,14 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     query = query.limit(size + 1)
     
     result = await db.execute(query)
-    items = result.scalars().all()
+
+    if is_expires_sort:
+        raw_results = result.all()
+        items = [row.Check for row in raw_results]
+        cursor_values = [row.expires_at for row in raw_results]
+    else:
+        items = result.scalars().all()
+        cursor_values = None
 
     next_cursor = None
     prev_cursor = None
@@ -316,16 +339,28 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     if is_prev:
         # If we're fetching a previous page, the items are in reverse order
         items.reverse()
+        if cursor_values:
+            cursor_values.reverse()
+        
         # The "next" cursor is the first item we fetched (before reversing)
-        next_cursor = _encode_cursor(getattr(items[0], sort_by)) if items else None
+        if items:
+            next_cursor_val = cursor_values[0] if is_expires_sort else getattr(items[0], sort_by)
+            next_cursor = _encode_cursor(next_cursor_val)
+        
         # The "previous" cursor is the last item if we fetched a full page
-        prev_cursor = _encode_cursor(getattr(items[-1], sort_by)) if len(items) > size else None
+        if len(items) > size:
+            prev_cursor_val = cursor_values[-1] if is_expires_sort else getattr(items[-1], sort_by)
+            prev_cursor = _encode_cursor(prev_cursor_val)
     else:
         # The "previous" cursor is the first item we fetched
-        prev_cursor = _encode_cursor(getattr(items[0], sort_by)) if items else None
+        if items:
+            prev_cursor_val = cursor_values[0] if is_expires_sort else getattr(items[0], sort_by)
+            prev_cursor = _encode_cursor(prev_cursor_val)
+        
         # The "next" cursor is the last item if we fetched more than page size
         if len(items) > size:
-            next_cursor = _encode_cursor(getattr(items[size-1], sort_by))
+            next_cursor_val = cursor_values[size-1] if is_expires_sort else getattr(items[size-1], sort_by)
+            next_cursor = _encode_cursor(next_cursor_val)
             items = items[:size] # Trim the extra item
 
     return items, next_cursor, prev_cursor

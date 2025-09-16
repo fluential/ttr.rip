@@ -29,7 +29,7 @@ async def read_checks(
     sort_direction: str = Query('desc', pattern="^(asc|desc|asc_prev|desc_prev)$"),
     cursor: Optional[str] = None,
 ):
-    allowed_sort_fields = ['id', 'name', 'status', 'created_at', 'last_ping', 'last_duration_seconds', 'uuid']
+    allowed_sort_fields = ['id', 'name', 'status', 'created_at', 'last_ping', 'last_duration_seconds', 'uuid', 'expires_at']
     if sort_by not in allowed_sort_fields:
         raise HTTPException(status_code=400, detail=f"Invalid sort field: {sort_by}")
 
