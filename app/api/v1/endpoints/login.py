@@ -1,11 +1,14 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+import secrets
 
 from app import crud, schemas, security
 from app.core.config import settings
 from app.db import base as db_base
+from app.db import models as db_models
+from app.web.routes import generate_auth_key
 
 router = APIRouter()
 
@@ -26,3 +29,25 @@ async def login_for_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
+async def rotate_api_key(
+    x_auth_key: str = Header(..., alias="X-Auth-Key"),
+    db: AsyncSession = Depends(db_base.get_db)
+):
+    """Rotate the user's API key"""
+    # Get current user
+    user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication key"
+        )
+    
+    # Generate new key
+    new_key = generate_auth_key()
+    
+    # Update the user
+    user = await crud.update_user_auth_key(db, user=user, new_auth_key=new_key)
+    
+    return {"auth_key": user.auth_key}

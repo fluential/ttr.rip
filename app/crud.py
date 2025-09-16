@@ -72,6 +72,35 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
     await db.refresh(db_user)
     return db_user
 
+async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key: str):
+    """Update a user's auth key and re-encrypt any tokens"""
+    # First get all checks owned by this user that have telegram bot tokens
+    result = await db.execute(
+        select(models.Check)
+        .filter(models.Check.owner_id == user.id)
+        .filter(models.Check.telegram_bot_token.isnot(None))
+    )
+    checks_with_tokens = result.scalars().all()
+    
+    # For each check, decrypt the token and re-encrypt it with the new key
+    for check in checks_with_tokens:
+        try:
+            # Decrypt the token using old key
+            decrypted_token = encryption.decrypt_token(check.telegram_bot_token)
+            # Re-encrypt with new key
+            check.telegram_bot_token = encryption.encrypt_token(decrypted_token)
+        except Exception as e:
+            logger.error(f"Failed to re-encrypt token for check {check.id}: {e}")
+            # Continue with other checks even if one fails
+    
+    # Update the user's auth key
+    user.auth_key = new_auth_key
+    
+    # Commit all changes
+    await db.commit()
+    await db.refresh(user)
+    return user
+
 # Check CRUD
 async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
     result = await db.execute(select(models.Check).filter(models.Check.uuid == check_uuid))

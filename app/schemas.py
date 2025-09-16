@@ -34,6 +34,9 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
+class UserKeyResponse(BaseModel):
+    auth_key: str
+
 # Check Schemas
 class CheckBase(BaseModel):
     name: str

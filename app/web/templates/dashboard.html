@@ -11,6 +11,13 @@
     <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
     <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
     
+    <div style="margin-top: 1rem; display: flex; justify-content: center;">
+        <button type="button" id="rotate-key-btn" class="secondary outline" onclick="confirmRotateKey()">Rotate Access Key</button>
+    </div>
+
+    <div id="key-rotation-message" style="margin-top: 1rem; text-align: center; display: none;">
+    </div>
+    
     {% if telegram_auth_enabled %}
     <div style="text-align: center; margin-top: 1.5rem;">
         <p>Optionally, link your Telegram account for easier login and recovery.</p>
@@ -123,6 +130,62 @@
             element.value = getMaskedAuthKey(fullKey); // Restore on error
             delete element.dataset.copying;
         });
+    }
+
+    function confirmRotateKey() {
+        if (confirm('Are you sure you want to rotate your access key? You will need to update any scripts or bookmarks using the current key.')) {
+            rotateApiKey();
+        }
+    }
+
+    async function rotateApiKey() {
+        const rotateBtn = document.getElementById('rotate-key-btn');
+        const messageDiv = document.getElementById('key-rotation-message');
+        
+        rotateBtn.disabled = true;
+        rotateBtn.setAttribute('aria-busy', 'true');
+        messageDiv.textContent = 'Rotating your access key...';
+        messageDiv.style.display = 'block';
+        messageDiv.style.color = 'inherit';
+        
+        try {
+            const response = await fetch('/api/v1/user/rotate-key', {
+                method: 'POST',
+                headers: {
+                    'X-Auth-Key': authKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to rotate key');
+            }
+            
+            const data = await response.json();
+            const newKey = data.auth_key;
+            
+            // Update cookie and reload
+            document.cookie = `auth_key=${newKey}; path=/; max-age=${365*24*60*60}`;
+            
+            messageDiv.textContent = 'Your access key has been rotated successfully. The page will refresh in 3 seconds...';
+            messageDiv.style.color = 'var(--pico-color-green-500)';
+            
+            // Update display
+            const authKeyDisplay = document.getElementById('auth-key-display');
+            authKeyDisplay.value = getMaskedAuthKey(newKey);
+            
+            // Reload after delay to use new key
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        } catch (error) {
+            console.error('Error rotating key:', error);
+            messageDiv.textContent = 'Failed to rotate access key. Please try again.';
+            messageDiv.style.color = 'var(--pico-color-red-500)';
+            rotateBtn.disabled = false;
+        } finally {
+            rotateBtn.removeAttribute('aria-busy');
+        }
     }
 
     function copyUrl(element) {
