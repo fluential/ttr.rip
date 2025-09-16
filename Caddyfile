@@ -13,8 +13,6 @@
     # Enable response header to show when caching is active
     header /* {
         X-Cache-Status {http.cache.status}
-        # Add ETag header support
-        ETag {http.response.header.Etag}
     }
 
     # Global rate limiting - 10 req/s with burst of 20
@@ -36,6 +34,7 @@
         disable_if {
             not {method} match GET HEAD
             header Authorization *
+            header X-Auth-Key *
         }
         
         # Cache key based on request attributes including ETag support
@@ -94,7 +93,7 @@
         # User-specific rate limiting for authenticated requests
         rate_limit {
             zone authenticated_api {
-                key {http.request.header.Authorization}
+                key {http.request.header.X-Auth-Key}
                 events 120     # 120 requests per minute per auth key
                 window 60s
                 burst 30
@@ -151,7 +150,7 @@
         Referrer-Policy "strict-origin-when-cross-origin"
         
         # Content Security Policy to mitigate XSS attacks
-        Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; object-src 'none'; media-src 'self'; frame-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; object-src 'none'; media-src 'self'; frame-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
         
         # Feature Policy to limit which browser features your site can use
         Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), accelerometer=(), gyroscope=(), interest-cohort=()"
