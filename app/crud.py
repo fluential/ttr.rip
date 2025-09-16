@@ -81,18 +81,20 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # Base query for the user's checks
     if principal.is_admin:
         # Admin stats would be for all checks
-        query = select(models.Check)
+        base_query = select(models.Check)
     else:
-        query = select(models.Check).filter(models.Check.owner_id == principal.id)
+        base_query = select(models.Check).filter(models.Check.owner_id == principal.id)
 
+    # Create a subquery from the base query to apply aggregations
+    subquery = base_query.subquery()
     stats_query = select(
-        func.count(models.Check.id).label("total_checks"),
-        func.sum(case((models.Check.status == 'up', 1), else_=0)).label("up_count"),
-        func.sum(case((models.Check.status == 'down', 1), else_=0)).label("down_count"),
-        func.sum(case((models.Check.status == 'new', 1), else_=0)).label("new_count"),
-        func.avg(models.Check.interval_seconds).label("avg_interval_seconds"),
-        func.avg(models.Check.last_duration_seconds).label("avg_duration_seconds")
-    ).select_from(query.subquery())
+        func.count(subquery.c.id).label("total_checks"),
+        func.sum(case((subquery.c.status == 'up', 1), else_=0)).label("up_count"),
+        func.sum(case((subquery.c.status == 'down', 1), else_=0)).label("down_count"),
+        func.sum(case((subquery.c.status == 'new', 1), else_=0)).label("new_count"),
+        func.avg(subquery.c.interval_seconds).label("avg_interval_seconds"),
+        func.avg(subquery.c.last_duration_seconds).label("avg_duration_seconds")
+    )
 
     result = await db.execute(stats_query)
     stats = result.first()

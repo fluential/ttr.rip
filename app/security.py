@@ -8,6 +8,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.db import base as db_base
@@ -63,9 +64,18 @@ async def get_auth_principal(
     if x_auth_key:
         user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
         if not user:
-            # Just-in-time user creation for auth_key users
-            user_schema = schemas.UserCreate(auth_key=x_auth_key)
-            user = await crud.create_user(db, user=user_schema)
+            try:
+                # Just-in-time user creation for auth_key users
+                user_schema = schemas.UserCreate(auth_key=x_auth_key)
+                user = await crud.create_user(db, user=user_schema)
+            except IntegrityError:
+                await db.rollback()
+                # The user was likely created by a concurrent request. Fetch it.
+                user = await crud.get_user_by_auth_key(db, auth_key=x_auth_key)
+                if not user:
+                    # This would be a very strange state, but handle it.
+                    logger.error(f"Failed to create or find user for auth_key ...{x_auth_key[-4:]} after IntegrityError.")
+                    raise credentials_exception
         return user
     
     raise HTTPException(
