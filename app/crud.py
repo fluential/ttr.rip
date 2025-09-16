@@ -337,31 +337,44 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     prev_cursor = None
 
     if is_prev:
-        # If we're fetching a previous page, the items are in reverse order
+        # Items were fetched in reverse order. We reverse them back for display.
         items.reverse()
         if cursor_values:
             cursor_values.reverse()
-        
-        # The "next" cursor is the first item we fetched (before reversing)
+
+        has_prev_page = len(items) > size
+
+        # The 'next' cursor always points to the last item of the page we just fetched.
         if items:
-            next_cursor_val = cursor_values[0] if is_expires_sort else getattr(items[0], sort_by)
+            next_cursor_val = cursor_values[-1] if is_expires_sort else getattr(items[-1], sort_by)
             next_cursor = _encode_cursor(next_cursor_val)
-        
-        # The "previous" cursor is the last item if we fetched a full page
-        if len(items) > size:
-            prev_cursor_val = cursor_values[-1] if is_expires_sort else getattr(items[-1], sort_by)
-            prev_cursor = _encode_cursor(prev_cursor_val)
-    else:
-        # The "previous" cursor is the first item we fetched
+
+        if has_prev_page:
+            # The extra item is now at the beginning. Trim it for the response.
+            items = items[1:]
+            if cursor_values:
+                cursor_values = cursor_values[1:]
+            
+            # The 'prev' cursor points to the new first item of the page.
+            if items:
+                prev_cursor_val = cursor_values[0] if is_expires_sort else getattr(items[0], sort_by)
+                prev_cursor = _encode_cursor(prev_cursor_val)
+        else:
+            prev_cursor = None
+    else: # is_next
+        # The 'prev' cursor always points to the first item of the page.
         if items:
             prev_cursor_val = cursor_values[0] if is_expires_sort else getattr(items[0], sort_by)
             prev_cursor = _encode_cursor(prev_cursor_val)
-        
-        # The "next" cursor is the last item if we fetched more than page size
+
         if len(items) > size:
-            next_cursor_val = cursor_values[size-1] if is_expires_sort else getattr(items[size-1], sort_by)
+            # The 'next' cursor points to the last item of the page content (not the extra one).
+            next_cursor_val = cursor_values[size - 1] if is_expires_sort else getattr(items[size - 1], sort_by)
             next_cursor = _encode_cursor(next_cursor_val)
-            items = items[:size] # Trim the extra item
+            # Trim the extra item from the end for the response.
+            items = items[:size]
+        else:
+            next_cursor = None
 
     return items, next_cursor, prev_cursor
 
