@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.db import base as db_base
 from app.db import models as db_models
 from app import crud, schemas
+from app.core.redis_pool import get_redis_connection
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/token", auto_error=False)
@@ -76,6 +77,19 @@ async def get_public_user_from_key(
 
     if not auth_key:
         raise credentials_exception
+
+    # --- Blacklist Check ---
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r and r.exists(f"blacklist:auth_key:{auth_key}"):
+                logger.warning(f"Authentication attempt with blacklisted key: ...{auth_key[-4:]}")
+                raise credentials_exception
+        except Exception as e:
+            logger.error(f"Redis check failed during auth: {e}")
+            # Fail closed: if we can't check the blacklist, deny access.
+            raise credentials_exception
+    # --- End Blacklist Check ---
 
     user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
     if not user:
