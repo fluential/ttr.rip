@@ -184,6 +184,7 @@ async def public_integrations(
         "is_admin": False,
         "telegram_bot_token": "",  # Always empty for security
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
+        "telegram_bot_token_placeholder": "[Existing token hidden for security]" if has_token else "Enter your Telegram bot token",
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
@@ -271,6 +272,7 @@ async def admin_integrations(
         "is_admin": True,
         "telegram_bot_token": "",  # Always empty for security
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
+        "telegram_bot_token_placeholder": "[Existing token hidden for security]" if has_token else "Enter your Telegram bot token",
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
