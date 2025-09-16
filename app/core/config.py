@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 from pydantic import RedisDsn
 
 class Settings(BaseSettings):
@@ -17,6 +16,15 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_NAME: str = ""
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_AUTH_ENABLED: bool = False
+    
+    # Auto-cleanup settings
+    CLEANUP_ENABLED: bool = False
+    CLEANUP_INACTIVE_DAYS: int = 180
+    CLEANUP_INTERVAL_HOURS: int = 24
+    
+    # Auto-start Celery worker
+    AUTO_START_WORKER: bool = True
+    WORKER_CONCURRENCY: int = 2
 
     model_config = SettingsConfigDict(env_file=".env")
 
