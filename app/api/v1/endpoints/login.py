@@ -33,6 +33,39 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.delete("/user", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user_account(
+    response: Response,
+    user: db_models.User = Depends(security.get_public_user_from_key),
+    db: AsyncSession = Depends(db_base.get_db)
+):
+    """Deletes a user and all their associated data."""
+    if not user or not user.id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication key"
+        )
+    
+    auth_key_to_blacklist = user.auth_key
+    
+    await crud.delete_user_and_data(db, user=user)
+    
+    # Add the key to the Redis blacklist with a 1-hour TTL
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                # Blacklist for 1 hour (3600 seconds)
+                r.set(f"blacklist:auth_key:{auth_key_to_blacklist}", "1", ex=3600)
+                logger.info(f"Blacklisted auth key for deleted user {user.id}: ...{auth_key_to_blacklist[-4:]}")
+        except Exception as e:
+            logger.error(f"Failed to blacklist auth key for deleted user {user.id}: {e}")
+
+    # Clear the auth cookie
+    response.delete_cookie("auth_key")
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 @router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
 async def rotate_api_key(
     response: Response,

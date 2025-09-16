@@ -96,9 +96,10 @@
     <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
     
     <div style="margin-top: 1rem;" class="grid">
-        <button type="button" id="rotate-key-btn" class="secondary outline" onclick="confirmRotateKey()">Rotate Access Key</button>
-        <a href="/api/v1/checks/export" role="button" class="secondary outline">Export Checks</a>
-        <button type="button" id="import-btn" class="secondary outline">Import Checks</button>
+        <button type="button" id="rotate-key-btn" class="btn-rotate">Rotate Access Key</button>
+        <button type="button" id="export-btn" class="btn-export">Export Checks</button>
+        <button type="button" id="import-btn" class="btn-import">Import Checks</button>
+        <button type="button" id="delete-account-btn" class="btn-delete">Delete Account</button>
         <input type="file" id="import-file-input" style="display: none;" accept=".json">
     </div>
 

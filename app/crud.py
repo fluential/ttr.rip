@@ -500,6 +500,47 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
     return db_check
 
 
+async def delete_user_and_data(db: AsyncSession, user: models.User):
+    """
+    Deletes a user and all of their associated checks.
+    """
+    if not user or not user.id:
+        return
+
+    # Get all checks for the user
+    checks_to_delete = await get_all_checks_by_owner(db, principal=user)
+    check_ids = [c.id for c in checks_to_delete]
+    logger.info(f"Deleting {len(checks_to_delete)} checks for user {user.id} as part of account deletion.")
+    
+    for check in checks_to_delete:
+        await db.delete(check)
+    
+    # Now delete the user
+    logger.info(f"Deleting user {user.id} (auth_key: ...{user.auth_key[-4:]}).")
+    await db.delete(user)
+    
+    await db.commit()
+
+    # Optional: Clean up any related Redis data if necessary
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                pipe = r.pipeline()
+                # Clean up user stats cache
+                pipe.delete(f"user_stats:dashboard:{user.id}")
+                # Clean up check-related keys (if any)
+                for check_id in check_ids:
+                    key_pattern = f"check:{check_id}:*"
+                    keys = r.keys(key_pattern)
+                    if keys:
+                        pipe.delete(*keys)
+                pipe.execute()
+                logger.info(f"Cleaned up Redis entries for deleted user {user.id}")
+        except Exception as e:
+            logger.error(f"Error cleaning up Redis entries for deleted user {user.id}: {e}")
+
+
 async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     # If the principal has no ID, they can't own any checks to delete.
     if not principal.id:

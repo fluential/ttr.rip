@@ -110,6 +110,89 @@ async function rotateApiKey() {
     }
 }
 
+function confirmDeleteAccount() {
+    const confirmation = prompt('This action is irreversible. You will lose all your checks and your access key will be blacklisted for one hour. To confirm, type "DELETE" in the box below.');
+    if (confirmation === 'DELETE') {
+        deleteAccount();
+    }
+}
+
+async function deleteAccount() {
+    const deleteBtn = document.getElementById('delete-account-btn');
+    const messageDiv = document.getElementById('import-message'); // Reuse this message div
+
+    deleteBtn.disabled = true;
+    deleteBtn.setAttribute('aria-busy', 'true');
+    messageDiv.textContent = 'Deleting your account...';
+    messageDiv.style.display = 'block';
+    messageDiv.style.color = 'inherit';
+
+    try {
+        const response = await fetch('/api/v1/user', {
+            method: 'DELETE',
+            headers: {
+                'X-Auth-Key': authKey,
+                'X-CSRF-Token': getCsrfToken(),
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to delete account');
+        }
+
+        // On success, redirect to homepage
+        messageDiv.textContent = 'Account deleted successfully. Redirecting...';
+        messageDiv.style.color = 'var(--pico-color-green-500)';
+        // Use a short delay to allow user to read the message
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1500);
+
+    } catch (error) {
+        console.error('Error deleting account:', error);
+        messageDiv.textContent = `Failed to delete account: ${error.message}. Please try again.`;
+        messageDiv.style.color = 'var(--pico-color-red-500)';
+        deleteBtn.disabled = false;
+        deleteBtn.removeAttribute('aria-busy');
+    }
+}
+
+async function handleExport() {
+    const exportBtn = document.getElementById('export-btn');
+    exportBtn.disabled = true;
+    exportBtn.setAttribute('aria-busy', 'true');
+
+    try {
+        const response = await fetch('/api/v1/checks/export', {
+            headers: { 'X-Auth-Key': authKey }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to export checks');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'ttr_rip_checks_export.json';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+    } catch (error) {
+        console.error('Error exporting checks:', error);
+        alert(`Failed to export checks: ${error.message}`);
+    } finally {
+        exportBtn.disabled = false;
+        exportBtn.removeAttribute('aria-busy');
+    }
+}
+
 async function handleImport(file) {
     const importBtn = document.getElementById('import-btn');
     const messageDiv = document.getElementById('import-message');
@@ -601,16 +684,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
 
-    // Import/Export listeners
+    // Account Management listeners
     const importBtn = document.getElementById('import-btn');
     const importFileInput = document.getElementById('import-file-input');
+    const exportBtn = document.getElementById('export-btn');
+    const deleteBtn = document.getElementById('delete-account-btn');
+
     if (importBtn && importFileInput) {
-        importBtn.addEventListener('click', () => {
-            importFileInput.click();
-        });
-        importFileInput.addEventListener('change', (event) => {
-            handleImport(event.target.files[0]);
-        });
+        importBtn.addEventListener('click', () => importFileInput.click());
+        importFileInput.addEventListener('change', (event) => handleImport(event.target.files[0]));
+    }
+    if (exportBtn) {
+        exportBtn.addEventListener('click', handleExport);
+    }
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', confirmDeleteAccount);
     }
 
     // Pagination listeners

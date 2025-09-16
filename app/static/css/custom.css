@@ -46,3 +46,34 @@ th[data-sort].sort-desc::after {
     display: inline-flex;
     align-items: center;
 }
+
+/* Account Management Buttons */
+.btn-rotate {
+    --pico-background-color: var(--pico-color-green-500) !important;
+    --pico-border-color: var(--pico-color-green-500) !important;
+    --pico-color: white !important;
+}
+.btn-rotate:hover {
+    --pico-background-color: var(--pico-color-green-600) !important;
+    --pico-border-color: var(--pico-color-green-600) !important;
+}
+
+.btn-export, .btn-import {
+    --pico-background-color: var(--pico-color-blue-500) !important;
+    --pico-border-color: var(--pico-color-blue-500) !important;
+    --pico-color: white !important;
+}
+.btn-export:hover, .btn-import:hover {
+    --pico-background-color: var(--pico-color-blue-600) !important;
+    --pico-border-color: var(--pico-color-blue-600) !important;
+}
+
+.btn-delete {
+    --pico-background-color: var(--pico-color-red-600) !important;
+    --pico-border-color: var(--pico-color-red-600) !important;
+    --pico-color: white !important;
+}
+.btn-delete:hover {
+    --pico-background-color: var(--pico-color-red-700) !important;
+    --pico-border-color: var(--pico-color-red-700) !important;
+}
