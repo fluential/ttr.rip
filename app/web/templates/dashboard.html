@@ -70,22 +70,11 @@
 
 <article>
     <header>Current Checks</header>
-    <div class="refresh-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <div>
+    <div class="refresh-controls" style="margin-bottom: 1rem; text-align: right;">
+        <div class="refresh-buttons-container">
             <button id="refresh-toggle-btn" class="outline" title="Pause automatic refresh">⏸️</button>
             <button id="manual-refresh-btn" class="outline" title="Refresh now">🔄</button>
             <span id="refresh-status">Auto-refresh: <span id="refresh-countdown">5</span>s</span>
-        </div>
-        <div>
-            <label for="page-size" style="display: inline-block; margin-bottom: 0; margin-right: 0.5rem;">
-                Checks per page:
-            </label>
-            <select id="page-size" style="width: auto; display: inline-block; margin-bottom: 0;">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-            </select>
         </div>
     </div>
     <figure>
@@ -106,14 +95,27 @@
             </tbody>
         </table>
     </figure>
-    <nav id="pagination-controls" aria-label="pagination">
-        <ul>
-            <li><button id="prev-page" class="secondary outline" disabled>Previous</button></li>
-        </ul>
-        <ul>
-            <li><button id="next-page" class="secondary outline" disabled>Next</button></li>
-        </ul>
-    </nav>
+    <div class="pagination-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+        <nav id="pagination-controls" aria-label="pagination">
+            <ul>
+                <li><button id="prev-page" class="secondary outline" disabled>Previous</button></li>
+            </ul>
+            <ul>
+                <li><button id="next-page" class="secondary outline" disabled>Next</button></li>
+            </ul>
+        </nav>
+        <div class="page-size-container">
+            <label for="page-size" style="display: inline-block; margin-bottom: 0; margin-right: 0.5rem;">
+                Checks per page:
+            </label>
+            <select id="page-size" style="width: auto; display: inline-block; margin-bottom: 0;">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+    </div>
 </article>
 
 <script>
@@ -691,7 +693,6 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-top: 1rem;
     }
     #pagination-controls ul {
         margin-bottom: 0;
@@ -703,6 +704,17 @@
     .refresh-controls button {
         padding: 0.4rem;
         width: 2.5rem;
+    }
+    .refresh-buttons-container {
+        display: inline-flex;
+        align-items: center;
+    }
+    .pagination-container {
+        margin-top: 1rem;
+    }
+    .page-size-container {
+        display: flex;
+        align-items: center;
     }
 </style>
 {% endblock %}
