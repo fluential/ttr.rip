@@ -229,6 +229,7 @@ async def public_status_page(
         "request": request,
         "status_page": status_page,
         "overall_status": overall_status,
+        "is_public_status_page": True,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,

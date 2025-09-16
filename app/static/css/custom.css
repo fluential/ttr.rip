@@ -142,3 +142,7 @@ th[data-sort].sort-desc::after {
     padding: 0.5rem;
     margin-top: 0.5rem;
 }
+
+.container-wide {
+    max-width: 1400px;
+}
