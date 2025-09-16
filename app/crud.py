@@ -339,8 +339,23 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
     await db.commit()
     await db.refresh(db_check)
     
-    # Manually set the relationship to prevent lazy loading during serialization
-    db_check.owner = principal
+    # Create a dictionary representation of the owner instead of relying on the relationship
+    # This avoids the MissingGreenlet error
+    owner_dict = {
+        "id": principal.id,
+        "username": principal.username,
+        "is_admin": principal.is_admin,
+        "auth_key": principal.auth_key,
+        "telegram_user_id": principal.telegram_user_id,
+        "telegram_first_name": principal.telegram_first_name,
+        "telegram_username": principal.telegram_username
+    }
+    
+    # Convert the owner_dict to a User model instance
+    owner = models.User(**owner_dict)
+    
+    # Set the owner attribute
+    db_check.owner = owner
     
     return db_check
 
@@ -419,7 +434,21 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     if db_check:
         await db.delete(db_check)
         await db.commit()
-        # Manually set owner for the returned object to be serializable
-        db_check.owner = principal
+        # Create a dictionary representation of the owner instead of relying on the relationship
+        owner_dict = {
+            "id": principal.id,
+            "username": principal.username,
+            "is_admin": principal.is_admin,
+            "auth_key": principal.auth_key,
+            "telegram_user_id": principal.telegram_user_id,
+            "telegram_first_name": principal.telegram_first_name,
+            "telegram_username": principal.telegram_username
+        }
+        
+        # Convert the owner_dict to a User model instance
+        owner = models.User(**owner_dict)
+        
+        # Set the owner attribute
+        db_check.owner = owner
         return db_check
     return None
