@@ -134,7 +134,7 @@ def start_celery_worker():
         return
     
     try:
-        logger.info(f"Starting Celery worker with concurrency {settings.WORKER_CONCURRENCY}")
+        logger.info(f"Starting Celery worker with thread pool, concurrency {settings.WORKER_CONCURRENCY}")
         
         # Get the directory of the current script
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -150,6 +150,7 @@ def start_celery_worker():
             sys.executable, "-m", "celery", 
             "-A", "app.worker.celery_app", "worker", 
             "--loglevel=info", 
+            "--pool=threads",
             f"--concurrency={settings.WORKER_CONCURRENCY}"
         ]
         

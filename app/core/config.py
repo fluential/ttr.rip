@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     
     # Auto-start Celery worker
     AUTO_START_WORKER: bool = True
-    WORKER_CONCURRENCY: int = 2
+    WORKER_CONCURRENCY: int = 50
 
     model_config = SettingsConfigDict(env_file=".env")
 
