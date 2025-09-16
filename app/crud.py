@@ -328,10 +328,13 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
 
 
 async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: models.User):
+    # Extract the ID from principal immediately to avoid async access issues
+    principal_id = principal.id
+    
     db_check_data = {
         **check.model_dump(),
         "uuid": str(uuid.uuid4()),
-        "owner_id": principal.id
+        "owner_id": principal_id
     }
 
     db_check = models.Check(**db_check_data)
@@ -339,10 +342,9 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
     await db.commit()
     await db.refresh(db_check)
     
-    # Create a dictionary representation of the owner instead of relying on the relationship
-    # This avoids the MissingGreenlet error
+    # Extract all needed attributes from principal to avoid async access issues
     owner_dict = {
-        "id": principal.id,
+        "id": principal_id,
         "username": principal.username,
         "is_admin": principal.is_admin,
         "auth_key": principal.auth_key,
@@ -351,7 +353,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         "telegram_username": principal.telegram_username
     }
     
-    # Convert the owner_dict to a User model instance
+    # Create a new User instance to avoid async access issues with the ORM
     owner = models.User(**owner_dict)
     
     # Set the owner attribute
@@ -434,9 +436,11 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     if db_check:
         await db.delete(db_check)
         await db.commit()
-        # Create a dictionary representation of the owner instead of relying on the relationship
+        
+        # Extract all needed attributes from principal to avoid async access issues
+        principal_id = principal.id
         owner_dict = {
-            "id": principal.id,
+            "id": principal_id,
             "username": principal.username,
             "is_admin": principal.is_admin,
             "auth_key": principal.auth_key,
@@ -445,7 +449,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
             "telegram_username": principal.telegram_username
         }
         
-        # Convert the owner_dict to a User model instance
+        # Create a new User instance to avoid async access issues with the ORM
         owner = models.User(**owner_dict)
         
         # Set the owner attribute
