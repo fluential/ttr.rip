@@ -5,6 +5,8 @@
     log {
         format json
     }
+    # Add rate_limit ordering to ensure it runs before reverse_proxy
+    order rate_limit before reverse_proxy
 }
 
 :8080 {
@@ -71,8 +73,18 @@
         file_server
     }
 
-    # Handle API paths with micro-caching
+    # Handle API paths with micro-caching and user-specific rate limiting
     handle /api/v1/* {
+        # User-specific rate limiting for authenticated requests
+        rate_limit {
+            zone authenticated_api {
+                key {http.request.header.Authorization}
+                events 120     # 120 requests per minute per auth key
+                window 60s
+                burst 30
+            }
+        }
+        
         # Micro-caching for API endpoints - 5 seconds
         cache {
             ttl 5s
