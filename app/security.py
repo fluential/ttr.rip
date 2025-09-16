@@ -41,7 +41,9 @@ async def get_public_user_from_key(
 ) -> db_models.User:
     """
     Dependency for public, key-based authentication via the X-Auth-Key header.
-    Handles Just-in-Time user creation for new keys.
+    If a user is found, it is returned.
+    If not, a temporary, in-memory-only User object is returned.
+    The user is only persisted to the DB upon a meaningful action (e.g., creating a check).
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -55,18 +57,11 @@ async def get_public_user_from_key(
 
     user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
     if not user:
-        try:
-            # Just-in-time user creation for auth_key users
-            user_schema = schemas.UserCreate(auth_key=auth_key)
-            user = await crud.create_user(db, user=user_schema)
-        except IntegrityError:
-            await db.rollback()
-            # The user was likely created by a concurrent request. Fetch it.
-            user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
-            if not user:
-                # This would be a very strange state, but handle it.
-                logger.error(f"Failed to create or find user for auth_key ...{auth_key[-4:]} after IntegrityError.")
-                raise credentials_exception
+        # User does not exist. Return a temporary, non-persistent User object.
+        # This allows read-only operations to proceed for a new key without a DB write.
+        # The user will be created in the DB when they perform a write action (e.g., create_check).
+        return db_models.User(auth_key=auth_key)
+    
     return user
 
 

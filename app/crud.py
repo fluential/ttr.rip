@@ -108,7 +108,7 @@ async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
     return result.scalars().first()
 
 async def get_user_queued_notification_count(db: AsyncSession, principal: models.User) -> Union[int, str]:
-    if settings.DEBUG_MODE:
+    if settings.DEBUG_MODE or not principal.id:
         return 0
 
     try:
@@ -126,6 +126,10 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: models
 
 
 async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: models.User):
+    # If the principal has no ID, they can't own any checks yet.
+    if not principal.id:
+        return None
+        
     query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
@@ -135,6 +139,10 @@ async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: 
     return result.scalars().first()
 
 async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
+    # If the principal has no ID, they have no stats.
+    if not principal.id:
+        return schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0)
+
     # --- Caching Layer ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
@@ -275,6 +283,10 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
     return check
 
 async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc', cursor: Optional[str] = None):
+    # If the principal has no ID, they can't have any checks.
+    if not principal.id:
+        return [], None, None
+
     query = select(models.Check)
     if principal.is_admin:
         query = query.options(selectinload(models.Check.owner))
@@ -328,18 +340,24 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
 
 
 async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: models.User):
-    # Get all needed attributes synchronously from principal upfront
-    # This prevents lazy loading which causes the MissingGreenlet error
-    # Get all the values directly using getattr to avoid SQLAlchemy lazy loading
+    """
+    Creates a check. If the principal (user) is not yet persisted in the database,
+    it creates the user first.
+    """
     try:
-        # Extract values directly to avoid lazy loading
-        principal_id = principal.id
-        
-        # Create the check
+        # If the principal doesn't have an ID, it's a new user that needs to be created.
+        if not principal.id:
+            logger.info(f"Creating new user for auth_key ...{principal.auth_key[-4:]}")
+            user_schema = schemas.UserCreate(auth_key=principal.auth_key)
+            # The `create_user` function will add, commit, and refresh.
+            principal = await create_user(db, user=user_schema)
+            logger.info(f"New user created with ID: {principal.id}")
+
+        # Now, principal is guaranteed to be a persisted User object.
         db_check_data = {
             **check.model_dump(),
             "uuid": str(uuid.uuid4()),
-            "owner_id": principal_id
+            "owner_id": principal.id
         }
         
         db_check = models.Check(**db_check_data)
@@ -347,18 +365,20 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         await db.commit()
         await db.refresh(db_check)
         
-        # Manually load the User model into the owner relationship
-        # For the owner relationship, we need to run a separate query
-        result = await db.execute(select(models.User).filter(models.User.id == principal_id))
-        owner = result.scalars().first()
-        db_check.owner = owner
+        # Attach the owner for the response model.
+        db_check.owner = principal
         
         return db_check
     except Exception as e:
-        logger.error(f"Error in create_check: {e}")
+        logger.error(f"Error in create_check: {e}", exc_info=True)
+        await db.rollback()
         raise
 
 async def update_check(db: AsyncSession, check_id: int, check_data: schemas.CheckUpdate, principal: models.User):
+    # If the principal has no ID, they can't own any checks to update.
+    if not principal.id:
+        return None
+
     query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
@@ -398,6 +418,10 @@ async def link_telegram_to_user(db: AsyncSession, user: models.User, login_data:
 
 
 async def update_check_telegram_settings(db: AsyncSession, check_id: int, settings_data: schemas.TelegramSettingsUpdate, principal: models.User):
+    # If the principal has no ID, they can't own any checks to update.
+    if not principal.id:
+        return None
+
     query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
@@ -423,6 +447,10 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
 
 
 async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
+    # If the principal has no ID, they can't own any checks to delete.
+    if not principal.id:
+        return None
+
     query = select(models.Check).filter(models.Check.id == check_id)
     if not principal.is_admin:
         query = query.filter(models.Check.owner_id == principal.id)
