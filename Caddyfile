@@ -1,0 +1,106 @@
+{
+    # Global Caddy options
+    admin off  # Disable admin API for security in container
+    auto_https off  # We'll handle HTTPS at the ingress level
+    log {
+        format json
+    }
+}
+
+:8080 {
+    # Enable response header to show when caching is active
+    header /* {
+        X-Cache-Status {http.cache.status}
+    }
+
+    # Global rate limiting - 10 req/s with burst of 20
+    rate_limit {
+        zone global {
+            key {remote_host}
+            events 10
+            window 1s
+            burst 20
+        }
+    }
+
+    # Cache configuration for GET/HEAD requests
+    cache {
+        # Default TTL for successful responses
+        ttl 10s
+        
+        # Don't cache non-GET/HEAD methods or requests with authorization
+        disable_if {
+            not {method} match GET HEAD
+            header Authorization *
+        }
+        
+        # Cache key based on request attributes
+        key {
+            method
+            host
+            path
+            query
+            header Accept
+        }
+    }
+
+    # Handle /static/ path with longer cache time
+    handle /static/* {
+        # Higher rate limit for static assets
+        rate_limit {
+            zone static {
+                key {remote_host}
+                events 50
+                window 1s
+                burst 100
+            }
+        }
+        
+        # Longer cache time for static assets
+        cache {
+            ttl 1h
+        }
+        
+        # Standard file server for static files
+        file_server
+    }
+
+    # Handle API paths
+    handle /api/v1/* {
+        # Only cache GET requests for API endpoints
+        cache {
+            disable_if {
+                not {method} match GET
+            }
+        }
+        
+        # Pass to FastAPI backend
+        reverse_proxy localhost:8000
+    }
+
+    # Special handling for ping endpoints (avoid caching)
+    handle /ping/* {
+        cache {
+            disable
+        }
+        reverse_proxy localhost:8000
+    }
+
+    # Handle all other requests
+    handle {
+        reverse_proxy localhost:8000
+    }
+
+    # Add useful response headers
+    header /* {
+        # Security headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-XSS-Protection "1; mode=block"
+        
+        # Remove Server header
+        -Server
+    }
+}

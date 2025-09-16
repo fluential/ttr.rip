@@ -12,19 +12,32 @@ services:
       - postgres_data:/var/lib/postgresql/data/
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ttlrip"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: ttl_rip_redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - redis_data:/data
 
   web:
     build: .
     container_name: ttl_rip_web
-    command: ./start.sh
+    command: ./start-with-caddy.sh
     volumes:
       - ./app:/app/app
+      - ./Caddyfile:/etc/caddy/Caddyfile
     ports:
-      - "8000:8000"
+      - "8080:8080"
     env_file:
       - .env
     depends_on:
@@ -33,3 +46,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
