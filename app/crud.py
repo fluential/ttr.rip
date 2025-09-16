@@ -329,6 +329,13 @@ async def update_check_start(db: AsyncSession, check: models.Check):
     await db.refresh(check)
     return check
 
+async def toggle_check_pause(db: AsyncSession, check: models.Check):
+    """Toggles the paused state of a check."""
+    check.paused = not check.paused
+    await db.commit()
+    await db.refresh(check)
+    return check
+
 async def update_check_fail(db: AsyncSession, check: models.Check):
     previous_status = check.status
     check.status = "down"

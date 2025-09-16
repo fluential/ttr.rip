@@ -42,6 +42,7 @@ class CheckBase(BaseModel):
     name: str
     interval_seconds: int
     grace_seconds: int
+    max_runtime_seconds: Optional[int] = None
 
 class CheckCreate(CheckBase):
     pass
@@ -71,6 +72,7 @@ class Check(CheckBase):
     id: int
     uuid: str
     status: str
+    paused: bool
     created_at: datetime
     last_ping: Optional[datetime] = None
     last_start: Optional[datetime] = None

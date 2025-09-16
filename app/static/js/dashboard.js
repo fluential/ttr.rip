@@ -454,7 +454,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     const statusCounts = { up: 0, down: 0, new: 0 };
 
     if (checks.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="7">No checks found. Create one above!</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8">No checks found. Create one above!</td></tr>';
         if (statusSummary) {
             statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: 0`;
             statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: 0`;
@@ -490,19 +490,26 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         const statusIcon = {
             'up': '🟢',
             'down': '🔴',
-            'new': '🟡'
-        }[currentStatus] || '⚪️';
+            'new': '🟡',
+            'paused': '⏸️'
+        };
+        
+        const displayStatus = check.paused ? 'paused' : currentStatus;
+        const statusText = displayStatus.toUpperCase();
+        const badgeUrl = `${window.location.origin}/ping/${check.uuid}/badge.svg`;
 
         row.innerHTML = `
-            <td><span class="status-${currentStatus}" title="${currentStatus.toUpperCase()}">${statusIcon} ${currentStatus.toUpperCase()}</span></td>
+            <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
             <td>${check.name}</td>
             <td><input type="text" class="ping-url" value="${pingUrl}" readonly onclick="copyUrl(this)"></td>
             <td>${lastPing}</td>
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
+            <td><img src="${badgeUrl}" alt="Status Badge" style="cursor: pointer;" title="Click to copy Markdown" onclick="copyUrl(this, '[![Status](${badgeUrl})](${pingUrl})')"></td>
             <td>
-                <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
-                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds})">✏️</button>
+                <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
+                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds})">✏️</button>
+                    <button class="outline action-button" title="${check.paused ? 'Resume' : 'Pause'}" onclick="togglePause(${check.id})">${check.paused ? '▶️' : '⏸️'}</button>
                     <button class="outline action-button" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
                     <button class="secondary outline action-button" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
                 </div>
@@ -540,7 +547,7 @@ function updateSortIndicators() {
     });
 }
 
-function editCheck(event, id, name, interval, grace) {
+function editCheck(event, id, name, interval, grace, maxRuntime) {
     event.stopPropagation();
     const details = document.getElementById('new-check-section');
     if (details) {
@@ -550,6 +557,7 @@ function editCheck(event, id, name, interval, grace) {
     form.querySelector('#name').value = name;
     form.querySelector('#interval_seconds').value = interval;
     form.querySelector('#grace_seconds').value = grace;
+    form.querySelector('#max_runtime_seconds').value = maxRuntime || '';
     
     form.dataset.editingId = id;
 
@@ -594,10 +602,14 @@ async function handleFormSubmit(event) {
     const form = event.target;
     const editingId = form.dataset.editingId;
 
+    const maxRuntimeInput = form.querySelector('#max_runtime_seconds');
+    const maxRuntimeValue = maxRuntimeInput.value ? parseInt(maxRuntimeInput.value) : null;
+
     const data = {
         name: form.querySelector('#name').value,
         interval_seconds: parseInt(form.querySelector('#interval_seconds').value),
-        grace_seconds: parseInt(form.querySelector('#grace_seconds').value)
+        grace_seconds: parseInt(form.querySelector('#grace_seconds').value),
+        max_runtime_seconds: maxRuntimeValue
     };
 
     const headers = {
@@ -626,6 +638,22 @@ async function handleFormSubmit(event) {
         fetchChecks();
     } else {
         alert(`Failed to ${editingId ? 'update' : 'create'} check.`);
+    }
+}
+
+async function togglePause(checkId) {
+    const response = await fetch(`/api/v1/checks/${checkId}/toggle-pause`, {
+        method: 'POST',
+        headers: { 
+            'X-Auth-Key': authKey,
+            'X-CSRF-Token': getCsrfToken()
+        }
+    });
+
+    if (response.ok) {
+        fetchChecks(); // Refresh the list to show the new state
+    } else {
+        alert('Failed to toggle pause status.');
     }
 }
 

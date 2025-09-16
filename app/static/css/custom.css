@@ -1,6 +1,7 @@
 .status-up { color: var(--pico-color-green-500); font-weight: bold; }
 .status-down { color: var(--pico-color-red-500); font-weight: bold; }
-.status-new { color: var(--pico-color-gray-500); font-weight: bold; }
+.status-new { color: var(--pico-color-yellow-500); font-weight: bold; }
+.status-paused { color: var(--pico-color-gray-500); font-weight: bold; }
 
 th[data-sort] {
     cursor: pointer;

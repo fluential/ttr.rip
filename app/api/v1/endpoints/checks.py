@@ -122,6 +122,19 @@ async def test_telegram_notification_queue(
     return {"message": "Test notification queued."}
 
 
+@router.post("/{check_id}/toggle-pause", response_model=schemas.Check)
+async def toggle_pause_check(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check:
+        raise HTTPException(status_code=404, detail="Check not found")
+    
+    return await crud.toggle_check_pause(db=db, check=check)
+
+
 @router.delete("/{check_id}", response_model=schemas.Check)
 async def delete_check(
     check_id: int,

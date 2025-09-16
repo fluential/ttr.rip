@@ -2,6 +2,7 @@ import asyncio
 import logging
 from celery import Celery
 from sqlalchemy.future import select
+from sqlalchemy import text
 from sqlalchemy.orm import selectinload
 import httpx
 from datetime import datetime, timezone
@@ -98,12 +99,13 @@ async def _check_overdue_jobs():
     
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            query = select(Check).where(
+            # --- Find overdue checks ---
+            overdue_query = select(Check).where(
                 Check.status.in_(["up", "new"]),
+                Check.paused == False,
                 Check.deadline < now_utc
             )
-            
-            result = await session.execute(query)
+            result = await session.execute(overdue_query)
             overdue_checks = result.scalars().all()
 
             if overdue_checks:
@@ -111,16 +113,49 @@ async def _check_overdue_jobs():
                 for check in overdue_checks:
                     if check.status != "down":
                         old_status = check.status
-                        logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN.")
+                        logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN (overdue).")
                         check.status = "down"
                         message = f"🔴 Check Down: [{check.name}] is overdue."
                         notifications.schedule_telegram_notification(check, message)
-                        # Update counters immediately after deciding to change status
                         _update_redis_stats_counters(check.owner_id, old_status, "down")
-                
-                await session.commit()
             else:
                 logger.info("Scheduler found no overdue checks.")
+
+            # --- Find checks that exceeded max runtime ---
+            runtime_query = select(Check).where(
+                Check.last_start.isnot(None),
+                Check.max_runtime_seconds.isnot(None),
+                Check.paused == False,
+                Check.last_start < now_utc - text("max_runtime_seconds * '1 second'::interval")
+            )
+            # SQLite version for compatibility
+            if "sqlite" in settings.DATABASE_URL:
+                runtime_query = select(Check).where(
+                    Check.last_start.isnot(None),
+                    Check.max_runtime_seconds.isnot(None),
+                    Check.paused == False
+                ).where(
+                    text("julianday(:now) - julianday(last_start) > max_runtime_seconds / 86400.0")
+                )
+            
+            result = await session.execute(runtime_query, {"now": now_utc})
+            long_running_checks = result.scalars().all()
+
+            if long_running_checks:
+                logger.info(f"Scheduler found {len(long_running_checks)} long-running checks.")
+                for check in long_running_checks:
+                    if check.status != "down":
+                        old_status = check.status
+                        logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN (exceeded max runtime).")
+                        check.status = "down"
+                        check.last_start = None # Clear start time to prevent re-triggering
+                        message = f"🔴 Check Down: [{check.name}] exceeded its max runtime of {check.max_runtime_seconds}s."
+                        notifications.schedule_telegram_notification(check, message)
+                        _update_redis_stats_counters(check.owner_id, old_status, "down")
+            else:
+                logger.info("Scheduler found no long-running checks.")
+
+            await session.commit()
 
 
 @celery_app.task(name="app.worker.check_overdue_jobs_task")

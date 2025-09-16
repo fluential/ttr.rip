@@ -48,6 +48,7 @@
                     <th scope="col" data-sort="last_ping">Last Ping</th>
                     <th scope="col" data-sort="last_duration_seconds">Last Duration</th>
                     <th scope="col" data-sort="deadline">Expires in</th>
+                    <th scope="col">Badge</th>
                     <th scope="col">Actions</th>
                 </tr>
             </thead>
@@ -89,10 +90,16 @@
                 <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
             </label>
         </div>
-        <label for="grace_seconds">
-            Grace (seconds)
-            <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
-        </label>
+        <div class="grid">
+            <label for="grace_seconds">
+                Grace (seconds)
+                <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
+            </label>
+            <label for="max_runtime_seconds">
+                Max Runtime (seconds, optional)
+                <input type="number" id="max_runtime_seconds" name="max_runtime_seconds" placeholder="e.g., 3600 for 1 hour">
+            </label>
+        </div>
         <button type="submit">Create Check</button>
     </form>
 </details>

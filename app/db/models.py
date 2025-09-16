@@ -48,6 +48,8 @@ class Check(Base):
     deadline: Optional[datetime] = Column(DateTime(timezone=True), nullable=True, index=True)
     last_start: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     last_duration_seconds: Optional[int] = Column(Integer, nullable=True)
+    max_runtime_seconds: Optional[int] = Column(Integer, nullable=True)
+    paused: bool = Column(Boolean, default=False, nullable=False)
     telegram_bot_token: Optional[str] = Column(String, nullable=True)
     telegram_chat_id: Optional[str] = Column(String, nullable=True)
     telegram_enabled: bool = Column(Boolean, default=False, nullable=False)
