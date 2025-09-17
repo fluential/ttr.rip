@@ -1089,58 +1089,71 @@ async function handleFormSubmit(event) {
     event.preventDefault();
     const form = event.target;
     const editingId = form.dataset.editingId;
+    const submitButton = form.querySelector('button[type="submit"]');
 
-    const maxRuntimeInput = form.querySelector('#max_runtime_seconds');
-    const maxRuntimeValue = maxRuntimeInput.value ? parseInt(maxRuntimeInput.value) : null;
+    submitButton.disabled = true;
+    submitButton.setAttribute('aria-busy', 'true');
 
-    const scheduleType = form.querySelector('input[name="schedule-type"]:checked').value;
-    const schedule = form.querySelector('#schedule').value;
-    const interval = form.querySelector('#interval_seconds').value;
+    try {
+        const maxRuntimeInput = form.querySelector('#max_runtime_seconds');
+        const maxRuntimeValue = maxRuntimeInput.value ? parseInt(maxRuntimeInput.value) : null;
 
-    const data = {
-        name: form.querySelector('#name').value,
-        slug: form.querySelector('#slug').value || null,
-        tags: form.querySelector('#tags').value.split(',').map(t => t.trim()).filter(Boolean),
-        schedule_type: scheduleType,
-        schedule: (scheduleType === 'cron' || scheduleType === 'oncalendar') ? (schedule || null) : null,
-        interval_seconds: scheduleType === 'interval' ? (interval ? parseInt(interval) : null) : null,
-        tz: form.querySelector('#tz').value || 'UTC',
-        grace_seconds: parseInt(form.querySelector('#grace_seconds').value),
-        max_runtime_seconds: maxRuntimeValue,
-        notify_after_failures: parseInt(form.querySelector('#notify_after_failures').value) || null,
-        notify_on_up: form.querySelector('#notify_on_up').checked,
-        expected_content: form.querySelector('#expected_content').value,
-        expected_content_type: form.querySelector('#expected_content_type').value,
-        use_regex_for_content: form.querySelector('#use_regex_for_content').checked
-    };
+        const scheduleType = form.querySelector('input[name="schedule-type"]:checked').value;
+        const schedule = form.querySelector('#schedule').value;
+        const interval = form.querySelector('#interval_seconds').value;
 
-    const headers = {
-        'X-Auth-Key': authKey,
-        'X-CSRF-Token': csrfToken,
-        'Content-Type': 'application/json'
-    };
+        const data = {
+            name: form.querySelector('#name').value,
+            slug: form.querySelector('#slug').value || null,
+            tags: form.querySelector('#tags').value.split(',').map(t => t.trim()).filter(Boolean),
+            schedule_type: scheduleType,
+            schedule: (scheduleType === 'cron' || scheduleType === 'oncalendar') ? (schedule || null) : null,
+            interval_seconds: scheduleType === 'interval' ? (interval ? parseInt(interval) : null) : null,
+            tz: form.querySelector('#tz').value || 'UTC',
+            grace_seconds: parseInt(form.querySelector('#grace_seconds').value),
+            max_runtime_seconds: maxRuntimeValue,
+            notify_after_failures: parseInt(form.querySelector('#notify_after_failures').value) || null,
+            notify_on_up: form.querySelector('#notify_on_up').checked,
+            expected_content: form.querySelector('#expected_content').value,
+            expected_content_type: form.querySelector('#expected_content_type').value,
+            use_regex_for_content: form.querySelector('#use_regex_for_content').checked
+        };
 
-    let response;
-    if (editingId) {
-        response = await fetch(`/api/v1/checks/${editingId}`, {
-            method: 'PUT',
-            headers: headers,
-            body: JSON.stringify(data)
-        });
-    } else {
-        response = await fetch('/api/v1/checks', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(data)
-        });
-    }
+        const headers = {
+            'X-Auth-Key': authKey,
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json'
+        };
 
-    if (response.ok) {
-        cancelEdit();
-        fetchChecks();
-        fetchAllTags(); // Refresh tag filter to include any new tags
-    } else {
-        alert(`Failed to ${editingId ? 'update' : 'create'} check.`);
+        let response;
+        if (editingId) {
+            response = await fetch(`/api/v1/checks/${editingId}`, {
+                method: 'PUT',
+                headers: headers,
+                body: JSON.stringify(data)
+            });
+        } else {
+            response = await fetch('/api/v1/checks', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(data)
+            });
+        }
+
+        if (response.ok) {
+            cancelEdit();
+            fetchChecks();
+            fetchAllTags(); // Refresh tag filter to include any new tags
+        } else {
+            const error = await response.json();
+            alert(`Failed to ${editingId ? 'update' : 'create'} check: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error submitting check form:', error);
+        alert(`An unexpected error occurred: ${error.message}`);
+    } finally {
+        submitButton.disabled = false;
+        submitButton.removeAttribute('aria-busy');
     }
 }
 
