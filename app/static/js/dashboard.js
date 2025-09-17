@@ -1485,10 +1485,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // User Slug form listener
-    const userSlugForm = document.getElementById('user-slug-form');
-    if (userSlugForm) {
-        userSlugForm.addEventListener('submit', handleUserSlugSubmit);
+    // User Slug input listener
+    const userSlugInput = document.getElementById('user-slug');
+    if (userSlugInput) {
+        userSlugInput.addEventListener('input', (e) => {
+            const slug = e.target.value;
+            const feedbackEl = document.getElementById('user-slug-feedback');
+            
+            if (!/^[a-z0-9_-]*$/.test(slug)) {
+                feedbackEl.textContent = 'Invalid characters. Use a-z, 0-9, -, _';
+                feedbackEl.style.color = 'var(--pico-color-red-500)';
+                e.target.setAttribute('aria-invalid', 'true');
+            } else {
+                feedbackEl.textContent = '';
+                e.target.setAttribute('aria-invalid', 'false');
+                validateAndSaveUserSlug(slug);
+            }
+        });
     }
 
     // Sorting listeners
@@ -1506,46 +1519,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 
-const checkUserSlugAvailability = debounce(async function(slug) {
+const validateAndSaveUserSlug = debounce(async function(slug) {
     const feedbackEl = document.getElementById('user-slug-feedback');
-    if (!slug) {
+    const slugInput = document.getElementById('user-slug');
+
+    if (currentUser && slug === currentUser.slug) {
         feedbackEl.textContent = '';
+        slugInput.setAttribute('aria-invalid', 'false');
         return;
     }
+
+    if (!slug) {
+        feedbackEl.textContent = 'Slug cannot be empty.';
+        feedbackEl.style.color = 'var(--pico-color-red-500)';
+        slugInput.setAttribute('aria-invalid', 'true');
+        return;
+    }
+
     feedbackEl.textContent = 'Checking...';
     feedbackEl.style.color = 'inherit';
 
     try {
-        const response = await fetch(`/api/v1/user/slug-check?slug=${encodeURIComponent(slug)}`, {
+        const checkResponse = await fetch(`/api/v1/user/slug-check?slug=${encodeURIComponent(slug)}`, {
             headers: { 'X-Auth-Key': authKey }
         });
-        if (response.status === 409) {
-            feedbackEl.textContent = 'Slug is already taken.';
-            feedbackEl.style.color = 'var(--pico-color-orange-500)';
-        } else if (response.ok) {
-            feedbackEl.textContent = 'Slug is available.';
-            feedbackEl.style.color = 'var(--pico-color-green-500)';
-        } else {
-            throw new Error('Server error');
+
+        if (checkResponse.status === 409) {
+            throw new Error('Slug is already taken.');
+        } else if (!checkResponse.ok) {
+            throw new Error('Server error during availability check.');
         }
-    } catch (error) {
-        feedbackEl.textContent = 'Could not check availability.';
-        feedbackEl.style.color = 'var(--pico-color-red-500)';
-    }
-}, 500);
 
-async function handleUserSlugSubmit(event) {
-    event.preventDefault();
-    const form = event.target;
-    const slug = form.querySelector('#user-slug').value;
-    const submitButton = form.querySelector('button[type="submit"]');
-    const feedbackEl = document.getElementById('user-slug-feedback');
-
-    submitButton.disabled = true;
-    submitButton.setAttribute('aria-busy', 'true');
-
-    try {
-        const response = await fetch('/api/v1/user/slug', {
+        feedbackEl.textContent = 'Saving...';
+        const saveResponse = await fetch('/api/v1/user/slug', {
             method: 'POST',
             headers: {
                 'X-Auth-Key': authKey,
@@ -1555,34 +1561,22 @@ async function handleUserSlugSubmit(event) {
             body: JSON.stringify({ slug })
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
+        const data = await saveResponse.json();
+        if (!saveResponse.ok) {
             throw new Error(data.detail || 'Failed to update slug');
         }
 
-        currentUser.slug = data.slug; // Update local cache
-        feedbackEl.textContent = 'Slug saved successfully!';
+        currentUser.slug = data.slug;
+        feedbackEl.textContent = 'Saved!';
         feedbackEl.style.color = 'var(--pico-color-green-500)';
-        // Refresh checks to update URLs
+        slugInput.setAttribute('aria-invalid', 'false');
+        
         fetchChecks();
         fetchStatusPages();
+
     } catch (error) {
         feedbackEl.textContent = error.message;
         feedbackEl.style.color = 'var(--pico-color-red-500)';
-    } finally {
-        submitButton.disabled = false;
-        submitButton.removeAttribute('aria-busy');
+        slugInput.setAttribute('aria-invalid', 'true');
     }
-}
-
-document.getElementById('user-slug')?.addEventListener('input', (e) => {
-    const slug = e.target.value;
-    const feedbackEl = document.getElementById('user-slug-feedback');
-    if (!/^[a-z0-9_-]*$/.test(slug)) {
-        feedbackEl.textContent = 'Invalid characters. Use a-z, 0-9, -, _';
-        feedbackEl.style.color = 'var(--pico-color-red-500)';
-    } else {
-        checkUserSlugAvailability(slug);
-    }
-});
+}, 1000);
