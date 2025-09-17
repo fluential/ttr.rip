@@ -1,5 +1,5 @@
 from typing import List, Union, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
@@ -315,7 +315,7 @@ async def toggle_pause_check(
     return await crud.toggle_check_pause(db=db, check=check)
 
 
-@router.delete("/{check_id}", response_model=schemas.Check)
+@router.delete("/{check_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_check(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -324,7 +324,7 @@ async def delete_check(
     deleted_check = await crud.delete_check(db=db, check_id=check_id, principal=principal)
     if not deleted_check:
         raise HTTPException(status_code=404, detail="Check not found")
-    return deleted_check
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/export", response_class=JSONResponse)

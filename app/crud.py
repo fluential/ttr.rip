@@ -746,6 +746,20 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         await db.delete(db_check)
         await db.commit()
         _update_redis_stats_counters(owner_id, old_status=old_status, new_status=None)
+
+        # Clean up associated Redis keys
+        if not settings.DEBUG_MODE:
+            try:
+                r = get_redis_connection()
+                if r:
+                    pipe = r.pipeline()
+                    pipe.delete(f"ping_logs:{check_id}")
+                    pipe.delete(f"check_content:{check_id}")
+                    pipe.execute()
+                    logger.info(f"Cleaned up Redis entries for deleted check {check_id}")
+            except Exception as e:
+                logger.error(f"Error cleaning up Redis entries for deleted check {check_id}: {e}")
+
         return db_check
     return None
 
