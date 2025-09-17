@@ -68,6 +68,21 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
     user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+    if not user:
+        try:
+            logger.info(f"Dashboard visit from a new user with auth_key ...{auth_key[-4:]}. Creating user now.")
+            user_schema = schemas.UserCreate(auth_key=auth_key)
+            user = await crud.create_user(db, user=user_schema)
+        except IntegrityError:
+            await db.rollback()
+            logger.warning(f"Race condition on user creation during dashboard load for auth_key ...{auth_key[-4:]}. Refetching.")
+            user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+            if not user:
+                raise HTTPException(status_code=500, detail="Failed to create or find user for dashboard.")
+        except Exception:
+            await db.rollback()
+            raise
+
     status_pages = []
     if user and user.id:
         status_pages = await crud.get_status_pages_by_owner(db, principal=user)
