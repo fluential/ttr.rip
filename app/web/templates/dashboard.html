@@ -300,6 +300,18 @@
         margin-right: 0.3rem;
         margin-bottom: 0.3rem;
     }
+    /* Health Status Dots */
+    .health-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+    }
+    .health-dot.green { background-color: var(--pico-color-green-500); }
+    .health-dot.yellow { background-color: var(--pico-color-yellow-500); }
+    .health-dot.red { background-color: var(--pico-color-red-500); }
+    .health-dot.unknown { background-color: var(--pico-color-gray-500); }
 </style>
 
 <!-- Recent Pings Modal -->

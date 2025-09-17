@@ -526,9 +526,9 @@ async function fetchOperationalMetrics() {
                 <div><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
             </div>
             <div class="grid">
-                <div><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
-                <div><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
-                <div><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+                <div><span class="health-dot ${metrics.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
+                <div><span class="health-dot ${metrics.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
+                <div><span class="health-dot ${metrics.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
             </div>
         `;
 
