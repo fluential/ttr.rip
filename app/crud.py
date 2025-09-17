@@ -527,6 +527,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
             notifications.schedule_all_notifications(check, message)
         
         await db.commit()
+        await db.refresh(check)
 
         # Enrich the check object for the response
         check.status = "up"
