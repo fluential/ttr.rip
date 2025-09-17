@@ -33,6 +33,15 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.get("/user/me", response_model=schemas.User)
+async def read_users_me(current_user: db_models.User = Depends(security.get_public_user_from_key)):
+    if not current_user.id:
+        # This handles transient users who haven't been saved to the DB yet.
+        # They cannot have a linked Telegram account.
+        raise HTTPException(status_code=404, detail="User not found in database")
+    return current_user
+
+
 @router.post("/user/delete")
 async def delete_user_account(
     user: db_models.User = Depends(security.get_public_user_from_key),

@@ -141,6 +141,39 @@ async function handleUnlinkTelegram() {
     }
 }
 
+async function updateTelegramSection() {
+    const telegramDiv = document.getElementById('telegram-management');
+    if (!telegramDiv) return;
+
+    try {
+        const response = await fetch('/api/v1/user/me', {
+            headers: { 'X-Auth-Key': authKey }
+        });
+        if (!response.ok) {
+            // If user is not found (404), it means they are a new transient user,
+            // so the default login widget is correct. We can just return.
+            return;
+        }
+        
+        const user = await response.json();
+        
+        if (user && user.telegram_user_id) {
+            telegramDiv.innerHTML = `
+                <p>Your account is linked to Telegram user: <strong>@${user.telegram_username || user.telegram_first_name}</strong></p>
+                <button id="unlink-telegram-btn" class="secondary outline">Disconnect Telegram</button>
+            `;
+            // We need to re-add the event listener to the new button
+            const unlinkBtn = document.getElementById('unlink-telegram-btn');
+            if (unlinkBtn) {
+                unlinkBtn.addEventListener('click', handleUnlinkTelegram);
+            }
+        }
+        // If not linked, the default HTML from the template will remain, which is correct.
+    } catch (error) {
+        console.error('Error updating Telegram section:', error);
+    }
+}
+
 // --- Status Page Functions ---
 
 let allChecksForStatusPage = [];
@@ -1050,6 +1083,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics(), fetchStatusPages()]);
+    await updateTelegramSection();
     
     const loadTime = performance.now() - window.pageLoadStartTime;
     const clientTimeElem = document.getElementById('client-load-time');
