@@ -39,20 +39,15 @@ async def delete_user_account(
     db: AsyncSession = Depends(db_base.get_db)
 ):
     """Deletes a user and all their associated data."""
-    logger.debug("Attempting to delete user account.")
     if not user or not user.id:
-        logger.warning("User deletion failed: Invalid authentication key provided.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication key"
         )
     
-    logger.debug(f"User found for deletion: user_id={user.id}")
     auth_key_to_blacklist = user.auth_key
     
-    logger.debug(f"Proceeding to delete data for user_id={user.id}")
     await crud.delete_user_and_data(db, user=user)
-    logger.info(f"Successfully deleted data for user_id={user.id}")
     
     # Add the key to the Redis blacklist with a 24-hour TTL
     if not settings.DEBUG_MODE:
@@ -60,17 +55,14 @@ async def delete_user_account(
             r = get_redis_connection()
             if r:
                 # Blacklist for 24 hours (86400 seconds)
-                logger.debug(f"Attempting to blacklist auth key for user_id={user.id}")
                 r.set(f"blacklist:auth_key:{auth_key_to_blacklist}", "1", ex=86400)
                 logger.info(f"Blacklisted auth key for deleted user {user.id}: ...{auth_key_to_blacklist[-4:]}")
         except Exception as e:
             logger.error(f"Failed to blacklist auth key for deleted user {user.id}: {e}")
 
     # Clear the auth cookie
-    logger.debug("Preparing response to clear auth_key cookie.")
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie("auth_key")
-    logger.debug(f"Response headers for user deletion: {response.headers}")
     return response
 
 @router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)

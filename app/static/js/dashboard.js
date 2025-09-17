@@ -10,12 +10,6 @@ let autoRefreshInterval = 5; // seconds
 let autoRefreshCountdown = autoRefreshInterval;
 let autoRefreshTimer = null;
 
-function getCsrfToken() {
-    const cookies = document.cookie.split(';').map(c => c.trim());
-    const csrfCookie = cookies.find(c => c.startsWith('csrf_token='));
-    return csrfCookie ? csrfCookie.split('=')[1] : null;
-}
-
 function getMaskedAuthKey(key) {
     if (key.length <= 4) {
         return '****';
@@ -63,7 +57,7 @@ async function rotateApiKey() {
             method: 'POST',
             headers: {
                 'X-Auth-Key': authKey,
-                'X-CSRF-Token': getCsrfToken(),
+                'X-CSRF-Token': csrfToken,
                 'Content-Type': 'application/json'
             }
         });
@@ -220,7 +214,7 @@ async function handleStatusPageFormSubmit(event) {
 
     const headers = {
         'X-Auth-Key': authKey,
-        'X-CSRF-Token': getCsrfToken(),
+        'X-CSRF-Token': csrfToken,
         'Content-Type': 'application/json'
     };
 
@@ -251,7 +245,7 @@ async function deleteStatusPage(pageId) {
         method: 'DELETE',
         headers: { 
             'X-Auth-Key': authKey,
-            'X-CSRF-Token': getCsrfToken()
+            'X-CSRF-Token': csrfToken
         }
     });
 
@@ -296,7 +290,6 @@ function confirmDeleteAccount() {
 }
 
 async function deleteAccount() {
-    console.log("deleteAccount function called.");
     const deleteBtn = document.getElementById('delete-account-btn');
     const messageDiv = document.getElementById('import-message'); // Reuse this message div
 
@@ -307,25 +300,19 @@ async function deleteAccount() {
     messageDiv.style.color = 'inherit';
 
     try {
-        console.log("Sending delete request with authKey:", authKey ? `...${authKey.slice(-4)}` : 'null');
         const response = await fetch('/api/v1/user/delete', {
             method: 'POST',
             headers: {
                 'X-Auth-Key': authKey,
-                'X-CSRF-Token': getCsrfToken(),
+                'X-CSRF-Token': csrfToken,
             }
         });
 
-        console.log(`Received response from /api/v1/user/delete: status=${response.status}`);
-        console.log("Response headers:", Object.fromEntries(response.headers.entries()));
-
         if (!response.ok) {
-            console.error("Response was not OK.");
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Failed to delete account');
         }
 
-        console.log("Account deletion successful on server. Clearing client-side auth.");
         // On success, redirect to homepage
         messageDiv.textContent = 'Account deleted successfully. Redirecting...';
         messageDiv.style.color = 'var(--pico-color-green-500)';
@@ -405,7 +392,7 @@ async function handleImport(file) {
             method: 'POST',
             headers: {
                 'X-Auth-Key': authKey,
-                'X-CSRF-Token': getCsrfToken(),
+                'X-CSRF-Token': csrfToken,
             },
             body: formData
         });
@@ -791,7 +778,7 @@ async function handleFormSubmit(event) {
 
     const headers = {
         'X-Auth-Key': authKey,
-        'X-CSRF-Token': getCsrfToken(),
+        'X-CSRF-Token': csrfToken,
         'Content-Type': 'application/json'
     };
 
@@ -823,7 +810,7 @@ async function togglePause(checkId) {
         method: 'POST',
         headers: { 
             'X-Auth-Key': authKey,
-            'X-CSRF-Token': getCsrfToken()
+            'X-CSRF-Token': csrfToken
         }
     });
 
@@ -841,7 +828,7 @@ async function deleteCheck(checkId) {
         method: 'DELETE',
         headers: { 
             'X-Auth-Key': authKey,
-            'X-CSRF-Token': getCsrfToken()
+            'X-CSRF-Token': csrfToken
         }
     });
 
