@@ -242,24 +242,23 @@ async function handleStatusPageFormSubmit(event) {
 
 function updateConnectionStatus(status) {
     const statusBar = document.getElementById('connection-status');
-    if (!statusBar) return;
+    const borderOverlay = document.getElementById('connection-border-overlay');
+    if (!statusBar || !borderOverlay) return;
 
     if (status === 'error') {
         if (isConnectionLost) return; // Don't stack messages
         isConnectionLost = true;
         statusBar.textContent = 'Connection to the server was lost. Retrying...';
         statusBar.className = 'error';
-        document.documentElement.classList.add('connection-error');
-        document.documentElement.classList.remove('connection-success');
+        borderOverlay.className = 'error';
     } else if (status === 'success') {
         isConnectionLost = false;
         statusBar.textContent = 'Connection restored. Data is up to date.';
         statusBar.className = 'success';
-        document.documentElement.classList.remove('connection-error');
-        document.documentElement.classList.add('connection-success');
+        borderOverlay.className = 'success';
         setTimeout(() => {
             statusBar.className = ''; // Hide the bar
-            document.documentElement.classList.remove('connection-success');
+            borderOverlay.className = ''; // Hide the border
         }, 2500);
     }
 }

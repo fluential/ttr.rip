@@ -204,14 +204,22 @@ th[data-sort].sort-desc::after {
     background-color: var(--pico-color-green-600);
 }
 
-html.connection-error {
-    outline: 5px solid var(--pico-color-red-600);
-    outline-offset: -5px; /* Draw the outline inside the viewport */
-    transition: outline 0.3s ease-in-out;
+#connection-border-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none; /* Make it non-interactive */
+    z-index: 9999;
+    border: 5px solid transparent;
+    transition: border-color 0.3s ease-in-out;
 }
 
-html.connection-success {
-    outline: 5px solid var(--pico-color-green-600);
-    outline-offset: -5px;
-    transition: outline 0.3s ease-in-out;
+#connection-border-overlay.error {
+    border-color: var(--pico-color-red-600);
+}
+
+#connection-border-overlay.success {
+    border-color: var(--pico-color-green-600);
 }
