@@ -294,6 +294,12 @@ async function updateTelegramSection() {
         }
         
         currentUser = await response.json();
+
+        // Also update the user slug input field if it exists
+        const userSlugInput = document.getElementById('user-slug');
+        if (userSlugInput && currentUser.slug) {
+            userSlugInput.value = currentUser.slug;
+        }
         
         if (currentUser && currentUser.telegram_user_id) {
             telegramDiv.innerHTML = `
