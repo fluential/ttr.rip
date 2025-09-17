@@ -865,6 +865,17 @@ async function deleteCheck(checkId) {
 }
 
 async function viewLastContent(checkId) {
+    const modal = document.getElementById('content-modal');
+    const contentDiv = document.getElementById('content-modal-content');
+    const checkNameSpan = document.getElementById('content-modal-check-name');
+
+    const check = checksData[checkId];
+    if (!check) return;
+
+    checkNameSpan.textContent = check.name;
+    contentDiv.innerHTML = '<p>Loading content...</p>';
+    modal.showModal();
+
     try {
         const response = await fetch(`/api/v1/checks/${checkId}/content`, {
             headers: { 'X-Auth-Key': authKey }
@@ -875,12 +886,21 @@ async function viewLastContent(checkId) {
         }
         const data = await response.json();
         
-        // For now, use a simple alert. A modal would be a good improvement.
-        alert(`Last Captured Content:\n\n${data.content}`);
+        if (data.content) {
+            // Use <pre> and <code> for better formatting of raw content
+            const pre = document.createElement('pre');
+            const code = document.createElement('code');
+            code.textContent = data.content;
+            pre.appendChild(code);
+            contentDiv.innerHTML = '';
+            contentDiv.appendChild(pre);
+        } else {
+            contentDiv.innerHTML = '<p>No content recorded for this check.</p>';
+        }
 
     } catch (error) {
         console.error('Error fetching last content:', error);
-        alert(`Could not retrieve last captured content: ${error.message}`);
+        contentDiv.innerHTML = `<p style="color: var(--pico-color-red-500);">Could not retrieve last captured content: ${error.message}</p>`;
     }
 }
 
