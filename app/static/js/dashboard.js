@@ -731,7 +731,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             <td>
                 <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;">
                     <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${(check.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds}, '${(check.expected_content || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${check.expected_content_type}', ${check.use_regex_for_content})">✏️</button>
-                    <button class="outline action-button" title="View Last Content" onclick="viewLastContent(${check.id})">📄</button>
+                    <button class="outline action-button" title="View Last Content" onclick="viewLastContent(${check.id})" ${!check.last_content ? 'disabled' : ''}>📄</button>
                     <button class="outline action-button" title="${check.paused ? 'Resume' : 'Pause'}" onclick="togglePause(${check.id})">${check.paused ? '▶️' : '⏸️'}</button>
                     <button class="outline action-button" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
                     <button class="secondary outline action-button" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
