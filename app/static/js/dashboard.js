@@ -1048,6 +1048,7 @@ async function handleFormSubmit(event) {
     if (response.ok) {
         cancelEdit();
         fetchChecks();
+        fetchAllTags(); // Refresh tag filter to include any new tags
     } else {
         alert(`Failed to ${editingId ? 'update' : 'create'} check.`);
     }
