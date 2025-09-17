@@ -151,6 +151,11 @@ const checkSlugAvailability = debounce(async function(slug) {
             feedbackEl.textContent = 'Slug is available.';
             feedbackEl.style.color = 'var(--pico-color-green-500)';
             slugInput.setAttribute('aria-invalid', 'false');
+            setTimeout(() => {
+                if (feedbackEl.textContent === 'Slug is available.') {
+                    feedbackEl.textContent = '';
+                }
+            }, 2500);
         }
     } catch (error) {
         console.error('Error checking slug availability:', error);
@@ -1571,6 +1576,12 @@ const validateAndSaveUserSlug = debounce(async function(slug) {
         feedbackEl.style.color = 'var(--pico-color-green-500)';
         slugInput.setAttribute('aria-invalid', 'false');
         
+        setTimeout(() => {
+            if (feedbackEl.textContent === 'Saved!') {
+                feedbackEl.textContent = '';
+            }
+        }, 2500);
+
         fetchChecks();
         fetchStatusPages();
 
