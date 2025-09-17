@@ -429,14 +429,15 @@ async function handleImport(file) {
     }
 }
 
-function copyUrl(element) {
+function copyUrl(element, textToCopy) {
     if (element.dataset.copying) {
         return;
     }
     element.dataset.copying = 'true';
     const originalValue = element.value;
+    const text = textToCopy || originalValue;
 
-    navigator.clipboard.writeText(originalValue).then(() => {
+    navigator.clipboard.writeText(text).then(() => {
         element.value = 'Copied!';
         setTimeout(() => {
             element.value = originalValue;
@@ -670,11 +671,11 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         row.innerHTML = `
             <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
             <td>${check.name}</td>
-            <td><input type="text" class="ping-url" value="${pingUrl}" readonly onclick="copyUrl(this)"></td>
+            <td><input type="text" class="ping-url" value="Click to copy Ping URL" readonly onclick="copyUrl(this, '${pingUrl}')"></td>
             <td>${lastPing}</td>
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
-            <td><img src="${badgeUrl}?_=${Date.now()}" alt="Status Badge" style="cursor: pointer;" title="Click to copy Markdown" onclick="copyUrl(this, '[![Status](${badgeUrl})](${pingUrl})')"></td>
+            <td><input type="text" class="ping-url" value="Click to copy Badge URL" readonly onclick="copyUrl(this, '${badgeUrl}')"></td>
             <td>
                 <button class="outline action-button" title="Recent Pings" onclick="viewRecentPings(${check.id})" ${!check.last_pings || check.last_pings.length === 0 ? 'disabled' : ''}>📜</button>
             </td>
