@@ -63,8 +63,6 @@ async def delete_user_account(
 
     # Clear the auth cookie
     response.delete_cookie("auth_key")
-    
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 @router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
 async def rotate_api_key(

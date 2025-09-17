@@ -322,6 +322,11 @@ async function deleteAccount() {
         // On success, redirect to homepage
         messageDiv.textContent = 'Account deleted successfully. Redirecting...';
         messageDiv.style.color = 'var(--pico-color-green-500)';
+        
+        // Invalidate the key in memory to prevent reuse
+        authKey = null;
+        window.AUTH_KEY = null;
+
         // Use a short delay to allow user to read the message
         setTimeout(() => {
             window.location.href = '/';
