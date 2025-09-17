@@ -17,7 +17,7 @@
     </script>
 </head>
 <body>
-    <main class="container{% if is_public_status_page %} container-wide{% endif %}">
+    <main class="container{% if is_public_status_page or request.path.startswith('/dashboard') or request.path.startswith('/admin/dashboard') %} container-wide{% endif %}">
         <nav>
             <ul>
                 <li><strong>ttr.rip</strong></li>
