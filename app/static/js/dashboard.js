@@ -515,16 +515,28 @@ async function fetchOperationalMetrics() {
         const metrics = await response.json();
         const summaryDiv = document.getElementById('operational-metrics-summary');
 
-        const avgLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
+        const avgApiLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
+        const avgDbLatency = metrics.average_db_latency_seconds ? (metrics.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
+        const avgRedisLatency = metrics.average_redis_latency_seconds ? (metrics.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
 
         summaryDiv.innerHTML = `
             <div class="grid">
                 <div><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
                 <div><strong>API Requests:</strong> ${metrics.total_api_requests || 0}</div>
-                <div><strong>Avg. API Latency:</strong> ${avgLatency} ms</div>
                 <div><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
             </div>
+            <div class="grid">
+                <div><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
+                <div><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
+                <div><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+            </div>
         `;
+
+        // Update footer metrics
+        const footerApiLatency = document.getElementById('footer-api-latency');
+        const footerRedisLatency = document.getElementById('footer-redis-latency');
+        if (footerApiLatency) footerApiLatency.textContent = avgApiLatency;
+        if (footerRedisLatency) footerRedisLatency.textContent = avgRedisLatency;
     } catch (error) {
         console.error("Error fetching operational metrics:", error);
         updateConnectionStatus('error');

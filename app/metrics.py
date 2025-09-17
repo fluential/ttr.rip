@@ -10,6 +10,7 @@ NOTIFICATIONS_SENT = Counter("ttl_notifications_sent_total", "Total number of no
 API_REQUESTS = Counter("ttl_api_requests_total", "Total number of API requests", ["method", "endpoint", "status"])
 API_REQUEST_DURATION = Histogram("ttl_api_request_duration_seconds", "Duration of API requests in seconds", buckets=(0.01, 0.05, 0.1, 0.5, 1, 5))
 DB_QUERY_DURATION = Histogram("ttl_db_query_duration_seconds", "Duration of database queries in seconds", buckets=(0.01, 0.05, 0.1, 0.5, 1, 5))
+REDIS_COMMAND_DURATION = Histogram("ttl_redis_command_duration_seconds", "Duration of Redis commands in seconds", buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5))
 ACTIVE_USERS = Gauge("ttl_active_users", "Number of active users")
 QUEUE_SIZE = Gauge("ttl_queue_size", "Size of the message queue", ["queue_name"])
 WORKERS_ONLINE = Gauge("ttl_workers_online", "Number of workers online")

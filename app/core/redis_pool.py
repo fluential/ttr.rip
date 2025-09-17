@@ -1,6 +1,8 @@
 import redis
 import logging
+import time
 from app.core.config import settings
+from app import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,16 @@ except Exception as e:
     logger.error(f"Error initializing Redis connection pool: {e}")
     redis_pool = None
 
+class TimedRedis(redis.Redis):
+    """A Redis client that records command execution times."""
+    def execute_command(self, *args, **kwargs):
+        start_time = time.perf_counter()
+        try:
+            return super().execute_command(*args, **kwargs)
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.REDIS_COMMAND_DURATION.observe(duration)
+
 def get_redis_connection():
     """
     Returns a Redis connection from the pool.
@@ -28,4 +40,4 @@ def get_redis_connection():
         logger.error("Redis connection pool is not initialized")
         return None
     
-    return redis.Redis(connection_pool=redis_pool)
+    return TimedRedis(connection_pool=redis_pool)

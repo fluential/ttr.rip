@@ -37,6 +37,8 @@ async def get_metrics_summary():
         "total_checks": int(parse_prometheus_metric("ttl_checks_total") or 0),
         "total_notifications_sent": int(parse_prometheus_metric("ttl_notifications_sent_total") or 0),
         "average_api_latency_seconds": parse_prometheus_metric("ttl_api_request_duration_seconds"),
+        "average_db_latency_seconds": parse_prometheus_metric("ttl_db_query_duration_seconds"),
+        "average_redis_latency_seconds": parse_prometheus_metric("ttl_redis_command_duration_seconds"),
         "total_api_requests": int(parse_prometheus_metric("ttl_api_requests_total") or 0),
     }
             
