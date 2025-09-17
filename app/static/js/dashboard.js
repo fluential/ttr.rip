@@ -1,5 +1,6 @@
 let authKey = window.AUTH_KEY;
 let csrfToken = window.CSRF_TOKEN;
+let isConnectionLost = false;
 let currentSortBy = 'id';
 let currentSortDir = 'desc';
 let pageSize = 25;
@@ -239,6 +240,25 @@ async function handleStatusPageFormSubmit(event) {
     }
 }
 
+function updateConnectionStatus(status) {
+    const statusBar = document.getElementById('connection-status');
+    if (!statusBar) return;
+
+    if (status === 'error') {
+        if (isConnectionLost) return; // Don't stack messages
+        isConnectionLost = true;
+        statusBar.textContent = 'Connection to the server was lost. Retrying...';
+        statusBar.className = 'error';
+    } else if (status === 'success') {
+        isConnectionLost = false;
+        statusBar.textContent = 'Connection restored. Data is up to date.';
+        statusBar.className = 'success';
+        setTimeout(() => {
+            statusBar.className = ''; // Hide the bar
+        }, 2500);
+    }
+}
+
 async function deleteStatusPage(pageId) {
     if (!confirm('Are you sure you want to delete this status page?')) return;
 
@@ -261,8 +281,11 @@ async function fetchOperationalMetrics() {
     try {
         const response = await fetch('/api/v1/metrics/summary');
         if (!response.ok) {
+            if (response.status >= 500) updateConnectionStatus('error');
             throw new Error('Failed to fetch operational metrics');
         }
+        if (isConnectionLost) updateConnectionStatus('success');
+
         const metrics = await response.json();
         const summaryDiv = document.getElementById('operational-metrics-summary');
 
@@ -278,6 +301,7 @@ async function fetchOperationalMetrics() {
         `;
     } catch (error) {
         console.error("Error fetching operational metrics:", error);
+        updateConnectionStatus('error');
         const summaryDiv = document.getElementById('operational-metrics-summary');
         summaryDiv.innerHTML = `<p style="color: var(--pico-color-red-500);">Could not load operational metrics.</p>`;
     }
@@ -570,8 +594,11 @@ async function fetchUserStats() {
             headers: { 'X-Auth-Key': authKey }
         });
         if (!response.ok) {
+            if (response.status >= 500) updateConnectionStatus('error');
             throw new Error('Failed to fetch user stats');
         }
+        if (isConnectionLost) updateConnectionStatus('success');
+
         const stats = await response.json();
         const summaryDiv = document.getElementById('user-stats-summary');
 
@@ -593,6 +620,7 @@ async function fetchUserStats() {
         `;
     } catch (error) {
         console.error("Error fetching user stats:", error);
+        updateConnectionStatus('error');
         const summaryDiv = document.getElementById('user-stats-summary');
         summaryDiv.innerHTML = `<p style="color: var(--pico-color-red-500);">Could not load user stats.</p>`;
     }
@@ -603,18 +631,27 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     if (cursor) {
         url += `&cursor=${cursor}`;
     }
-    const response = await fetch(url, {
-        headers: { 'X-Auth-Key': authKey }
-    });
+    
+    try {
+        const response = await fetch(url, {
+            headers: { 'X-Auth-Key': authKey }
+        });
 
-    if (response.status === 401) {
-        const tableBody = document.querySelector('#checks-table tbody');
-        tableBody.innerHTML = '<tr><td colspan="7" style="color: var(--pico-color-red-500);">Authentication failed. Your key may be invalid or expired. Please log in again.</td></tr>';
-        stopAutoRefreshTimer();
-        return;
-    }
+        if (!response.ok) {
+            if (response.status >= 500) updateConnectionStatus('error');
+            if (response.status === 401) {
+                const tableBody = document.querySelector('#checks-table tbody');
+                tableBody.innerHTML = '<tr><td colspan="9" style="color: var(--pico-color-red-500);">Authentication failed. Your key may be invalid or expired. Please log in again.</td></tr>';
+                stopAutoRefreshTimer();
+            }
+            return; // Stop processing on error
+        }
 
-    const data = await response.json();
+        if (isConnectionLost) {
+            updateConnectionStatus('success');
+        }
+
+        const data = await response.json();
     const checks = data.items;
     checks.forEach(c => checksData[c.id] = c); // Update global cache
     allChecksForStatusPage = checks; // Cache for status page form
@@ -708,6 +745,11 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     }
     updatePagination(data.next_cursor, data.prev_cursor);
     updateSortIndicators();
+
+    } catch (error) {
+        console.error("Network error during fetchChecks:", error);
+        updateConnectionStatus('error');
+    }
 }
 
 function updatePagination(newNextCursor, newPrevCursor) {
