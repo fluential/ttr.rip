@@ -330,7 +330,8 @@ def _validate_content(check: models.Check, content: Optional[str]) -> tuple[bool
             if re.search(pattern, content, re.DOTALL):
                 match_found = True
         else:
-            if pattern in content:
+            # Exact match for non-regex
+            if pattern == content:
                 match_found = True
     except re.error as e:
         logger.warning(f"Invalid regex for check {check.id}: {e}")
