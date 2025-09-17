@@ -153,6 +153,8 @@ def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_st
         elif not old_status and new_status: # Creation
             pipe.hincrby(key, "total", 1)
         
+        # Set a 30-day expiry on the stats key to prevent orphaned data
+        pipe.expire(key, timedelta(days=30))
         pipe.execute()
         logger.debug(f"Updated Redis stats for user {user_id}: {old_status} -> {new_status}")
     except Exception as e:
@@ -416,6 +418,8 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
                 pipe.hset(key, "down", stats_obj.down_count)
                 pipe.hset(key, "new", stats_obj.new_count)
                 pipe.hset(key, "paused", stats_obj.paused_count)
+                # Set a 30-day expiry on the stats key to prevent orphaned data
+                pipe.expire(key, timedelta(days=30))
                 pipe.execute()
                 logger.info(f"Rehydrated Redis counters for user {principal.id}")
         except Exception as e:
