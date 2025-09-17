@@ -371,13 +371,26 @@ async def get_status_badge(uuid: str, db: AsyncSession = Depends(get_db)):
     db_check = await crud.get_check_by_uuid(db, check_uuid=uuid)
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
+
+    # Re-evaluate status to ensure badge is up-to-date, even if scheduler hasn't run.
+    current_status = db_check.status
+    if current_status != 'down':
+        now = datetime.now(timezone.utc)
+        reference_time = db_check.last_ping or db_check.created_at
+        if reference_time.tzinfo is None:
+            reference_time = reference_time.replace(tzinfo=timezone.utc)
+        
+        deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
+        
+        if now > deadline:
+            current_status = "down"
     
-    status = "paused" if db_check.paused else db_check.status
+    status = "paused" if db_check.paused else current_status
     badge_svg = BADGE_TEMPLATES.get(status, BADGE_TEMPLATES["new"])
     
-    # Add cache control headers. Allow caching for 30 seconds.
+    # Add cache control headers. Allow caching for 60 seconds.
     headers = {
-        "Cache-Control": "public, max-age=30",
+        "Cache-Control": "public, max-age=60",
     }
     return SVGResponse(content=badge_svg, headers=headers)
 

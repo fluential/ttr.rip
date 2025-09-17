@@ -674,7 +674,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             <td>${lastPing}</td>
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
-            <td><img src="${badgeUrl}" alt="Status Badge" style="cursor: pointer;" title="Click to copy Markdown" onclick="copyUrl(this, '[![Status](${badgeUrl})](${pingUrl})')"></td>
+            <td><img src="${badgeUrl}?_=${Date.now()}" alt="Status Badge" style="cursor: pointer;" title="Click to copy Markdown" onclick="copyUrl(this, '[![Status](${badgeUrl})](${pingUrl})')"></td>
             <td>
                 <button class="outline action-button" title="Recent Pings" onclick="viewRecentPings(${check.id})" ${!check.last_pings || check.last_pings.length === 0 ? 'disabled' : ''}>📜</button>
             </td>
