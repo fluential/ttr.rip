@@ -397,10 +397,12 @@ function cancelStatusPageEdit() {
     delete form.dataset.editingId;
     
     const details = document.getElementById('new-status-page-section');
-    details.querySelector('summary').textContent = 'New Status Page';
+    const summary = details.querySelector('summary');
+    summary.textContent = 'New Status Page';
     if (details.open) {
-        // Simulate a click on the summary to close it gracefully, avoiding a scroll jump.
-        details.querySelector('summary').click();
+        // Move focus to the summary before clicking it to prevent scroll jump.
+        summary.focus({ preventScroll: true });
+        summary.click();
     }
     
     form.querySelector('button[type="submit"]').textContent = 'Create Status Page';
@@ -1089,10 +1091,12 @@ function cancelEdit() {
 
     const details = document.getElementById('new-check-section');
     if (details) {
-        details.querySelector('summary').textContent = 'New Check';
+        const summary = details.querySelector('summary');
+        summary.textContent = 'New Check';
         if (details.open) {
-            // Simulate a click on the summary to close it gracefully, avoiding a scroll jump.
-            details.querySelector('summary').click();
+            // Move focus to the summary before clicking it to prevent scroll jump.
+            summary.focus({ preventScroll: true });
+            summary.click();
         }
     }
     form.querySelector('button[type="submit"]').textContent = 'Create Check';
