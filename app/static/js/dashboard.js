@@ -494,10 +494,10 @@ function formatDuration(seconds) {
     if (seconds < 0) return 'N/A';
 
     if (seconds < 1) {
-        return "less than a second";
+        return `${Math.round(seconds * 1000)} ms`;
     }
     if (seconds < 60) {
-        const s = Math.round(seconds);
+        const s = parseFloat(seconds.toFixed(1));
         return `${s} second${s !== 1 ? 's' : ''}`;
     }
 

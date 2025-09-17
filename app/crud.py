@@ -358,13 +358,13 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
         if last_start.tzinfo is None:
             last_start = last_start.replace(tzinfo=timezone.utc)
         duration = now - last_start
-        check.last_duration_seconds = int(duration.total_seconds())
+        check.last_duration_seconds = duration.total_seconds()
     elif check.last_ping:
         last_ping = check.last_ping
         if last_ping.tzinfo is None:
             last_ping = last_ping.replace(tzinfo=timezone.utc)
         duration = now - last_ping
-        check.last_duration_seconds = int(duration.total_seconds())
+        check.last_duration_seconds = duration.total_seconds()
     else:
         check.last_duration_seconds = None
 

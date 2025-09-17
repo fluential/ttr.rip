@@ -87,7 +87,7 @@ class CheckSimpleForStatusPage(BaseModel):
     status: str
     paused: bool
     last_ping: Optional[datetime] = None
-    last_duration_seconds: Optional[int] = None
+    last_duration_seconds: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -138,7 +138,7 @@ class Check(CheckBase):
     created_at: datetime
     last_ping: Optional[datetime] = None
     last_start: Optional[datetime] = None
-    last_duration_seconds: Optional[int] = None
+    last_duration_seconds: Optional[float] = None
     expected_content: Optional[str] = None
     expected_content_type: Optional[str] = None
     use_regex_for_content: bool

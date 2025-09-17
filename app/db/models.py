@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Boolean,
     Table,
+    Float,
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 
@@ -72,7 +73,7 @@ class Check(Base):
     last_ping: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     deadline: Optional[datetime] = Column(DateTime(timezone=True), nullable=True, index=True)
     last_start: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    last_duration_seconds: Optional[int] = Column(Integer, nullable=True)
+    last_duration_seconds: Optional[float] = Column(Float, nullable=True)
     max_runtime_seconds: Optional[int] = Column(Integer, nullable=True)
     paused: bool = Column(Boolean, default=False, nullable=False)
 
