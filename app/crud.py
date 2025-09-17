@@ -515,7 +515,6 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
         
         # Update deadline in the database for the scheduler
         check.deadline = _calculate_next_deadline(check, now)
-        await db.commit()
 
         _update_redis_stats_counters(check.owner_id, previous_status, "up", is_paused=check.paused)
 
@@ -526,6 +525,8 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
                 duration_str = notifications.format_duration(duration_seconds)
                 message += f" Last run took {duration_str}."
             notifications.schedule_all_notifications(check, message)
+        
+        await db.commit()
 
         # Enrich the check object for the response
         check.status = "up"
@@ -535,6 +536,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
         return check, None
     except Exception as e:
         logger.error(f"Failed to update check ping status in Redis for check {check.id}: {e}")
+        await db.rollback()
         return check, None
 
 async def update_check_start(db: AsyncSession, check: models.Check):
