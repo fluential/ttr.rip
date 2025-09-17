@@ -279,8 +279,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
                     # Averages are not stored in counters, so we still need a DB query for them.
                     # This is a compromise to keep counter logic simple.
                     avg_query = select(
-                        func.avg(models.Check.interval_seconds).label("avg_interval_seconds"),
-                        func.avg(models.Check.last_duration_seconds).label("avg_duration_seconds")
+                        func.avg(models.Check.interval_seconds).label("avg_interval_seconds")
                     ).filter(models.Check.owner_id == principal.id)
                     
                     result = await db.execute(avg_query)
@@ -293,7 +292,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
                         new_count=int(cached_counters.get("new", 0)),
                         paused_count=int(cached_counters.get("paused", 0)),
                         avg_interval_seconds=averages.avg_interval_seconds if averages else None,
-                        avg_duration_seconds=averages.avg_duration_seconds if averages else None,
+                        avg_duration_seconds=None, # This can't be calculated from DB anymore
                         user_queued_notifications=await get_user_queued_notification_count(db, principal)
                     )
         except Exception as e:
