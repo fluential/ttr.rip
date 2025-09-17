@@ -205,6 +205,7 @@ app = FastAPI(lifespan=lifespan, title="ttr.rip")
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.perf_counter()
+    request.state.start_time = start_time
     
     # Record API request metrics
     path = request.url.path
@@ -228,7 +229,6 @@ async def add_process_time_header(request: Request, call_next):
     # Record response time and status
     process_time = time.perf_counter() - start_time
     response.headers["X-Process-Time"] = str(process_time)
-    request.state.process_time = process_time
     
     # Use the route template for the endpoint path to avoid high cardinality
     route = request.scope.get('route')
@@ -317,7 +317,8 @@ async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get
     if updated_check.last_duration_seconds:
         metrics.record_check_duration(updated_check.last_duration_seconds)
     
-    process_time = getattr(request.state, "process_time", 0)
+    start_time = getattr(request.state, "start_time", time.perf_counter())
+    process_time = time.perf_counter() - start_time
     
     response_message = "OK"
     if reason:
