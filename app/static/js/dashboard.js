@@ -398,7 +398,10 @@ function cancelStatusPageEdit() {
     
     const details = document.getElementById('new-status-page-section');
     details.querySelector('summary').textContent = 'New Status Page';
-    details.open = false;
+    if (details.open) {
+        // Simulate a click on the summary to close it gracefully, avoiding a scroll jump.
+        details.querySelector('summary').click();
+    }
     
     form.querySelector('button[type="submit"]').textContent = 'Create Status Page';
     const cancelButton = form.querySelector('.cancel-edit');
@@ -1087,7 +1090,10 @@ function cancelEdit() {
     const details = document.getElementById('new-check-section');
     if (details) {
         details.querySelector('summary').textContent = 'New Check';
-        details.open = false;
+        if (details.open) {
+            // Simulate a click on the summary to close it gracefully, avoiding a scroll jump.
+            details.querySelector('summary').click();
+        }
     }
     form.querySelector('button[type="submit"]').textContent = 'Create Check';
     
