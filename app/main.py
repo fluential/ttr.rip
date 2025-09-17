@@ -310,7 +310,7 @@ async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get
             logger.error(f"Failed to store ping content in Redis for check {db_check.id}: {e}")
 
     previous_status = db_check.status
-    updated_check = await crud.update_check_ping(db, check=db_check, content=content)
+    updated_check, reason = await crud.update_check_ping(db, check=db_check, content=content)
 
     # Record check metrics
     metrics.record_check_update(updated_check.status, previous_status)
@@ -318,7 +318,12 @@ async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get
         metrics.record_check_duration(updated_check.last_duration_seconds)
     
     process_time = getattr(request.state, "process_time", 0)
-    return {"message": "OK", "process_time_seconds": process_time}
+    
+    response_message = "OK"
+    if reason:
+        response_message = f"OK, but content validation failed: {reason}"
+        
+    return {"message": response_message, "process_time_seconds": process_time}
 
 
 @app.get("/ping/{uuid}/start", status_code=status.HTTP_200_OK)

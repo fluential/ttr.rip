@@ -345,12 +345,13 @@ def _validate_content(check: models.Check, content: Optional[str]) -> tuple[bool
     return True, ""
 
 
-async def update_check_ping(db: AsyncSession, check: models.Check, content: Optional[str] = None):
+async def update_check_ping(db: AsyncSession, check: models.Check, content: Optional[str] = None) -> tuple[models.Check, Optional[str]]:
     validation_passed, reason = _validate_content(check, content)
     if not validation_passed:
         logger.info(f"Check '{check.name}' (ID: {check.id}) failed content validation: {reason}.")
         # The content is already stored in Redis by the ping endpoint, so we don't need to pass it here.
-        return await update_check_fail(db, check, reason=reason)
+        check = await update_check_fail(db, check, reason=reason)
+        return check, reason
 
     now = datetime.now(timezone.utc)
     if check.last_start:
@@ -385,7 +386,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
             message += f" Last run took {duration_str}."
         notifications.schedule_all_notifications(check, message)
 
-    return check
+    return check, None
 
 async def update_check_start(db: AsyncSession, check: models.Check):
     check.last_start = datetime.now(timezone.utc)
