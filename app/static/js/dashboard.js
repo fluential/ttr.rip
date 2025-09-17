@@ -296,6 +296,7 @@ function confirmDeleteAccount() {
 }
 
 async function deleteAccount() {
+    console.log("deleteAccount function called.");
     const deleteBtn = document.getElementById('delete-account-btn');
     const messageDiv = document.getElementById('import-message'); // Reuse this message div
 
@@ -306,6 +307,7 @@ async function deleteAccount() {
     messageDiv.style.color = 'inherit';
 
     try {
+        console.log("Sending delete request with authKey:", authKey ? `...${authKey.slice(-4)}` : 'null');
         const response = await fetch('/api/v1/user/delete', {
             method: 'POST',
             headers: {
@@ -314,11 +316,16 @@ async function deleteAccount() {
             }
         });
 
+        console.log(`Received response from /api/v1/user/delete: status=${response.status}`);
+        console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+
         if (!response.ok) {
+            console.error("Response was not OK.");
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Failed to delete account');
         }
 
+        console.log("Account deletion successful on server. Clearing client-side auth.");
         // On success, redirect to homepage
         messageDiv.textContent = 'Account deleted successfully. Redirecting...';
         messageDiv.style.color = 'var(--pico-color-green-500)';
