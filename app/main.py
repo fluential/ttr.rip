@@ -316,7 +316,16 @@ async def ping_check(identifier: str, request: Request, db: AsyncSession = Depen
         except Exception as e:
             logger.error(f"Failed to store ping content in Redis for check {db_check.id}: {e}")
 
-    previous_status = db_check.status
+    # Get previous status from Redis for metrics
+    previous_status = "new"
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                previous_status = r.hget(crud.get_check_runtime_redis_key(db_check.id), "status") or "new"
+        except Exception as e:
+            logger.error(f"Could not get previous status from Redis for check {db_check.id}: {e}")
+
     updated_check, reason = await crud.update_check_ping(db, check=db_check, content=content)
 
     # Record check metrics
@@ -397,7 +406,16 @@ async def fail_check(identifier: str, db: AsyncSession = Depends(get_db)):
     db_check = await crud.get_check_by_identifier(db, identifier=identifier)
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
-    previous_status = db_check.status
+    # Get previous status from Redis for metrics
+    previous_status = "new"
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                previous_status = r.hget(crud.get_check_runtime_redis_key(db_check.id), "status") or "new"
+        except Exception as e:
+            logger.error(f"Could not get previous status from Redis for check {db_check.id}: {e}")
+
     updated_check, _ = await crud.update_check_fail(db, check=db_check, reason="Manual failure triggered")
     
     # Record check metrics
