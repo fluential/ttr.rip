@@ -736,8 +736,9 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         
         db_check = models.Check(**db_check_data)
         db_check.tags = await _handle_tags(db, principal.id, tag_names)
-        # Set initial deadline based on creation time
-        db_check.deadline = _calculate_next_deadline(db_check, db_check.created_at)
+        # Set initial deadline based on creation time. The created_at field is set by the DB
+        # default, so we use a fresh timestamp for the initial deadline calculation.
+        db_check.deadline = _calculate_next_deadline(db_check, datetime.now(timezone.utc))
         db.add(db_check)
         await db.commit()
         await db.refresh(db_check)
