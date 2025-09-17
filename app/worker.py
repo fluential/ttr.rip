@@ -14,7 +14,10 @@ from app.core.logging_config import setup_logging
 from app.core import encryption
 from app import metrics
 from app.core.redis_pool import get_redis_connection
-from app.services.notifications import _execute_telegram_send
+from app.services.notifications import (
+    _execute_telegram_send, _execute_slack_send, 
+    _execute_discord_send, _execute_webhook_send
+)
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -48,12 +51,11 @@ else:
         logger.error(f"Celery worker failed to connect to Redis: {e}. Tasks may not be processed.")
 
 
-async def _send_telegram_notification(check_id: int, message: str):
-    """The core async logic for sending a notification and updating the DB."""
+async def _send_notification(check_id: int, message: str, send_function):
+    """Generic async logic for sending a notification and updating the DB."""
     owner_identifier_for_stats = None
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            # Eagerly load the owner to get access to the auth_key for decryption
             result = await session.execute(
                 select(Check)
                 .options(selectinload(Check.owner))
@@ -75,18 +77,36 @@ async def _send_telegram_notification(check_id: int, message: str):
                 except Exception as e:
                     logger.error(f"Could not decrement queued notification count for check {check_id}: {e}")
 
-            # Call the centralized sending logic
-            await _execute_telegram_send(check, message)
-            
+            await send_function(check, message)
             await session.commit()
 
+async def _send_telegram_notification(check_id: int, message: str):
+    await _send_notification(check_id, message, _execute_telegram_send)
+
+async def _send_slack_notification(check_id: int, message: str):
+    await _send_notification(check_id, message, _execute_slack_send)
+
+async def _send_discord_notification(check_id: int, message: str):
+    await _send_notification(check_id, message, _execute_discord_send)
+
+async def _send_webhook_notification(check_id: int, message: str):
+    await _send_notification(check_id, message, _execute_webhook_send)
 
 @celery_app.task(name="send_telegram_notification_task")
 def send_telegram_notification_task(check_id: int, message: str):
-    """Celery task wrapper to run the async notification logic."""
-    # This task is executed by a Celery worker in a synchronous context.
-    # It runs the async notification function in a new event loop.
     asyncio.run(_send_telegram_notification(check_id, message))
+
+@celery_app.task(name="send_slack_notification_task")
+def send_slack_notification_task(check_id: int, message: str):
+    asyncio.run(_send_slack_notification(check_id, message))
+
+@celery_app.task(name="send_discord_notification_task")
+def send_discord_notification_task(check_id: int, message: str):
+    asyncio.run(_send_discord_notification(check_id, message))
+
+@celery_app.task(name="send_webhook_notification_task")
+def send_webhook_notification_task(check_id: int, message: str):
+    asyncio.run(_send_webhook_notification(check_id, message))
 
 
 async def _check_overdue_jobs():
@@ -116,7 +136,7 @@ async def _check_overdue_jobs():
                         logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN (overdue).")
                         check.status = "down"
                         message = f"🔴 Check Down: [{check.name}] is overdue."
-                        notifications.schedule_telegram_notification(check, message)
+                        notifications.schedule_all_notifications(check, message)
                         _update_redis_stats_counters(check.owner_id, old_status, "down")
             else:
                 logger.info("Scheduler found no overdue checks.")
@@ -150,7 +170,7 @@ async def _check_overdue_jobs():
                         check.status = "down"
                         check.last_start = None # Clear start time to prevent re-triggering
                         message = f"🔴 Check Down: [{check.name}] exceeded its max runtime of {check.max_runtime_seconds}s."
-                        notifications.schedule_telegram_notification(check, message)
+                        notifications.schedule_all_notifications(check, message)
                         _update_redis_stats_counters(check.owner_id, old_status, "down")
             else:
                 logger.info("Scheduler found no long-running checks.")

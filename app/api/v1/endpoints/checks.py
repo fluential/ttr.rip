@@ -83,6 +83,45 @@ async def update_check_telegram_settings(
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
 
+
+@router.put("/{check_id}/slack", response_model=schemas.Check)
+async def update_check_slack_settings(
+    check_id: int,
+    slack_settings: schemas.SlackSettingsUpdate,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    updated_check = await crud.update_check_slack_settings(db=db, check_id=check_id, settings_data=slack_settings, principal=principal)
+    if not updated_check:
+        raise HTTPException(status_code=404, detail="Check not found")
+    return updated_check
+
+
+@router.put("/{check_id}/discord", response_model=schemas.Check)
+async def update_check_discord_settings(
+    check_id: int,
+    discord_settings: schemas.DiscordSettingsUpdate,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    updated_check = await crud.update_check_discord_settings(db=db, check_id=check_id, settings_data=discord_settings, principal=principal)
+    if not updated_check:
+        raise HTTPException(status_code=404, detail="Check not found")
+    return updated_check
+
+
+@router.put("/{check_id}/webhook", response_model=schemas.Check)
+async def update_check_webhook_settings(
+    check_id: int,
+    webhook_settings: schemas.WebhookSettingsUpdate,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    updated_check = await crud.update_check_webhook_settings(db=db, check_id=check_id, settings_data=webhook_settings, principal=principal)
+    if not updated_check:
+        raise HTTPException(status_code=404, detail="Check not found")
+    return updated_check
+
 @router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
 async def test_telegram_notification(
     check_id: int,
@@ -103,6 +142,57 @@ async def test_telegram_notification(
     await db.refresh(check)
     return check
 
+
+@router.post("/{check_id}/slack/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+async def test_slack_notification(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check: raise HTTPException(status_code=404, detail="Check not found")
+    if not all([check.slack_enabled, check.slack_webhook_url]):
+        raise HTTPException(status_code=400, detail="Slack settings are incomplete.")
+    message = f"🔔 This is a test notification for your check '[{check.name}]'."
+    await notifications.send_slack_notification(db, check, message)
+    await db.commit()
+    await db.refresh(check)
+    return check
+
+
+@router.post("/{check_id}/discord/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+async def test_discord_notification(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check: raise HTTPException(status_code=404, detail="Check not found")
+    if not all([check.discord_enabled, check.discord_webhook_url]):
+        raise HTTPException(status_code=400, detail="Discord settings are incomplete.")
+    message = f"🔔 This is a test notification for your check '[{check.name}]'."
+    await notifications.send_discord_notification(db, check, message)
+    await db.commit()
+    await db.refresh(check)
+    return check
+
+
+@router.post("/{check_id}/webhook/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+async def test_webhook_notification(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check: raise HTTPException(status_code=404, detail="Check not found")
+    if not all([check.webhook_enabled, check.webhook_url]):
+        raise HTTPException(status_code=400, detail="Webhook settings are incomplete.")
+    message = f"🔔 This is a test notification for your check '[{check.name}]'."
+    await notifications.send_webhook_notification(db, check, message)
+    await db.commit()
+    await db.refresh(check)
+    return check
+
 @router.post("/{check_id}/telegram/test-queue", status_code=status.HTTP_202_ACCEPTED)
 async def test_telegram_notification_queue(
     check_id: int,
@@ -119,6 +209,51 @@ async def test_telegram_notification_queue(
     logger.info(f"Queueing test Telegram notification for check ID {check_id} on behalf of user {principal.id}.")
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
     notifications.schedule_telegram_notification(check, message)
+    return {"message": "Test notification queued."}
+
+
+@router.post("/{check_id}/slack/test-queue", status_code=status.HTTP_202_ACCEPTED)
+async def test_slack_notification_queue(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check: raise HTTPException(status_code=404, detail="Check not found")
+    if not all([check.slack_enabled, check.slack_webhook_url]):
+        raise HTTPException(status_code=400, detail="Slack settings are incomplete.")
+    message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
+    notifications.schedule_slack_notification(check, message)
+    return {"message": "Test notification queued."}
+
+
+@router.post("/{check_id}/discord/test-queue", status_code=status.HTTP_202_ACCEPTED)
+async def test_discord_notification_queue(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check: raise HTTPException(status_code=404, detail="Check not found")
+    if not all([check.discord_enabled, check.discord_webhook_url]):
+        raise HTTPException(status_code=400, detail="Discord settings are incomplete.")
+    message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
+    notifications.schedule_discord_notification(check, message)
+    return {"message": "Test notification queued."}
+
+
+@router.post("/{check_id}/webhook/test-queue", status_code=status.HTTP_202_ACCEPTED)
+async def test_webhook_notification_queue(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check: raise HTTPException(status_code=404, detail="Check not found")
+    if not all([check.webhook_enabled, check.webhook_url]):
+        raise HTTPException(status_code=400, detail="Webhook settings are incomplete.")
+    message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
+    notifications.schedule_webhook_notification(check, message)
     return {"message": "Test notification queued."}
 
 
@@ -200,11 +335,17 @@ async def import_checks(
             )
             new_check = await crud.create_check(db=db, check=check_create, principal=principal)
             
-            # Manually set telegram properties and commit
+            # Manually set properties and commit
             # This bypasses the re-encryption logic in the standard update endpoint
             new_check.telegram_bot_token = check_to_import.telegram_bot_token
             new_check.telegram_chat_id = check_to_import.telegram_chat_id
             new_check.telegram_enabled = check_to_import.telegram_enabled
+            new_check.slack_webhook_url = check_to_import.slack_webhook_url
+            new_check.slack_enabled = check_to_import.slack_enabled
+            new_check.discord_webhook_url = check_to_import.discord_webhook_url
+            new_check.discord_enabled = check_to_import.discord_enabled
+            new_check.webhook_url = check_to_import.webhook_url
+            new_check.webhook_enabled = check_to_import.webhook_enabled
             
             await db.commit()
             

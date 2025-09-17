@@ -58,6 +58,12 @@ class CheckExport(BaseModel):
     telegram_enabled: bool
     telegram_chat_id: Optional[str] = None
     telegram_bot_token: Optional[str] = None
+    slack_enabled: bool
+    slack_webhook_url: Optional[str] = None
+    discord_enabled: bool
+    discord_webhook_url: Optional[str] = None
+    webhook_enabled: bool
+    webhook_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -125,6 +131,21 @@ class Check(CheckBase):
     telegram_last_notification_status: Optional[str] = None
     telegram_last_notification_message: Optional[str] = None
     telegram_last_notification_timestamp: Optional[datetime] = None
+    slack_webhook_url: Optional[str] = None
+    slack_enabled: bool
+    slack_last_notification_status: Optional[str] = None
+    slack_last_notification_message: Optional[str] = None
+    slack_last_notification_timestamp: Optional[datetime] = None
+    discord_webhook_url: Optional[str] = None
+    discord_enabled: bool
+    discord_last_notification_status: Optional[str] = None
+    discord_last_notification_message: Optional[str] = None
+    discord_last_notification_timestamp: Optional[datetime] = None
+    webhook_url: Optional[str] = None
+    webhook_enabled: bool
+    webhook_last_notification_status: Optional[str] = None
+    webhook_last_notification_message: Optional[str] = None
+    webhook_last_notification_timestamp: Optional[datetime] = None
     owner_id: int
     owner: Optional[User] = None # Include owner details
 
@@ -156,6 +177,30 @@ class TelegramSettings(BaseModel):
     telegram_enabled: bool = False
 
 class TelegramSettingsUpdate(TelegramSettings):
+    pass
+
+
+class SlackSettings(BaseModel):
+    slack_webhook_url: Optional[str] = None
+    slack_enabled: bool = False
+
+class SlackSettingsUpdate(SlackSettings):
+    pass
+
+
+class DiscordSettings(BaseModel):
+    discord_webhook_url: Optional[str] = None
+    discord_enabled: bool = False
+
+class DiscordSettingsUpdate(DiscordSettings):
+    pass
+
+
+class WebhookSettings(BaseModel):
+    webhook_url: Optional[str] = None
+    webhook_enabled: bool = False
+
+class WebhookSettingsUpdate(WebhookSettings):
     pass
 
 

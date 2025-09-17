@@ -81,6 +81,28 @@ class Check(Base):
     telegram_last_notification_status: Optional[str] = Column(String, nullable=True)
     telegram_last_notification_message: Optional[str] = Column(String, nullable=True)
     telegram_last_notification_timestamp: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+
+    # Slack settings
+    slack_webhook_url: Optional[str] = Column(String, nullable=True)
+    slack_enabled: bool = Column(Boolean, default=False, nullable=False)
+    slack_last_notification_status: Optional[str] = Column(String, nullable=True)
+    slack_last_notification_message: Optional[str] = Column(String, nullable=True)
+    slack_last_notification_timestamp: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+
+    # Discord settings
+    discord_webhook_url: Optional[str] = Column(String, nullable=True)
+    discord_enabled: bool = Column(Boolean, default=False, nullable=False)
+    discord_last_notification_status: Optional[str] = Column(String, nullable=True)
+    discord_last_notification_message: Optional[str] = Column(String, nullable=True)
+    discord_last_notification_timestamp: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+
+    # Generic webhook settings
+    webhook_url: Optional[str] = Column(String, nullable=True)
+    webhook_enabled: bool = Column(Boolean, default=False, nullable=False)
+    webhook_last_notification_status: Optional[str] = Column(String, nullable=True)
+    webhook_last_notification_message: Optional[str] = Column(String, nullable=True)
+    webhook_last_notification_timestamp: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+
     owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     owner = relationship("User", back_populates="checks", lazy="selectin")

@@ -125,26 +125,36 @@ async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key
     """
     old_auth_key = user.auth_key
 
-    # First get all checks owned by this user that have telegram bot tokens
+    # First get all checks owned by this user that have any encrypted tokens
     result = await db.execute(
         select(models.Check)
         .filter(models.Check.owner_id == user.id)
-        .filter(models.Check.telegram_bot_token.isnot(None))
+        .filter(or_(
+            models.Check.telegram_bot_token.isnot(None),
+            models.Check.slack_webhook_url.isnot(None),
+            models.Check.discord_webhook_url.isnot(None),
+            models.Check.webhook_url.isnot(None)
+        ))
     )
     checks_with_tokens = result.scalars().all()
     
-    logger.info(f"Re-encrypting {len(checks_with_tokens)} tokens for user {user.id} due to auth_key rotation.")
+    logger.info(f"Re-encrypting tokens for {len(checks_with_tokens)} checks for user {user.id} due to auth_key rotation.")
 
     # For each check, decrypt the token with the old key and re-encrypt it with the new key
     for check in checks_with_tokens:
-        try:
-            # Decrypt the token using OLD auth key
-            decrypted_token = encryption.decrypt_token(check.telegram_bot_token, old_auth_key)
-            # Re-encrypt with NEW auth key
-            check.telegram_bot_token = encryption.encrypt_token(decrypted_token, new_auth_key)
-        except Exception as e:
-            logger.error(f"Failed to re-encrypt token for check {check.id} during auth_key rotation: {e}. This may cause notification failures for this check.")
-            # Continue with other checks even if one fails
+        encrypted_fields = [
+            "telegram_bot_token", "slack_webhook_url", 
+            "discord_webhook_url", "webhook_url"
+        ]
+        for field in encrypted_fields:
+            encrypted_value = getattr(check, field)
+            if encrypted_value:
+                try:
+                    decrypted_value = encryption.decrypt_token(encrypted_value, old_auth_key)
+                    setattr(check, field, encryption.encrypt_token(decrypted_value, new_auth_key))
+                except Exception as e:
+                    logger.error(f"Failed to re-encrypt {field} for check {check.id} during auth_key rotation: {e}. This may cause notification failures for this check.")
+                    # Continue with other checks even if one fails
     
     # Update the user's auth key
     user.auth_key = new_auth_key
@@ -319,7 +329,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check):
         if check.last_duration_seconds is not None:
             duration_str = notifications.format_duration(check.last_duration_seconds)
             message += f" Last run took {duration_str}."
-        notifications.schedule_telegram_notification(check, message)
+        notifications.schedule_all_notifications(check, message)
 
     return check
 
@@ -346,7 +356,7 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
 
     if previous_status != "down":
         message = f"🔴 Check Failed: [{check.name}] reported a failure."
-        notifications.schedule_telegram_notification(check, message)
+        notifications.schedule_all_notifications(check, message)
 
     return check
 
@@ -555,6 +565,69 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
             if token: # Only update if a new token is provided
                 db_check.telegram_bot_token = encryption.encrypt_token(token, principal.auth_key)
 
+        for key, value in update_data.items():
+            setattr(db_check, key, value)
+        await db.commit()
+        await db.refresh(db_check)
+    return db_check
+
+
+async def update_check_slack_settings(db: AsyncSession, check_id: int, settings_data: schemas.SlackSettingsUpdate, principal: models.User):
+    if not principal.id: return None
+    query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
+    if not principal.is_admin:
+        query = query.filter(models.Check.owner_id == principal.id)
+    
+    result = await db.execute(query)
+    db_check = result.scalars().first()
+    if db_check:
+        update_data = settings_data.model_dump(exclude_unset=True)
+        if 'slack_webhook_url' in update_data:
+            url = update_data.pop('slack_webhook_url')
+            if url:
+                db_check.slack_webhook_url = encryption.encrypt_token(url, principal.auth_key)
+        for key, value in update_data.items():
+            setattr(db_check, key, value)
+        await db.commit()
+        await db.refresh(db_check)
+    return db_check
+
+
+async def update_check_discord_settings(db: AsyncSession, check_id: int, settings_data: schemas.DiscordSettingsUpdate, principal: models.User):
+    if not principal.id: return None
+    query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
+    if not principal.is_admin:
+        query = query.filter(models.Check.owner_id == principal.id)
+    
+    result = await db.execute(query)
+    db_check = result.scalars().first()
+    if db_check:
+        update_data = settings_data.model_dump(exclude_unset=True)
+        if 'discord_webhook_url' in update_data:
+            url = update_data.pop('discord_webhook_url')
+            if url:
+                db_check.discord_webhook_url = encryption.encrypt_token(url, principal.auth_key)
+        for key, value in update_data.items():
+            setattr(db_check, key, value)
+        await db.commit()
+        await db.refresh(db_check)
+    return db_check
+
+
+async def update_check_webhook_settings(db: AsyncSession, check_id: int, settings_data: schemas.WebhookSettingsUpdate, principal: models.User):
+    if not principal.id: return None
+    query = select(models.Check).filter(models.Check.id == check_id).options(joinedload(models.Check.owner))
+    if not principal.is_admin:
+        query = query.filter(models.Check.owner_id == principal.id)
+    
+    result = await db.execute(query)
+    db_check = result.scalars().first()
+    if db_check:
+        update_data = settings_data.model_dump(exclude_unset=True)
+        if 'webhook_url' in update_data:
+            url = update_data.pop('webhook_url')
+            if url:
+                db_check.webhook_url = encryption.encrypt_token(url, principal.auth_key)
         for key, value in update_data.items():
             setattr(db_check, key, value)
         await db.commit()

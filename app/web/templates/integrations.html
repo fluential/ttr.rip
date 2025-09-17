@@ -6,66 +6,105 @@
     <h2>Manage notifications for check: <strong>{{ check.name }}</strong></h2>
 </hgroup>
 
+{% macro integration_status(integration_name, status, timestamp, message) %}
+<details open>
+    <summary>Integration Status</summary>
+    <div class="integration-status-container" data-integration="{{ integration_name }}" style="padding: 1rem; border-radius: var(--pico-border-radius);
+        {% if status == 'ok' %} background-color: var(--pico-color-green-200); color: var(--pico-color-green-900);
+        {% elif status == 'error' %} background-color: var(--pico-color-red-200); color: var(--pico-color-red-900);
+        {% else %} background-color: var(--pico-card-background-color); color: inherit;
+        {% endif %}
+    ">
+        <p style="margin-bottom: 0.5rem;" class="integration-status-text">
+            {% if status == 'ok' %} <strong>Status: ✅ OK</strong>
+            {% elif status == 'error' %} <strong>Status: ❌ Error</strong>
+            {% else %} <strong>Status: Unknown</strong> (No notification sent yet)
+            {% endif %}
+        </p>
+        <div class="integration-status-details" {% if not timestamp %}style="display: none;"{% endif %}>
+            <p style="margin-bottom: 0.5rem;"><strong>Last Attempt:</strong> <span class="last-notification-time">{{ timestamp.isoformat() if timestamp else '' }}</span></p>
+            <p style="margin-bottom: 0;"><strong>Details:</strong> <small class="last-notification-message">{{ message or '' }}</small></p>
+        </div>
+    </div>
+</details>
+{% endmacro %}
+
+<!-- Telegram -->
 <article>
     <header>Telegram Notifications</header>
-    <details open>
-        <summary>Integration Status</summary>
-        <div id="integration-status-container" style="padding: 1rem; border-radius: var(--pico-border-radius);
-            {% if check.telegram_last_notification_status == 'ok' %}
-                background-color: var(--pico-color-green-200); color: var(--pico-color-green-900);
-            {% elif check.telegram_last_notification_status == 'error' %}
-                background-color: var(--pico-color-red-200); color: var(--pico-color-red-900);
-            {% else %}
-                background-color: var(--pico-card-background-color); color: inherit;
-            {% endif %}
-        ">
-            <p style="margin-bottom: 0.5rem;" id="integration-status-text">
-                {% if check.telegram_last_notification_status == 'ok' %}
-                    <strong>Status: ✅ OK</strong>
-                {% elif check.telegram_last_notification_status == 'error' %}
-                    <strong>Status: ❌ Error</strong>
-                {% else %}
-                    <strong>Status: Unknown</strong> (No notification sent yet)
-                {% endif %}
-            </p>
-            <div id="integration-status-details" {% if not check.telegram_last_notification_timestamp %}style="display: none;"{% endif %}>
-                <p style="margin-bottom: 0.5rem;"><strong>Last Attempt:</strong> <span id="last-notification-time">{{ check.telegram_last_notification_timestamp.isoformat() if check.telegram_last_notification_timestamp else '' }}</span></p>
-                <p style="margin-bottom: 0;"><strong>Details:</strong> <small id="last-notification-message">{{ check.telegram_last_notification_message or '' }}</small></p>
-            </div>
-        </div>
-    </details>
+    {{ integration_status('telegram', check.telegram_last_notification_status, check.telegram_last_notification_timestamp, check.telegram_last_notification_message) }}
     <hr>
-    <p>
-        Get an alert via Telegram when this check goes down. Simply provide your bot token and chat ID below.
-    </p>
-    <form id="telegram-settings-form">
-        <label for="telegram_enabled">
-            <input type="checkbox" id="telegram_enabled" name="telegram_enabled" role="switch" {% if check.telegram_enabled %}checked{% endif %}>
-            Enable Telegram Notifications
-        </label>
-
+    <p>Get an alert via Telegram when this check goes down. Simply provide your bot token and chat ID below.</p>
+    <form data-integration="telegram">
+        <label><input type="checkbox" name="telegram_enabled" role="switch" {% if check.telegram_enabled %}checked{% endif %}> Enable Telegram Notifications</label>
         <div class="grid">
-            <label for="telegram_bot_token">
-                Bot Token
-                <input type="password" id="telegram_bot_token" name="telegram_bot_token" placeholder="{{ telegram_bot_token_placeholder }}" value="{{ telegram_bot_token or '' }}">
-                {% if has_telegram_bot_token %}
-                <small>Leave empty to keep the existing token. Enter a new value to replace it.</small>
-                {% endif %}
-            </label>
-            <label for="telegram_chat_id">
-                Chat ID
-                <input type="text" id="telegram_chat_id" name="telegram_chat_id" placeholder="-1001234567890 or @channel_name" value="{{ check.telegram_chat_id or '' }}">
-            </label>
+            <label>Bot Token <input type="password" name="telegram_bot_token" placeholder="{{ telegram_bot_token_placeholder }}" value=""><small>Leave empty to keep existing token.</small></label>
+            <label>Chat ID <input type="text" name="telegram_chat_id" placeholder="-1001234567890" value="{{ check.telegram_chat_id or '' }}"></label>
         </div>
         <footer class="grid">
-            <button type="submit">Save Settings</button>
-            <button type="button" id="test-telegram-btn" class="secondary">Test Connection</button>
-            <button type="button" id="test-queue-btn" class="secondary">Test via Queue</button>
-            <button type="button" class="secondary outline" onclick="window.location.href='{{ '/admin/dashboard' if is_admin else '/dashboard' }}'">Back to Dashboard</button>
+            <button type="submit">Save</button>
+            <button type="button" class="secondary test-btn">Test</button>
+            <button type="button" class="secondary test-queue-btn">Test Queue</button>
         </footer>
     </form>
-    <div id="form-message" style="margin-top: 1rem;"></div>
+    <div class="form-message" style="margin-top: 1rem;"></div>
 </article>
+
+<!-- Slack -->
+<article>
+    <header>Slack Notifications</header>
+    {{ integration_status('slack', check.slack_last_notification_status, check.slack_last_notification_timestamp, check.slack_last_notification_message) }}
+    <hr>
+    <p>Get an alert via Slack. Provide your Incoming Webhook URL.</p>
+    <form data-integration="slack">
+        <label><input type="checkbox" name="slack_enabled" role="switch" {% if check.slack_enabled %}checked{% endif %}> Enable Slack Notifications</label>
+        <label>Webhook URL <input type="password" name="slack_webhook_url" placeholder="https://hooks.slack.com/services/..." value=""><small>Leave empty to keep existing URL.</small></label>
+        <footer class="grid">
+            <button type="submit">Save</button>
+            <button type="button" class="secondary test-btn">Test</button>
+            <button type="button" class="secondary test-queue-btn">Test Queue</button>
+        </footer>
+    </form>
+    <div class="form-message" style="margin-top: 1rem;"></div>
+</article>
+
+<!-- Discord -->
+<article>
+    <header>Discord Notifications</header>
+    {{ integration_status('discord', check.discord_last_notification_status, check.discord_last_notification_timestamp, check.discord_last_notification_message) }}
+    <hr>
+    <p>Get an alert via Discord. Provide your Webhook URL.</p>
+    <form data-integration="discord">
+        <label><input type="checkbox" name="discord_enabled" role="switch" {% if check.discord_enabled %}checked{% endif %}> Enable Discord Notifications</label>
+        <label>Webhook URL <input type="password" name="discord_webhook_url" placeholder="https://discord.com/api/webhooks/..." value=""><small>Leave empty to keep existing URL.</small></label>
+        <footer class="grid">
+            <button type="submit">Save</button>
+            <button type="button" class="secondary test-btn">Test</button>
+            <button type="button" class="secondary test-queue-btn">Test Queue</button>
+        </footer>
+    </form>
+    <div class="form-message" style="margin-top: 1rem;"></div>
+</article>
+
+<!-- Generic Webhook -->
+<article>
+    <header>Generic Webhook</header>
+    {{ integration_status('webhook', check.webhook_last_notification_status, check.webhook_last_notification_timestamp, check.webhook_last_notification_message) }}
+    <hr>
+    <p>Send a POST request to any URL. The payload will be a JSON object.</p>
+    <form data-integration="webhook">
+        <label><input type="checkbox" name="webhook_enabled" role="switch" {% if check.webhook_enabled %}checked{% endif %}> Enable Webhook Notifications</label>
+        <label>Webhook URL <input type="password" name="webhook_url" placeholder="https://yourapi.com/endpoint" value=""><small>Leave empty to keep existing URL.</small></label>
+        <footer class="grid">
+            <button type="submit">Save</button>
+            <button type="button" class="secondary test-btn">Test</button>
+            <button type="button" class="secondary test-queue-btn">Test Queue</button>
+        </footer>
+    </form>
+    <div class="form-message" style="margin-top: 1rem;"></div>
+</article>
+
+<button type="button" class="secondary outline" onclick="window.location.href='{{ '/admin/dashboard' if is_admin else '/dashboard' }}'">Back to Dashboard</button>
 
 <script>
     window.CHECK_ID = {{ check.id }};
