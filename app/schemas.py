@@ -37,6 +37,14 @@ class User(UserBase):
 class UserKeyResponse(BaseModel):
     auth_key: str
 
+# Tag Schemas
+class Tag(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 # Check Schemas
 from pydantic import BaseModel, model_validator
 from typing import Optional, Union, Any
@@ -44,6 +52,7 @@ from typing import Optional, Union, Any
 class CheckBase(BaseModel):
     name: str
     slug: Optional[str] = None
+    tags: list[str] = []
     schedule: Optional[str] = None
     tz: str = "UTC"
     interval_seconds: Optional[int] = None
@@ -65,6 +74,7 @@ class CheckUpdate(CheckBase):
 class CheckExport(BaseModel):
     name: str
     slug: Optional[str] = None
+    tags: list[str] = []
     schedule: Optional[str] = None
     tz: str
     interval_seconds: Optional[int] = None
@@ -180,6 +190,7 @@ class Check(CheckBase):
     owner: Optional[User] = None # Include owner details
     last_pings: list[PingLog] = []
     last_content: Optional[str] = None
+    tags: list[Tag] = []
 
     class Config:
         from_attributes = True

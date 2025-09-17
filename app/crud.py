@@ -256,6 +256,31 @@ async def get_all_checks_by_owner(db: AsyncSession, principal: models.User):
     result = await db.execute(query)
     return result.scalars().all()
 
+async def _handle_tags(db: AsyncSession, owner_id: int, tag_names: list[str]) -> list[models.Tag]:
+    if not tag_names:
+        return []
+
+    # Find existing tags for this user
+    existing_tags_result = await db.execute(
+        select(models.Tag).filter(models.Tag.owner_id == owner_id, models.Tag.name.in_(tag_names))
+    )
+    existing_tags = existing_tags_result.scalars().all()
+    existing_tag_names = {t.name for t in existing_tags}
+
+    # Create new tags for names that don't exist
+    new_tags = []
+    for name in tag_names:
+        if name not in existing_tag_names:
+            new_tag = models.Tag(name=name, owner_id=owner_id)
+            db.add(new_tag)
+            new_tags.append(new_tag)
+    
+    if new_tags:
+        await db.flush()
+
+    return existing_tags + new_tags
+
+
 # Check CRUD
 async def get_check_by_identifier(db: AsyncSession, identifier: str):
     """Gets a check by its UUID or its slug."""
@@ -586,16 +611,19 @@ async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optio
         logger.error(f"Failed to update check fail status in Redis for check {check.id}: {e}")
         return check, reason
 
-async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc', cursor: Optional[str] = None):
+async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc', cursor: Optional[str] = None, tag: Optional[str] = None):
     # If the principal has no ID, they can't have any checks.
     if not principal.id:
         return [], None, None
 
-    query = select(models.Check)
+    query = select(models.Check).options(selectinload(models.Check.tags))
     if principal.is_admin:
         query = query.options(selectinload(models.Check.owner))
     else:
         query = query.filter(models.Check.owner_id == principal.id)
+
+    if tag:
+        query = query.join(models.Check.tags).filter(models.Tag.name == tag)
 
     sort_column = getattr(models.Check, sort_by, models.Check.id)
     is_expires_sort = False # This logic is no longer needed with the deadline column
@@ -696,6 +724,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
     try:
         # Now, principal is guaranteed to be a persisted User object.
         check_data = check.model_dump()
+        tag_names = check_data.pop("tags", [])
         if not check_data.get("slug"):
             check_data["slug"] = None # Ensure empty string is saved as NULL
 
@@ -706,6 +735,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         }
         
         db_check = models.Check(**db_check_data)
+        db_check.tags = await _handle_tags(db, principal.id, tag_names)
         # Set initial deadline based on creation time
         db_check.deadline = _calculate_next_deadline(db_check, db_check.created_at)
         db.add(db_check)
@@ -758,6 +788,9 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
     db_check = result.scalars().first()
     if db_check:
         update_data = check_data.model_dump()
+        tag_names = update_data.pop("tags", [])
+        db_check.tags = await _handle_tags(db, db_check.owner_id, tag_names)
+
         if "slug" in update_data and not update_data["slug"]:
             update_data["slug"] = None # Ensure empty string is saved as NULL
 
@@ -1097,3 +1130,11 @@ async def delete_status_page(db: AsyncSession, status_page_id: int, principal: m
         await db.delete(db_status_page)
         await db.commit()
     return db_status_page
+
+
+async def get_all_tags_by_owner(db: AsyncSession, principal: models.User):
+    if not principal.id:
+        return []
+    query = select(models.Tag).filter(models.Tag.owner_id == principal.id).order_by(models.Tag.name)
+    result = await db.execute(query)
+    return result.scalars().all()

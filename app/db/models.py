@@ -24,6 +24,25 @@ status_page_checks = Table(
     Column("check_id", Integer, ForeignKey("checks.id"), primary_key=True),
 )
 
+# Association Table for the many-to-many relationship between Check and Tag
+check_tags = Table(
+    "check_tags",
+    Base.metadata,
+    Column("check_id", Integer, ForeignKey("checks.id"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+)
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id: int = Column(Integer, primary_key=True, index=True)
+    name: str = Column(String, index=True, nullable=False)
+    owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    owner = relationship("User", back_populates="tags")
+    checks = relationship("Check", secondary=check_tags, back_populates="tags")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -44,6 +63,7 @@ class User(Base):
 
     checks = relationship("Check", back_populates="owner", cascade="all, delete-orphan")
     status_pages = relationship("StatusPage", back_populates="owner", cascade="all, delete-orphan")
+    tags = relationship("Tag", back_populates="owner", cascade="all, delete-orphan")
 
 
 class StatusPage(Base):
@@ -120,3 +140,4 @@ class Check(Base):
 
     owner = relationship("User", back_populates="checks", lazy="selectin")
     status_pages = relationship("StatusPage", secondary=status_page_checks, back_populates="checks")
+    tags = relationship("Tag", secondary=check_tags, back_populates="checks", lazy="selectin")

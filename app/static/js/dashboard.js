@@ -3,6 +3,7 @@ let csrfToken = window.CSRF_TOKEN;
 let isConnectionLost = false;
 let currentSortBy = 'id';
 let currentSortDir = 'desc';
+let currentTagFilter = '';
 let pageSize = 25;
 let nextCursor = null;
 let prevCursor = null;
@@ -172,6 +173,36 @@ async function handleUnlinkTelegram() {
         unlinkBtn.disabled = false;
         unlinkBtn.removeAttribute('aria-busy');
     }
+}
+
+async function fetchAllTags() {
+    try {
+        const response = await fetch('/api/v1/checks/tags', {
+            headers: { 'X-Auth-Key': authKey }
+        });
+        if (!response.ok) return;
+        const tags = await response.json();
+        renderTagFilter(tags);
+    } catch (error) {
+        console.error('Error fetching tags:', error);
+    }
+}
+
+function renderTagFilter(tags) {
+    const select = document.getElementById('tag-filter');
+    if (!select) return;
+    
+    // Preserve the "All Checks" option and the currently selected value
+    const selectedValue = select.value;
+    select.innerHTML = '<option value="">All Checks</option>';
+    
+    tags.forEach(tag => {
+        const option = document.createElement('option');
+        option.value = tag.name;
+        option.textContent = tag.name;
+        select.appendChild(option);
+    });
+    select.value = selectedValue;
 }
 
 async function updateTelegramSection() {
@@ -736,6 +767,9 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     if (cursor) {
         url += `&cursor=${cursor}`;
     }
+    if (currentTagFilter) {
+        url += `&tag=${encodeURIComponent(currentTagFilter)}`;
+    }
     
     try {
         const response = await fetch(url, {
@@ -822,6 +856,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         row.innerHTML = `
             <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
             <td>${check.name}</td>
+            <td>${check.tags.map(t => `<span class="tag">${t.name}</span>`).join(' ')}</td>
             <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;"></td>
             <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;"></td>
             <td>${lastPing}</td>
@@ -885,7 +920,7 @@ function editCheck(event, id) {
         alert('Could not find check data to edit.');
         return;
     }
-    const { name, slug, schedule, tz, interval_seconds, grace_seconds, max_runtime_seconds, notify_after_failures, notify_on_up, expected_content, expected_content_type, use_regex_for_content } = check;
+    const { name, slug, tags, schedule, tz, interval_seconds, grace_seconds, max_runtime_seconds, notify_after_failures, notify_on_up, expected_content, expected_content_type, use_regex_for_content } = check;
 
     const details = document.getElementById('new-check-section');
     if (details) {
@@ -894,6 +929,7 @@ function editCheck(event, id) {
     const form = document.getElementById('new-check-form');
     form.querySelector('#name').value = name;
     form.querySelector('#slug').value = slug || '';
+    form.querySelector('#tags').value = tags.map(t => t.name).join(', ');
     form.querySelector('#grace_seconds').value = grace_seconds;
     form.querySelector('#tz').value = tz || 'UTC';
     form.querySelector('#max_runtime_seconds').value = max_runtime_seconds || '';
@@ -975,6 +1011,7 @@ async function handleFormSubmit(event) {
     const data = {
         name: form.querySelector('#name').value,
         slug: form.querySelector('#slug').value || null,
+        tags: form.querySelector('#tags').value.split(',').map(t => t.trim()).filter(Boolean),
         schedule: scheduleType === 'cron' ? (schedule || null) : null,
         interval_seconds: scheduleType === 'simple' ? (interval ? parseInt(interval) : null) : null,
         tz: form.querySelector('#tz').value || 'UTC',
@@ -1208,7 +1245,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics(), fetchStatusPages()]);
+    await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics(), fetchStatusPages(), fetchAllTags()]);
     await updateTelegramSection();
     
     const loadTime = performance.now() - window.pageLoadStartTime;
@@ -1259,6 +1296,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             fetchChecks(nextCursor, currentSortDir);
         }
     });
+
+    // Tag filter listener
+    const tagFilter = document.getElementById('tag-filter');
+    if (tagFilter) {
+        tagFilter.addEventListener('change', (e) => {
+            currentTagFilter = e.target.value;
+            fetchChecks(); // Reset to first page on new filter
+        });
+    }
 
     // Sorting listeners
     document.querySelectorAll('#checks-table th[data-sort]').forEach(th => {

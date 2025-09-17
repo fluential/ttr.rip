@@ -31,6 +31,7 @@ async def read_checks(
     sort_by: str = Query('id'),
     sort_direction: str = Query('desc', pattern="^(asc|desc|asc_prev|desc_prev)$"),
     cursor: Optional[str] = None,
+    tag: Optional[str] = None,
 ):
     allowed_sort_fields = ['id', 'name', 'status', 'created_at', 'last_ping', 'last_duration_seconds', 'uuid', 'deadline']
     if sort_by not in allowed_sort_fields:
@@ -42,7 +43,8 @@ async def read_checks(
         size=size, 
         sort_by=sort_by, 
         sort_direction=sort_direction,
-        cursor=cursor
+        cursor=cursor,
+        tag=tag
     )
 
     # Enrich checks with runtime data from Redis
@@ -54,6 +56,14 @@ async def read_checks(
         prev_cursor=prev_cursor,
         size=size
     )
+
+@router.get("/tags", response_model=List[schemas.Tag])
+async def read_tags(
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    return await crud.get_all_tags_by_owner(db=db, principal=principal)
+
 
 @router.post("", response_model=schemas.Check, status_code=status.HTTP_201_CREATED)
 async def create_check(
