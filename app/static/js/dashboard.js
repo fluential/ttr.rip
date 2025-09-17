@@ -107,6 +107,79 @@ async function rotateApiKey() {
     }
 }
 
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+const checkSlugAvailability = debounce(async function(slug) {
+    const feedbackEl = document.getElementById('slug-feedback');
+    const slugInput = document.getElementById('slug');
+    if (!slug) {
+        feedbackEl.textContent = '';
+        return;
+    }
+
+    feedbackEl.textContent = 'Checking availability...';
+    feedbackEl.style.color = 'inherit';
+    slugInput.setAttribute('aria-invalid', 'false');
+
+    const form = document.getElementById('new-check-form');
+    const editingId = form.dataset.editingId;
+    
+    let url = `/api/v1/checks/slug-check?slug=${encodeURIComponent(slug)}`;
+    if (editingId) {
+        url += `&check_id=${editingId}`;
+    }
+
+    try {
+        const response = await fetch(url, {
+            headers: { 'X-Auth-Key': authKey }
+        });
+        const data = await response.json();
+
+        if (data.is_taken) {
+            feedbackEl.textContent = 'Slug is already taken.';
+            feedbackEl.style.color = 'var(--pico-color-orange-500)';
+            slugInput.setAttribute('aria-invalid', 'true');
+        } else {
+            feedbackEl.textContent = 'Slug is available.';
+            feedbackEl.style.color = 'var(--pico-color-green-500)';
+            slugInput.setAttribute('aria-invalid', 'false');
+        }
+    } catch (error) {
+        console.error('Error checking slug availability:', error);
+        feedbackEl.textContent = 'Could not check availability.';
+        feedbackEl.style.color = 'var(--pico-color-red-500)';
+        slugInput.setAttribute('aria-invalid', 'true');
+    }
+}, 500); // 500ms delay
+
+function validateSlugInput() {
+    const slugInput = document.getElementById('slug');
+    const feedbackEl = document.getElementById('slug-feedback');
+    const slug = slugInput.value;
+
+    if (!slug) {
+        feedbackEl.textContent = '';
+        slugInput.setAttribute('aria-invalid', 'false');
+        return;
+    }
+
+    if (!slugInput.checkValidity()) {
+        feedbackEl.textContent = 'Invalid characters. Use a-z, 0-9, -, _';
+        feedbackEl.style.color = 'var(--pico-color-red-500)';
+        slugInput.setAttribute('aria-invalid', 'true');
+    } else {
+        slugInput.setAttribute('aria-invalid', 'false');
+        checkSlugAvailability(slug);
+    }
+}
+
 function buildCronExpression() {
     // Times of Day
     const timeFrom = document.getElementById('time-from').value;
@@ -979,6 +1052,16 @@ function cancelEdit() {
     form.reset();
     delete form.dataset.editingId;
 
+    // Clear slug feedback
+    const slugFeedback = document.getElementById('slug-feedback');
+    if (slugFeedback) {
+        slugFeedback.textContent = '';
+    }
+    const slugInput = document.getElementById('slug');
+    if (slugInput) {
+        slugInput.setAttribute('aria-invalid', 'false');
+    }
+
     const details = document.getElementById('new-check-section');
     if (details) {
         details.querySelector('summary').textContent = 'New Check';
@@ -1183,6 +1266,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
         }
         domGrid.innerHTML = checkboxes;
+    }
+
+    // Slug validation listener
+    const slugInput = document.getElementById('slug');
+    if (slugInput) {
+        slugInput.addEventListener('input', validateSlugInput);
     }
 
     // Schedule type toggle

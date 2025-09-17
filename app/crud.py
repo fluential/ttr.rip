@@ -1174,3 +1174,16 @@ async def get_all_tags_by_owner(db: AsyncSession, principal: models.User):
     query = select(models.Tag).filter(models.Tag.owner_id == principal.id).order_by(models.Tag.name)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+async def is_slug_taken(db: AsyncSession, slug: str, owner_id: int, check_id: Optional[int] = None) -> bool:
+    """Checks if a slug is already taken by another check for the same owner."""
+    query = select(models.Check.id).filter(
+        models.Check.owner_id == owner_id,
+        models.Check.slug == slug
+    )
+    if check_id is not None:
+        query = query.filter(models.Check.id != check_id)
+    
+    result = await db.execute(query)
+    return result.scalars().first() is not None

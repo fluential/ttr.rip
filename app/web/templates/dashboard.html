@@ -84,7 +84,8 @@
             </label>
             <label for="slug">
                 Slug (Optional, for URL)
-                <input type="text" id="slug" name="slug" placeholder="daily-backup-job" pattern="[a-z0-9_-]+" title="a-z, 0-9, -, _">
+                <input type="text" id="slug" name="slug" placeholder="daily-backup-job" pattern="[a-z0-9_-]+" title="a-z, 0-9, -, _" aria-invalid="false">
+                <small id="slug-feedback" style="min-height: 1.2em;"></small>
             </label>
         </div>
         <label for="tags">

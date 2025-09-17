@@ -57,6 +57,19 @@ async def read_checks(
         size=size
     )
 
+@router.get("/slug-check", response_class=JSONResponse)
+async def check_slug_availability(
+    slug: str,
+    check_id: Optional[int] = None,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    if not principal.id:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    is_taken = await crud.is_slug_taken(db, slug=slug, owner_id=principal.id, check_id=check_id)
+    return JSONResponse(content={"is_taken": is_taken})
+
 @router.get("/tags", response_model=List[schemas.Tag])
 async def read_tags(
     db: AsyncSession = Depends(db_base.get_db),
