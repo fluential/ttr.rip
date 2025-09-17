@@ -38,27 +38,28 @@ async def delete_user_account(
     user: db_models.User = Depends(security.get_public_user_from_key),
     db: AsyncSession = Depends(db_base.get_db)
 ):
-    """Deletes a user and all their associated data."""
-    if not user or not user.id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication key"
-        )
-    
+    """
+    Deletes a user and all their associated data.
+    Handles cases where the user exists in the database and where they are a transient user
+    (i.e., have an auth key but haven't performed any action to be saved to the DB).
+    """
     auth_key_to_blacklist = user.auth_key
+    user_id_for_logging = user.id if user.id else "N/A (transient user)"
+
+    if user.id:
+        # User exists in the database, so delete their data.
+        await crud.delete_user_and_data(db, user=user)
     
-    await crud.delete_user_and_data(db, user=user)
-    
-    # Add the key to the Redis blacklist with a 24-hour TTL
+    # Add the key to the Redis blacklist with a 24-hour TTL, regardless of DB existence.
     if not settings.DEBUG_MODE:
         try:
             r = get_redis_connection()
             if r:
                 # Blacklist for 24 hours (86400 seconds)
                 r.set(f"blacklist:auth_key:{auth_key_to_blacklist}", "1", ex=86400)
-                logger.info(f"Blacklisted auth key for deleted user {user.id}: ...{auth_key_to_blacklist[-4:]}")
+                logger.info(f"Blacklisted auth key for deleted user {user_id_for_logging}: ...{auth_key_to_blacklist[-4:]}")
         except Exception as e:
-            logger.error(f"Failed to blacklist auth key for deleted user {user.id}: {e}")
+            logger.error(f"Failed to blacklist auth key for deleted user {user_id_for_logging}: {e}")
 
     # Clear the auth cookie
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
