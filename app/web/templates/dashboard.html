@@ -168,5 +168,5 @@
     window.AUTH_KEY = "{{ auth_key }}";
     window.CSRF_TOKEN = "{{ csrf_token }}";
 </script>
-<script src="/static/js/dashboard.js" defer></script>
+<script src="/static/js/dashboard.js?v={{ process_time }}" defer></script>
 {% endblock %}
