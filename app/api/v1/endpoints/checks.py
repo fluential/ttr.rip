@@ -160,7 +160,7 @@ async def get_check_last_content(
             if r:
                 redis_content = r.get(f"check_content:{check_id}")
                 if redis_content:
-                    content = redis_content.decode('utf-8', errors='replace')
+                    content = redis_content
         except Exception as e:
             logger.error(f"Failed to retrieve content from Redis for check {check_id}: {e}")
             content = "Error retrieving content from storage."
