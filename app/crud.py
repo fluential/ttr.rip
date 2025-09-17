@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from croniter import croniter
 import pytz
-from systemd_calendar import Calendar
+from oncalendar import OnCalendar
 from typing import Union, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -104,9 +104,9 @@ def _calculate_next_deadline(check: models.Check, from_time: datetime) -> Option
             return None
     elif check.schedule_type == 'oncalendar':
         try:
-            cal = Calendar(check.schedule)
+            cal = OnCalendar(check.schedule)
             # The library works with timezone-aware datetimes
-            next_run_aware = cal.next_timestamp(now_in_tz)
+            next_run_aware = cal.next(now_in_tz)
         except Exception as e:
             logger.error(f"Invalid OnCalendar schedule '{check.schedule}' for check {check.id}: {e}")
             return None
