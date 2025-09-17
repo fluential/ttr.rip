@@ -119,7 +119,10 @@
             <div id="text-schedule-fields" style="display: none;">
                 <label for="schedule" id="schedule-label">Cron Expression</label>
                 <input type="text" id="schedule" name="schedule" placeholder="* * * * *">
-                <button type="button" class="outline secondary" id="show-calendar-btn" style="margin-bottom: 1rem;">Select Schedule...</button>
+                <div id="schedule-helpers" style="margin-bottom: 1rem;">
+                    <button type="button" class="outline secondary" id="show-cron-builder-btn">Build Cron...</button>
+                    <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html#ONCALENDAR=-EXPRESSIONS" target="_blank" rel="noopener noreferrer" role="button" class="outline secondary" id="oncalendar-help-btn">Syntax Help</a>
+                </div>
             </div>
             <div class="grid">
                 <label for="grace_seconds">
@@ -322,11 +325,11 @@
     <option value="Australia/Sydney">
 </datalist>
 
-<!-- On-Calendar Schedule Modal -->
+<!-- Cron Schedule Builder Modal -->
 <dialog id="on-calendar-modal">
     <article>
         <header>
-            <span>On-Calendar Schedule</span>
+            <span>Cron Schedule Builder</span>
             <a href="#close" aria-label="Close" class="close" onclick="document.getElementById('on-calendar-modal').close()"></a>
         </header>
         

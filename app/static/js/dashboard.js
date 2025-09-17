@@ -1142,10 +1142,10 @@ function viewRecentPings(checkId) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // On-Calendar Modal setup
-    const showCalendarBtn = document.getElementById('show-calendar-btn');
-    if (showCalendarBtn) {
-        showCalendarBtn.addEventListener('click', () => {
+    // Cron Builder Modal setup
+    const showCronBuilderBtn = document.getElementById('show-cron-builder-btn');
+    if (showCronBuilderBtn) {
+        showCronBuilderBtn.addEventListener('click', () => {
             // Reset modal to default state when opening
             document.getElementById('time-from').value = '00:00';
             document.getElementById('time-to').value = '23:59';
@@ -1194,13 +1194,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             const scheduleInput = document.getElementById('schedule');
             const intervalInput = document.getElementById('interval_seconds');
             const scheduleLabel = document.getElementById('schedule-label');
-            const calendarBtn = document.getElementById('show-calendar-btn');
+            const cronBuilderBtn = document.getElementById('show-cron-builder-btn');
+            const oncalendarHelpBtn = document.getElementById('oncalendar-help-btn');
 
             simpleFields.style.display = 'none';
             textFields.style.display = 'none';
             intervalInput.required = false;
             scheduleInput.required = false;
-            calendarBtn.style.display = 'none';
+            cronBuilderBtn.style.display = 'none';
+            oncalendarHelpBtn.style.display = 'none';
 
             if (scheduleType === 'simple') {
                 simpleFields.style.display = 'block';
@@ -1210,12 +1212,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 scheduleInput.required = true;
                 scheduleLabel.textContent = 'Cron Expression';
                 scheduleInput.placeholder = '* * * * *';
-                calendarBtn.style.display = 'block';
+                cronBuilderBtn.style.display = 'inline-block';
             } else if (scheduleType === 'oncalendar') {
                 textFields.style.display = 'block';
                 scheduleInput.required = true;
                 scheduleLabel.textContent = 'On-Calendar Expression';
                 scheduleInput.placeholder = 'Mon,Fri *-*-* 12:00:00';
+                oncalendarHelpBtn.style.display = 'inline-block';
             }
         });
     });
