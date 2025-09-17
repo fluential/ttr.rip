@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional, Union, Any
 from datetime import datetime
 import uuid
+import re
 
 # Token Schemas
 class Token(BaseModel):
@@ -77,6 +78,15 @@ class CheckBase(BaseModel):
             self.interval_seconds = None
         else:
             raise ValueError(f"Invalid schedule_type: {self.schedule_type}")
+        return self
+
+    @model_validator(mode='after')
+    def check_regex_validity(self) -> 'CheckBase':
+        if self.use_regex_for_content and self.expected_content:
+            try:
+                re.compile(self.expected_content)
+            except re.error as e:
+                raise ValueError(f"Invalid regular expression: {e}")
         return self
 
 class CheckCreate(CheckBase):
