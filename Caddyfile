@@ -136,6 +136,17 @@
             disable_if {
                 not {method} match GET
             }
+
+            # Key the cache by the auth key to prevent users from seeing each other's data
+            key {
+                method
+                host
+                path
+                query
+                header Accept
+                header If-None-Match
+                header X-Auth-Key
+            }
         }
         
         # Add cache control header

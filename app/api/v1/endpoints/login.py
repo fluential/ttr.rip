@@ -33,7 +33,7 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.delete("/user", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/user/delete", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_account(
     response: Response,
     user: db_models.User = Depends(security.get_public_user_from_key),

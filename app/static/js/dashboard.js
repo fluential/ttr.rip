@@ -306,8 +306,8 @@ async function deleteAccount() {
     messageDiv.style.color = 'inherit';
 
     try {
-        const response = await fetch('/api/v1/user', {
-            method: 'DELETE',
+        const response = await fetch('/api/v1/user/delete', {
+            method: 'POST',
             headers: {
                 'X-Auth-Key': authKey,
                 'X-CSRF-Token': getCsrfToken(),
