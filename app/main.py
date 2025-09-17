@@ -359,18 +359,28 @@ async def get_status_badge(uuid: str, db: AsyncSession = Depends(get_db)):
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
 
-    # Re-evaluate status to ensure badge is up-to-date, even if scheduler hasn't run.
-    current_status = db_check.status
-    if current_status != 'down':
-        now = datetime.now(timezone.utc)
-        reference_time = db_check.last_ping or db_check.created_at
-        if reference_time.tzinfo is None:
-            reference_time = reference_time.replace(tzinfo=timezone.utc)
-        
-        deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
-        
-        if now > deadline:
-            current_status = "down"
+    # Get current status from Redis and re-evaluate to ensure badge is up-to-date.
+    current_status = "new"
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                key = crud.get_check_runtime_redis_key(db_check.id)
+                runtime_data = r.hgetall(key)
+                current_status = runtime_data.get("status", "new")
+                last_ping_str = runtime_data.get("last_ping")
+
+                if current_status != 'down':
+                    now = datetime.now(timezone.utc)
+                    reference_time = datetime.fromisoformat(last_ping_str) if last_ping_str else db_check.created_at
+                    
+                    deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
+                    
+                    if now > deadline:
+                        current_status = "down"
+        except Exception as e:
+            logger.error(f"Failed to get runtime status for badge for check {db_check.id}: {e}")
+            current_status = "unknown" # Should probably be a different badge
     
     status = "paused" if db_check.paused else current_status
     badge_svg = BADGE_TEMPLATES.get(status, BADGE_TEMPLATES["new"])
@@ -388,7 +398,7 @@ async def fail_check(uuid: str, db: AsyncSession = Depends(get_db)):
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
     previous_status = db_check.status
-    updated_check = await crud.update_check_fail(db, check=db_check, reason="Manual failure triggered")
+    updated_check, _ = await crud.update_check_fail(db, check=db_check, reason="Manual failure triggered")
     
     # Record check metrics
     metrics.record_check_update(updated_check.status, previous_status, is_paused=updated_check.paused)

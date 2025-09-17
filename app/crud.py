@@ -20,16 +20,61 @@ from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
-def _calculate_deadline(check: models.Check) -> Optional[datetime]:
-    """Calculates the deadline for a check."""
-    if not check.last_ping and not check.created_at:
-        return None
-    
-    reference_time = check.last_ping or check.created_at
-    if reference_time.tzinfo is None:
-        reference_time = reference_time.replace(tzinfo=timezone.utc)
+def get_check_runtime_redis_key(check_id: int) -> str:
+    """Returns the Redis key for a check's runtime data."""
+    return f"check_runtime:{check_id}"
+
+async def enrich_checks_with_runtime_data(checks: list[models.Check]):
+    """
+    Enriches a list of Check model objects with runtime data from Redis.
+    This includes status, last ping, ping logs, and last content.
+    """
+    if not checks:
+        return
+
+    # Set defaults for all checks first
+    for check in checks:
+        check.status = "new"
+        check.last_ping = None
+        check.last_start = None
+        check.last_duration_seconds = None
+        check.last_pings = []
+        check.last_content = None
+
+    if settings.DEBUG_MODE:
+        return
+
+    try:
+        r = get_redis_connection()
+        if not r:
+            raise ConnectionError("Redis connection not available")
+
+        pipe = r.pipeline()
+        for check in checks:
+            pipe.hgetall(get_check_runtime_redis_key(check.id))
+            pipe.lrange(f"ping_logs:{check.id}", 0, 2)
+            pipe.get(f"check_content:{check.id}")
         
-    return reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
+        results = pipe.execute()
+
+        for i, check in enumerate(checks):
+            runtime_data = results[i * 3]
+            ping_logs = results[i * 3 + 1]
+            last_content = results[i * 3 + 2]
+
+            check.status = runtime_data.get("status", "new")
+            check.last_ping = datetime.fromisoformat(lp) if (lp := runtime_data.get("last_ping")) else None
+            check.last_start = datetime.fromisoformat(ls) if (ls := runtime_data.get("last_start")) else None
+            check.last_duration_seconds = float(lds) if (lds := runtime_data.get("last_duration_seconds")) else None
+            
+            check.last_pings = [json.loads(log) for log in ping_logs] if ping_logs else []
+            check.last_content = last_content if last_content else None
+
+    except Exception as e:
+        logger.error(f"Failed to enrich checks with Redis data: {e}")
+        # Set a special status if Redis fails to indicate an issue
+        for check in checks:
+            check.status = "unknown"
 
 def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_status: Optional[str], is_paused: bool = False):
     """Atomically updates user stats counters in Redis."""
@@ -256,19 +301,14 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # --- End Redis Counter Strategy ---
 
     # Fallback to DB query if Redis fails, is disabled, or counters are not hydrated.
-    logger.info(f"Falling back to DB query for user stats: {principal.id}")
-    base_query = select(models.Check).filter(models.Check.owner_id == principal.id)
-
-    subquery = base_query.subquery()
+    # Note: Status counts are ONLY available from Redis. DB fallback is for config averages.
+    logger.info(f"Falling back to DB query for user stats averages: {principal.id}")
+    
     stats_query = select(
-        func.count(subquery.c.id).label("total_checks"),
-        func.sum(case((and_(subquery.c.status == 'up', subquery.c.paused == False), 1), else_=0)).label("up_count"),
-        func.sum(case((and_(subquery.c.status == 'down', subquery.c.paused == False), 1), else_=0)).label("down_count"),
-        func.sum(case((and_(subquery.c.status == 'new', subquery.c.paused == False), 1), else_=0)).label("new_count"),
-        func.sum(case((subquery.c.paused == True, 1), else_=0)).label("paused_count"),
-        func.avg(subquery.c.interval_seconds).label("avg_interval_seconds"),
-        func.avg(subquery.c.last_duration_seconds).label("avg_duration_seconds")
-    )
+        func.count(models.Check.id).label("total_checks"),
+        func.sum(case((models.Check.paused == True, 1), else_=0)).label("paused_count"),
+        func.avg(models.Check.interval_seconds).label("avg_interval_seconds")
+    ).filter(models.Check.owner_id == principal.id)
 
     result = await db.execute(stats_query)
     stats = result.first()
@@ -276,12 +316,12 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     if stats and stats.total_checks > 0:
         stats_obj = schemas.CheckStats(
             total_checks=stats.total_checks,
-            up_count=stats.up_count or 0,
-            down_count=stats.down_count or 0,
-            new_count=stats.new_count or 0,
+            up_count=0, # Not available from DB
+            down_count=0, # Not available from DB
+            new_count=0, # Not available from DB
             paused_count=stats.paused_count or 0,
             avg_interval_seconds=stats.avg_interval_seconds,
-            avg_duration_seconds=stats.avg_duration_seconds,
+            avg_duration_seconds=None, # Not available from DB
             user_queued_notifications=await get_user_queued_notification_count(db, principal)
         )
     else:
@@ -350,49 +390,80 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
     validation_passed, reason = _validate_content(check, content)
     if not validation_passed:
         logger.info(f"Check '{check.name}' (ID: {check.id}) failed content validation: {reason}.")
-        # The content is already stored in Redis by the ping endpoint, so we don't need to pass it here.
-        check = await update_check_fail(db, check, reason=reason)
-        return check, reason
+        updated_check, reason = await update_check_fail(db, check, reason=reason)
+        return updated_check, reason
 
-    now = datetime.now(timezone.utc)
-    if check.last_start:
-        last_start = check.last_start
-        if last_start.tzinfo is None:
-            last_start = last_start.replace(tzinfo=timezone.utc)
-        duration = now - last_start
-        check.last_duration_seconds = duration.total_seconds()
-    elif check.last_ping:
-        last_ping = check.last_ping
-        if last_ping.tzinfo is None:
-            last_ping = last_ping.replace(tzinfo=timezone.utc)
-        duration = now - last_ping
-        check.last_duration_seconds = duration.total_seconds()
-    else:
-        check.last_duration_seconds = None
+    if settings.DEBUG_MODE:
+        return check, None
 
-    previous_status = check.status
-    check.last_ping = now
-    check.status = "up"
-    check.last_start = None
-    check.deadline = _calculate_deadline(check)
-    await db.commit()
-    await db.refresh(check)
-    _update_redis_stats_counters(check.owner_id, previous_status, "up", is_paused=check.paused)
+    try:
+        r = get_redis_connection()
+        if not r:
+            return check, None
 
-    if previous_status == "down":
-        logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
-        message = f"🟢 Check Up: [{check.name}] is back up."
-        if check.last_duration_seconds is not None:
-            duration_str = notifications.format_duration(check.last_duration_seconds)
-            message += f" Last run took {duration_str}."
-        notifications.schedule_all_notifications(check, message)
+        key = get_check_runtime_redis_key(check.id)
+        now = datetime.now(timezone.utc)
 
-    return check, None
+        # Get previous state from Redis to calculate duration
+        previous_runtime_data = r.hgetall(key)
+        previous_status = previous_runtime_data.get("status", "new")
+        last_start_str = previous_runtime_data.get("last_start")
+        last_ping_str = previous_runtime_data.get("last_ping")
+
+        duration_seconds = None
+        if last_start_str:
+            last_start = datetime.fromisoformat(last_start_str)
+            duration_seconds = (now - last_start).total_seconds()
+        elif last_ping_str:
+            last_ping = datetime.fromisoformat(last_ping_str)
+            duration_seconds = (now - last_ping).total_seconds()
+
+        # Update runtime fields in Redis
+        runtime_update = {
+            "status": "up",
+            "last_ping": now.isoformat(),
+            "last_start": "", # Clear last_start
+        }
+        if duration_seconds is not None:
+            runtime_update["last_duration_seconds"] = duration_seconds
+        
+        r.hset(key, mapping=runtime_update)
+        
+        # Update deadline in the database for the scheduler
+        deadline = now + timedelta(seconds=check.interval_seconds + check.grace_seconds)
+        check.deadline = deadline
+        await db.commit()
+
+        _update_redis_stats_counters(check.owner_id, previous_status, "up", is_paused=check.paused)
+
+        if previous_status == "down":
+            logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
+            message = f"🟢 Check Up: [{check.name}] is back up."
+            if duration_seconds is not None:
+                duration_str = notifications.format_duration(duration_seconds)
+                message += f" Last run took {duration_str}."
+            notifications.schedule_all_notifications(check, message)
+
+        # Enrich the check object for the response
+        check.status = "up"
+        check.last_ping = now
+        check.last_duration_seconds = duration_seconds
+
+        return check, None
+    except Exception as e:
+        logger.error(f"Failed to update check ping status in Redis for check {check.id}: {e}")
+        return check, None
 
 async def update_check_start(db: AsyncSession, check: models.Check):
-    check.last_start = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(check)
+    if settings.DEBUG_MODE:
+        return check
+    try:
+        r = get_redis_connection()
+        if r:
+            key = get_check_runtime_redis_key(check.id)
+            r.hset(key, "last_start", datetime.now(timezone.utc).isoformat())
+    except Exception as e:
+        logger.error(f"Failed to update check start time in Redis for check {check.id}: {e}")
     return check
 
 async def toggle_check_pause(db: AsyncSession, check: models.Check):
@@ -427,21 +498,37 @@ async def toggle_check_pause(db: AsyncSession, check: models.Check):
     await db.refresh(check)
     return check
 
-async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optional[str] = None):
-    previous_status = check.status
-    check.status = "down"
-    check.last_start = None
-    await db.commit()
-    await db.refresh(check)
-    _update_redis_stats_counters(check.owner_id, previous_status, "down", is_paused=check.paused)
+async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optional[str] = None) -> tuple[models.Check, Optional[str]]:
+    if settings.DEBUG_MODE:
+        return check, reason
 
-    if previous_status != "down":
-        message = f"🔴 Check Failed: [{check.name}] reported a failure."
-        if reason:
-            message += f" Reason: {reason}."
-        notifications.schedule_all_notifications(check, message)
+    try:
+        r = get_redis_connection()
+        if not r:
+            return check, reason
 
-    return check
+        key = get_check_runtime_redis_key(check.id)
+        previous_status = r.hget(key, "status") or "new"
+
+        runtime_update = {
+            "status": "down",
+            "last_start": "", # Clear last_start
+        }
+        r.hset(key, mapping=runtime_update)
+
+        _update_redis_stats_counters(check.owner_id, previous_status, "down", is_paused=check.paused)
+
+        if previous_status != "down":
+            message = f"🔴 Check Failed: [{check.name}] reported a failure."
+            if reason:
+                message += f" Reason: {reason}."
+            notifications.schedule_all_notifications(check, message)
+        
+        check.status = "down" # Enrich for response
+        return check, reason
+    except Exception as e:
+        logger.error(f"Failed to update check fail status in Redis for check {check.id}: {e}")
+        return check, reason
 
 async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc', cursor: Optional[str] = None):
     # If the principal has no ID, they can't have any checks.
@@ -481,24 +568,6 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     result = await db.execute(query)
 
     items = result.scalars().all()
-
-    # Augment with last content from Redis
-    if items and not settings.DEBUG_MODE:
-        try:
-            r = get_redis_connection()
-            if r:
-                pipe = r.pipeline()
-                for item in items:
-                    pipe.get(f"check_content:{item.id}")
-                contents = pipe.execute()
-                for item, content in zip(items, contents):
-                    # Pydantic will pick this up via from_attributes=True
-                    item.last_content = content if content else None
-        except Exception as e:
-            logger.error(f"Failed to bulk fetch last content from Redis: {e}")
-            # Set default if Redis fails
-            for item in items:
-                item.last_content = None
     
     cursor_values = None
 
@@ -577,10 +646,22 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         }
         
         db_check = models.Check(**db_check_data)
-        db_check.deadline = _calculate_deadline(db_check)
+        # Set initial deadline based on creation time
+        db_check.deadline = db_check.created_at + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
         db.add(db_check)
         await db.commit()
         await db.refresh(db_check)
+
+        # Initialize runtime status in Redis
+        if not settings.DEBUG_MODE:
+            try:
+                r = get_redis_connection()
+                if r:
+                    key = get_check_runtime_redis_key(db_check.id)
+                    r.hset(key, mapping={"status": "new"})
+            except Exception as e:
+                logger.error(f"Failed to initialize Redis runtime status for check {db_check.id}: {e}")
+
         _update_redis_stats_counters(principal.id, old_status=None, new_status="new")
         metrics.record_check_creation()
         
@@ -614,24 +695,35 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         for key, value in update_data.items():
             setattr(db_check, key, value)
 
-        # Re-evaluate status after update
-        now = datetime.now(timezone.utc)
-        reference_time = db_check.last_ping if db_check.last_ping else db_check.created_at
-        if reference_time.tzinfo is None:
-            reference_time = reference_time.replace(tzinfo=timezone.utc)
-        deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
+        # After updating config, re-evaluate status and deadline from Redis data
+        new_status = "new"
+        old_status = "new"
+        if not settings.DEBUG_MODE:
+            try:
+                r = get_redis_connection()
+                if r:
+                    key = get_check_runtime_redis_key(db_check.id)
+                    runtime_data = r.hgetall(key)
+                    old_status = runtime_data.get("status", "new")
+                    last_ping_str = runtime_data.get("last_ping")
+                    
+                    now = datetime.now(timezone.utc)
+                    reference_time = datetime.fromisoformat(last_ping_str) if last_ping_str else db_check.created_at
+                    
+                    deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
+                    db_check.deadline = deadline # Update deadline in DB
 
-        old_status = db_check.status
-        if now > deadline:
-            new_status = "down"
-        else:
-            new_status = "up" if db_check.last_ping else "new"
-        db_check.status = new_status
+                    if now > deadline:
+                        new_status = "down"
+                    else:
+                        new_status = "up" if last_ping_str else "new"
+                    
+                    if new_status != old_status:
+                        r.hset(key, "status", new_status)
+
+            except Exception as e:
+                logger.error(f"Failed to re-evaluate status for check {db_check.id} during update: {e}")
         
-        # Recalculate deadline if interval or grace period changed
-        if 'interval_seconds' in update_data or 'grace_seconds' in update_data:
-            db_check.deadline = _calculate_deadline(db_check)
-
         await db.commit()
         await db.refresh(db_check)
         _update_redis_stats_counters(principal.id, old_status, new_status, is_paused=db_check.paused)
@@ -811,8 +903,16 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     if db_check:
         owner_id = db_check.owner_id
         is_paused = db_check.paused
-        old_status = db_check.status
         
+        old_status = "new"
+        if not settings.DEBUG_MODE:
+            try:
+                r = get_redis_connection()
+                if r:
+                    old_status = r.hget(get_check_runtime_redis_key(db_check.id), "status") or "new"
+            except Exception:
+                pass # Use default status on error
+
         await db.delete(db_check)
         await db.commit()
 
@@ -828,6 +928,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
                 r = get_redis_connection()
                 if r:
                     pipe = r.pipeline()
+                    pipe.delete(get_check_runtime_redis_key(check_id))
                     pipe.delete(f"ping_logs:{check_id}")
                     pipe.delete(f"check_content:{check_id}")
                     pipe.execute()

@@ -98,24 +98,38 @@ def get_metrics():
     return prometheus_client.generate_latest()
 
 async def initialize_check_counts(session):
-    """Initialize check counts from the database at startup."""
+    """Initialize check counts from Redis and the database at startup."""
+    from app.core.redis_pool import get_redis_connection
     from sqlalchemy import text
-    # Count non-paused checks by status
-    result = await session.execute(text("""
-        SELECT status, COUNT(*) as count 
-        FROM checks 
-        WHERE paused = false
-        GROUP BY status
-    """))
-    counts = {row[0]: row[1] for row in result}
-    for status in ["up", "down", "new"]:
-        CHECKS_TOTAL.labels(status=status).set(counts.get(status, 0))
+    import logging
 
-    # Count paused checks
-    result_paused = await session.execute(text("""
-        SELECT COUNT(*) as count 
-        FROM checks 
-        WHERE paused = true
-    """))
-    paused_count = result_paused.scalar_one_or_none() or 0
-    CHECKS_TOTAL.labels(status='paused').set(paused_count)
+    # Initialize all to 0 first
+    for status in ["up", "down", "new", "paused"]:
+        CHECKS_TOTAL.labels(status=status).set(0)
+
+    # Count paused checks from the database
+    try:
+        result_paused = await session.execute(text("SELECT COUNT(*) as count FROM checks WHERE paused = true"))
+        paused_count = result_paused.scalar_one_or_none() or 0
+        CHECKS_TOTAL.labels(status='paused').set(paused_count)
+    except Exception as e:
+        logging.error(f"Failed to initialize paused check count from DB: {e}")
+
+    # Count active checks from Redis
+    try:
+        r = get_redis_connection()
+        if r:
+            logging.info("Initializing active check counts from Redis...")
+            status_counts = {"up": 0, "down": 0, "new": 0}
+            # Note: SCAN can be slow on large databases. This is a startup-only task.
+            for key in r.scan_iter(match='check_runtime:*', count=1000):
+                status = r.hget(key, "status")
+                if status in status_counts:
+                    status_counts[status] += 1
+            
+            for status, count in status_counts.items():
+                if count > 0:
+                    CHECKS_TOTAL.labels(status=status).set(count)
+            logging.info("Finished initializing active check counts from Redis.")
+    except Exception as e:
+        logging.error(f"Failed to initialize check counts from Redis: {e}")

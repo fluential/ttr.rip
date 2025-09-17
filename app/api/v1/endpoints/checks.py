@@ -45,23 +45,8 @@ async def read_checks(
         cursor=cursor
     )
 
-    # --- Fetch Ping Logs from Redis ---
-    if settings.SAVE_CHECK_LAST_LOGS and items:
-        try:
-            r = get_redis_connection()
-            if r:
-                pipe = r.pipeline()
-                for check in items:
-                    pipe.lrange(f"ping_logs:{check.id}", 0, 2)
-                
-                log_results = pipe.execute()
-
-                for check, logs in zip(items, log_results):
-                    if logs:
-                        check.last_pings = [json.loads(log) for log in logs]
-        except Exception as e:
-            logger.error(f"Failed to fetch ping logs from Redis: {e}")
-    # --- End Fetch Ping Logs ---
+    # Enrich checks with runtime data from Redis
+    await crud.enrich_checks_with_runtime_data(items)
 
     return schemas.CheckPage(
         items=items,
