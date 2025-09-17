@@ -648,6 +648,16 @@ async def link_telegram_to_user(db: AsyncSession, user: models.User, login_data:
     return user
 
 
+async def unlink_telegram_from_user(db: AsyncSession, user: models.User):
+    """Removes Telegram account details from a user."""
+    user.telegram_user_id = None
+    user.telegram_first_name = None
+    user.telegram_username = None
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 async def update_check_telegram_settings(db: AsyncSession, check_id: int, settings_data: schemas.TelegramSettingsUpdate, principal: models.User):
     # If the principal has no ID, they can't own any checks to update.
     if not principal.id:

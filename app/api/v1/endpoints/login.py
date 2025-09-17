@@ -66,6 +66,21 @@ async def delete_user_account(
     response.delete_cookie("auth_key")
     return response
 
+@router.post("/user/unlink-telegram", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_telegram(
+    user: db_models.User = Depends(security.get_public_user_from_key),
+    db: AsyncSession = Depends(db_base.get_db)
+):
+    """Unlink a Telegram account from the user."""
+    if not user or not user.id or not user.telegram_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No Telegram account is linked to this user."
+        )
+    
+    await crud.unlink_telegram_from_user(db, user=user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 @router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
 async def rotate_api_key(
     response: Response,

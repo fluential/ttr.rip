@@ -106,6 +106,41 @@ async function rotateApiKey() {
     }
 }
 
+async function handleUnlinkTelegram() {
+    if (!confirm('Are you sure you want to disconnect your Telegram account? You will no longer be able to log in via Telegram.')) {
+        return;
+    }
+
+    const unlinkBtn = document.getElementById('unlink-telegram-btn');
+    unlinkBtn.disabled = true;
+    unlinkBtn.setAttribute('aria-busy', 'true');
+
+    try {
+        const response = await fetch('/api/v1/user/unlink-telegram', {
+            method: 'POST',
+            headers: {
+                'X-Auth-Key': authKey,
+                'X-CSRF-Token': csrfToken,
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to disconnect Telegram account');
+        }
+
+        // On success, reload the page to show the login widget again
+        alert('Telegram account disconnected successfully.');
+        window.location.reload();
+
+    } catch (error) {
+        console.error('Error disconnecting Telegram:', error);
+        alert(`Failed to disconnect Telegram account: ${error.message}`);
+        unlinkBtn.disabled = false;
+        unlinkBtn.removeAttribute('aria-busy');
+    }
+}
+
 // --- Status Page Functions ---
 
 let allChecksForStatusPage = [];
@@ -1037,6 +1072,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const importFileInput = document.getElementById('import-file-input');
     const exportBtn = document.getElementById('export-btn');
     const deleteBtn = document.getElementById('delete-account-btn');
+    const unlinkTelegramBtn = document.getElementById('unlink-telegram-btn');
 
     if (importBtn && importFileInput) {
         importBtn.addEventListener('click', () => importFileInput.click());
@@ -1047,6 +1083,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (deleteBtn) {
         deleteBtn.addEventListener('click', confirmDeleteAccount);
+    }
+    if (unlinkTelegramBtn) {
+        unlinkTelegramBtn.addEventListener('click', handleUnlinkTelegram);
     }
 
     // Pagination listeners
