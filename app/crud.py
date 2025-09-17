@@ -477,6 +477,25 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
     result = await db.execute(query)
 
     items = result.scalars().all()
+
+    # Augment with last content from Redis
+    if items and not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                pipe = r.pipeline()
+                for item in items:
+                    pipe.get(f"check_content:{item.id}")
+                contents = pipe.execute()
+                for item, content in zip(items, contents):
+                    # Pydantic will pick this up via from_attributes=True
+                    item.last_content = content if content else None
+        except Exception as e:
+            logger.error(f"Failed to bulk fetch last content from Redis: {e}")
+            # Set default if Redis fails
+            for item in items:
+                item.last_content = None
+    
     cursor_values = None
 
     next_cursor = None

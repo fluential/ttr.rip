@@ -166,6 +166,7 @@ class Check(CheckBase):
     owner_id: int
     owner: Optional[User] = None # Include owner details
     last_pings: list[PingLog] = []
+    last_content: Optional[str] = None
 
     class Config:
         from_attributes = True
