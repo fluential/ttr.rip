@@ -1293,7 +1293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             cronBuilderBtn.style.display = 'none';
             oncalendarHelpBtn.style.display = 'none';
 
-            if (scheduleType === 'simple') {
+            if (scheduleType === 'interval') {
                 simpleFields.style.display = 'block';
                 intervalInput.required = true;
             } else if (scheduleType === 'cron') {
