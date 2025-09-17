@@ -534,10 +534,20 @@ async def update_check_start(db: AsyncSession, check: models.Check):
 
 async def toggle_check_pause(db: AsyncSession, check: models.Check):
     """Toggles the paused state of a check and updates Redis counters."""
+    # The incoming check object has no status. We must fetch it from Redis.
+    current_status = "new"
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                current_status = r.hget(get_check_runtime_redis_key(check.id), "status") or "new"
+        except Exception as e:
+            logger.error(f"Could not get status from Redis for pause toggle: {e}")
+
     is_pausing = not check.paused
     
     # Update prometheus metrics BEFORE changing the state
-    metrics.record_check_pause_toggle(is_pausing, check.status)
+    metrics.record_check_pause_toggle(is_pausing, current_status)
     
     check.paused = is_pausing
     
@@ -550,18 +560,22 @@ async def toggle_check_pause(db: AsyncSession, check: models.Check):
                 key = f"user_stats:counters:{check.owner_id}"
                 if is_pausing:
                     # Decrement status, increment paused
-                    pipe.hincrby(key, check.status, -1)
+                    pipe.hincrby(key, current_status, -1)
                     pipe.hincrby(key, "paused", 1)
                 else: # Resuming
                     # Decrement paused, increment status
                     pipe.hincrby(key, "paused", -1)
-                    pipe.hincrby(key, check.status, 1)
+                    pipe.hincrby(key, current_status, 1)
                 pipe.execute()
         except Exception as e:
             logger.error(f"Could not update Redis stats counters for pause toggle: {e}")
 
     await db.commit()
     await db.refresh(check)
+    
+    # Enrich the check object for the response model
+    await enrich_checks_with_runtime_data([check])
+    
     return check
 
 async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optional[str] = None) -> tuple[models.Check, Optional[str]]:
@@ -763,6 +777,9 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         )
         final_check = result.scalars().one()
         
+        # Enrich with runtime data for the response model
+        await enrich_checks_with_runtime_data([final_check])
+        
         return final_check
     except IntegrityError as e:
         await db.rollback()
@@ -838,6 +855,11 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
 
         _update_redis_stats_counters(principal.id, old_status, new_status, is_paused=db_check.paused)
         metrics.record_check_update(new_status, old_status, is_paused=db_check.paused)
+    
+    if db_check:
+        # Enrich with runtime data for the response model
+        await enrich_checks_with_runtime_data([db_check])
+
     return db_check
 
 
