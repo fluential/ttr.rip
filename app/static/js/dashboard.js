@@ -888,14 +888,19 @@ function viewRecentPings(checkId) {
     if (!pings || pings.length === 0) {
         contentDiv.innerHTML = '<p>No recent pings recorded.</p>';
     } else {
-        contentDiv.innerHTML = pings.map(ping => `
+        const now = new Date();
+        contentDiv.innerHTML = pings.map(ping => {
+            const pingDate = new Date(ping.timestamp);
+            const diffSeconds = (pingDate - now) / 1000;
+            const timeAgo = formatTimeDifference(diffSeconds);
+            return `
             <div class="ping-log-entry">
                 <p><strong><span class="fi fi-${ping.country_code.toLowerCase()}"></span> ${ping.country_name}</strong> - ${ping.connection_type}</p>
-                <p><small>${new Date(ping.timestamp).toLocaleString()}</small></p>
+                <p><small>${pingDate.toLocaleString()} (${timeAgo})</small></p>
                 <p><small><strong>IP:</strong> ${ping.ip_address}</small></p>
                 <p><small><strong>Agent:</strong> ${ping.user_agent}</small></p>
             </div>
-        `).join('<hr class="modal-hr">');
+        `}).join('<hr class="modal-hr">');
     }
 
     modal.showModal();
