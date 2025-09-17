@@ -1,5 +1,11 @@
 import asyncio
 import logging
+import sys
+import os
+
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.core.redis_pool import get_redis_connection
 from app.core.logging_config import setup_logging
 
