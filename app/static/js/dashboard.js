@@ -1018,6 +1018,16 @@ function editCheck(event, id) {
     // Trigger change event to show/hide correct fields
     document.querySelector('input[name="schedule-type"]:checked').dispatchEvent(new Event('change'));
 
+    // Clear slug feedback when populating the form for editing
+    const slugFeedback = document.getElementById('slug-feedback');
+    if (slugFeedback) {
+        slugFeedback.textContent = '';
+    }
+    const slugInput = document.getElementById('slug');
+    if (slugInput) {
+        slugInput.setAttribute('aria-invalid', 'false');
+    }
+
     // Notification settings
     form.querySelector('#notify_after_failures').value = notify_after_failures === null ? 0 : notify_after_failures;
     form.querySelector('#notify_on_up').checked = notify_on_up;
