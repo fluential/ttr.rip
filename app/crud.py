@@ -819,6 +819,19 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
     db_check = result.scalars().first()
     if db_check:
         update_data = check_data.model_dump()
+
+        # Manual validation for schedule fields on update
+        if update_data['schedule_type'] == 'interval':
+            if update_data['interval_seconds'] is None:
+                raise IntegrityError('interval_seconds is required for interval schedule type', params=None, orig=None)
+            update_data['schedule'] = None
+        elif update_data['schedule_type'] in ['cron', 'oncalendar']:
+            if not update_data['schedule']:
+                raise IntegrityError('schedule is required for cron or oncalendar schedule type', params=None, orig=None)
+            update_data['interval_seconds'] = None
+        else:
+            raise IntegrityError(f"Invalid schedule_type: {update_data['schedule_type']}", params=None, orig=None)
+
         tag_names = update_data.pop("tags", [])
         db_check.tags = await _handle_tags(db, db_check.owner_id, tag_names)
 

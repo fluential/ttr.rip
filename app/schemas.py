@@ -67,7 +67,17 @@ class CheckBase(BaseModel):
     use_regex_for_content: bool = False
 
     @model_validator(mode='after')
-    def check_schedule_fields(self) -> 'CheckBase':
+    def check_regex_validity(self) -> 'CheckBase':
+        if self.use_regex_for_content and self.expected_content:
+            try:
+                re.compile(self.expected_content)
+            except re.error as e:
+                raise ValueError(f"Invalid regular expression: {e}")
+        return self
+
+class CheckCreate(CheckBase):
+    @model_validator(mode='after')
+    def check_schedule_fields(self) -> 'CheckCreate':
         if self.schedule_type == 'interval':
             if self.interval_seconds is None:
                 raise ValueError('interval_seconds is required for interval schedule type')
@@ -79,18 +89,6 @@ class CheckBase(BaseModel):
         else:
             raise ValueError(f"Invalid schedule_type: {self.schedule_type}")
         return self
-
-    @model_validator(mode='after')
-    def check_regex_validity(self) -> 'CheckBase':
-        if self.use_regex_for_content and self.expected_content:
-            try:
-                re.compile(self.expected_content)
-            except re.error as e:
-                raise ValueError(f"Invalid regular expression: {e}")
-        return self
-
-class CheckCreate(CheckBase):
-    pass
 
 class CheckUpdate(CheckBase):
     pass
