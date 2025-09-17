@@ -671,8 +671,9 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             <td>${expiresIn}</td>
             <td><img src="${badgeUrl}" alt="Status Badge" style="cursor: pointer;" title="Click to copy Markdown" onclick="copyUrl(this, '[![Status](${badgeUrl})](${pingUrl})')"></td>
             <td>
-                <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
-                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds})">✏️</button>
+                <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;">
+                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds}, '${(check.expected_content || '').replace(/'/g, "\\'")}', '${check.expected_content_type}', ${check.use_regex_for_content})">✏️</button>
+                    <button class="outline action-button" title="View Last Content" onclick="viewLastContent(${check.id})">📄</button>
                     <button class="outline action-button" title="${check.paused ? 'Resume' : 'Pause'}" onclick="togglePause(${check.id})">${check.paused ? '▶️' : '⏸️'}</button>
                     <button class="outline action-button" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
                     <button class="secondary outline action-button" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
@@ -711,7 +712,7 @@ function updateSortIndicators() {
     });
 }
 
-function editCheck(event, id, name, interval, grace, maxRuntime) {
+function editCheck(event, id, name, interval, grace, maxRuntime, expectedContent, expectedContentType, useRegex) {
     event.stopPropagation();
     const details = document.getElementById('new-check-section');
     if (details) {
@@ -722,6 +723,9 @@ function editCheck(event, id, name, interval, grace, maxRuntime) {
     form.querySelector('#interval_seconds').value = interval;
     form.querySelector('#grace_seconds').value = grace;
     form.querySelector('#max_runtime_seconds').value = maxRuntime || '';
+    form.querySelector('#expected_content').value = expectedContent || '';
+    form.querySelector('#expected_content_type').value = expectedContentType || 'present';
+    form.querySelector('#use_regex_for_content').checked = useRegex;
     
     form.dataset.editingId = id;
 
@@ -773,7 +777,10 @@ async function handleFormSubmit(event) {
         name: form.querySelector('#name').value,
         interval_seconds: parseInt(form.querySelector('#interval_seconds').value),
         grace_seconds: parseInt(form.querySelector('#grace_seconds').value),
-        max_runtime_seconds: maxRuntimeValue
+        max_runtime_seconds: maxRuntimeValue,
+        expected_content: form.querySelector('#expected_content').value,
+        expected_content_type: form.querySelector('#expected_content_type').value,
+        use_regex_for_content: form.querySelector('#use_regex_for_content').checked
     };
 
     const headers = {
@@ -836,6 +843,26 @@ async function deleteCheck(checkId) {
         fetchChecks();
     } else {
         alert('Failed to delete check.');
+    }
+}
+
+async function viewLastContent(checkId) {
+    try {
+        const response = await fetch(`/api/v1/checks/${checkId}/content`, {
+            headers: { 'X-Auth-Key': authKey }
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch content');
+        }
+        const data = await response.json();
+        
+        // For now, use a simple alert. A modal would be a good improvement.
+        alert(`Last Captured Content:\n\n${data.content}`);
+
+    } catch (error) {
+        console.error('Error fetching last content:', error);
+        alert(`Could not retrieve last captured content: ${error.message}`);
     }
 }
 

@@ -8,6 +8,7 @@ import json
 from app import crud, schemas, security
 from app.services import notifications
 from app.core.config import settings
+from app.core.redis_pool import get_redis_connection
 from app.db import base as db_base
 from app.db import models as db_models
 
@@ -121,6 +122,32 @@ async def update_check_webhook_settings(
     if not updated_check:
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
+
+
+@router.get("/{check_id}/content", response_class=JSONResponse)
+async def get_check_last_content(
+    check_id: int,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    # First, verify the user has access to this check
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check:
+        raise HTTPException(status_code=404, detail="Check not found")
+
+    content = "No content captured yet."
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                redis_content = r.get(f"check_content:{check_id}")
+                if redis_content:
+                    content = redis_content.decode('utf-8', errors='replace')
+        except Exception as e:
+            logger.error(f"Failed to retrieve content from Redis for check {check_id}: {e}")
+            content = "Error retrieving content from storage."
+    
+    return JSONResponse(content={"content": content})
 
 @router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
 async def test_telegram_notification(

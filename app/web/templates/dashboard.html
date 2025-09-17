@@ -53,7 +53,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="7">Loading...</td></tr>
+                <tr><td colspan="8">Loading...</td></tr>
             </tbody>
         </table>
     </figure>
@@ -100,6 +100,27 @@
                 <input type="number" id="max_runtime_seconds" name="max_runtime_seconds" placeholder="e.g., 3600 for 1 hour">
             </label>
         </div>
+        <details>
+            <summary>Content Filtering (Optional)</summary>
+            <p><small>Optionally, fail the check if the ping request body or query string does or does not contain specific content.</small></p>
+            <label for="expected_content">
+                Expected Content (Plain text or Regex)
+                <textarea id="expected_content" name="expected_content" placeholder="e.g., 'OK', 'SUCCESS', or a regex pattern like 'task_id: \w+'"></textarea>
+            </label>
+            <div class="grid">
+                <label for="expected_content_type">
+                    Rule
+                    <select id="expected_content_type" name="expected_content_type">
+                        <option value="present" selected>Content is Present</option>
+                        <option value="absent">Content is Absent</option>
+                    </select>
+                </label>
+                <label for="use_regex_for_content">
+                    <input type="checkbox" id="use_regex_for_content" name="use_regex_for_content" role="switch">
+                    Use Regular Expression
+                </label>
+            </div>
+        </details>
         <button type="submit">Create Check</button>
     </form>
 </details>

@@ -43,6 +43,9 @@ class CheckBase(BaseModel):
     interval_seconds: int
     grace_seconds: int
     max_runtime_seconds: Optional[int] = None
+    expected_content: Optional[str] = None
+    expected_content_type: Optional[str] = None # 'present' or 'absent'
+    use_regex_for_content: bool = False
 
 class CheckCreate(CheckBase):
     pass
@@ -55,6 +58,9 @@ class CheckExport(BaseModel):
     name: str
     interval_seconds: int
     grace_seconds: int
+    expected_content: Optional[str] = None
+    expected_content_type: Optional[str] = None
+    use_regex_for_content: bool
     telegram_enabled: bool
     telegram_chat_id: Optional[str] = None
     telegram_bot_token: Optional[str] = None
@@ -125,6 +131,9 @@ class Check(CheckBase):
     last_ping: Optional[datetime] = None
     last_start: Optional[datetime] = None
     last_duration_seconds: Optional[int] = None
+    expected_content: Optional[str] = None
+    expected_content_type: Optional[str] = None
+    use_regex_for_content: bool
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     telegram_enabled: bool

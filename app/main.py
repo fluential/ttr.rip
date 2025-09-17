@@ -5,6 +5,7 @@ import time
 import subprocess
 import sys
 import os
+import re
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -247,14 +248,65 @@ async def add_process_time_header(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-@app.get("/ping/{uuid}", status_code=status.HTTP_200_OK)
-async def ping_check(uuid: str, db: AsyncSession = Depends(get_db)):
+@app.api_route("/ping/{uuid}", methods=["GET", "POST"], status_code=status.HTTP_200_OK)
+async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get_db)):
     db_check = await crud.get_check_by_uuid(db, check_uuid=uuid)
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
+
+    # Capture content from GET query params or POST body
+    content = ""
+    if request.method == "GET":
+        content = str(request.query_params)
+    elif request.method == "POST":
+        try:
+            # Limit body size to prevent abuse (e.g., 1MB)
+            body_bytes = await request.body()
+            if len(body_bytes) > 1_048_576:
+                 raise HTTPException(status_code=413, detail="Request body too large.")
+            content = body_bytes.decode('utf-8', errors='replace')
+        except Exception:
+            content = "[Could not decode request body]"
+
+    # Store content in Redis with a 1-hour TTL
+    if not settings.DEBUG_MODE:
+        try:
+            r = get_redis_connection()
+            if r:
+                r.set(f"check_content:{db_check.id}", content, ex=3600)
+        except Exception as e:
+            logger.error(f"Failed to store ping content in Redis for check {db_check.id}: {e}")
+
+    # --- Content Validation ---
+    validation_passed = True
+    if db_check.expected_content and db_check.expected_content_type in ['present', 'absent']:
+        found = False
+        try:
+            if db_check.use_regex_for_content:
+                if re.search(db_check.expected_content, content):
+                    found = True
+            else:
+                if db_check.expected_content in content:
+                    found = True
+        except re.error as e:
+            logger.warning(f"Invalid regex for check {db_check.id}: {e}")
+            # Treat invalid regex as a failed check
+            found = False
+
+        if db_check.expected_content_type == 'present' and not found:
+            validation_passed = False
+            logger.info(f"Content validation failed for check {db_check.id}: expected content not found.")
+        elif db_check.expected_content_type == 'absent' and found:
+            validation_passed = False
+            logger.info(f"Content validation failed for check {db_check.id}: unexpected content was found.")
+    # --- End Content Validation ---
+
     previous_status = db_check.status
-    updated_check = await crud.update_check_ping(db, check=db_check)
-    
+    if validation_passed:
+        updated_check = await crud.update_check_ping(db, check=db_check)
+    else:
+        updated_check = await crud.update_check_fail(db, check=db_check)
+
     # Record check metrics
     metrics.record_check_update(updated_check.status, previous_status)
     if updated_check.last_duration_seconds:
