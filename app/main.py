@@ -313,7 +313,7 @@ async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get
     updated_check, reason = await crud.update_check_ping(db, check=db_check, content=content)
 
     # Record check metrics
-    metrics.record_check_update(updated_check.status, previous_status)
+    metrics.record_check_update(updated_check.status, previous_status, is_paused=updated_check.paused)
     if updated_check.last_duration_seconds:
         metrics.record_check_duration(updated_check.last_duration_seconds)
     
@@ -384,7 +384,7 @@ async def fail_check(uuid: str, db: AsyncSession = Depends(get_db)):
     updated_check = await crud.update_check_fail(db, check=db_check, reason="Manual failure triggered")
     
     # Record check metrics
-    metrics.record_check_update(updated_check.status, previous_status)
+    metrics.record_check_update(updated_check.status, previous_status, is_paused=updated_check.paused)
     
     return {"message": "OK"}
 

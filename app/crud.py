@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.exc import IntegrityError
 import logging
 from app.db import models
-from app import schemas, security
+from app import schemas, security, metrics
 from app.services import notifications
 from app.core import encryption
 from app.worker import celery_app
@@ -398,6 +398,10 @@ async def update_check_start(db: AsyncSession, check: models.Check):
 async def toggle_check_pause(db: AsyncSession, check: models.Check):
     """Toggles the paused state of a check and updates Redis counters."""
     is_pausing = not check.paused
+    
+    # Update prometheus metrics BEFORE changing the state
+    metrics.record_check_pause_toggle(is_pausing, check.status)
+    
     check.paused = is_pausing
     
     # Update redis counters
@@ -578,6 +582,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         await db.commit()
         await db.refresh(db_check)
         _update_redis_stats_counters(principal.id, old_status=None, new_status="new")
+        metrics.record_check_creation()
         
         result = await db.execute(
             select(models.Check)
@@ -630,6 +635,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         await db.commit()
         await db.refresh(db_check)
         _update_redis_stats_counters(principal.id, old_status, new_status, is_paused=db_check.paused)
+        metrics.record_check_update(new_status, old_status, is_paused=db_check.paused)
     return db_check
 
 
@@ -804,6 +810,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         # Otherwise, we decrement its last known status counter.
         status_to_decrement = "paused" if is_paused else old_status
         _update_redis_stats_counters(owner_id, old_status=status_to_decrement, new_status=None)
+        metrics.record_check_deletion(status_to_decrement)
 
         # Clean up associated Redis keys
         if not settings.DEBUG_MODE:

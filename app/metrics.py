@@ -23,7 +23,7 @@ def initialize_metrics(app_version: str):
     APP_INFO.info({"version": app_version})
     
     # Initialize status-based metrics
-    for status in ["up", "down", "new"]:
+    for status in ["up", "down", "new", "paused"]:
         CHECKS_TOTAL.labels(status=status).set(0) # Initialize to 0
 
     # Initialize notification metrics
@@ -31,11 +31,30 @@ def initialize_metrics(app_version: str):
         for ntype in ["telegram"]:
             NOTIFICATIONS_SENT.labels(status=status, type=ntype)
 
-def record_check_update(status: str, previous_status: Optional[str] = None):
-    """Record a check status update"""
+def record_check_update(status: str, previous_status: Optional[str] = None, is_paused: bool = False):
+    """Record a check status update. Does nothing if the check is paused."""
+    if is_paused:
+        return
     CHECKS_TOTAL.labels(status=status).inc()
     if previous_status and previous_status != status:
         CHECKS_TOTAL.labels(status=previous_status).dec()
+
+def record_check_creation():
+    """Record the creation of a new check."""
+    CHECKS_TOTAL.labels(status='new').inc()
+
+def record_check_deletion(status: str):
+    """Record the deletion of a check."""
+    CHECKS_TOTAL.labels(status=status).dec()
+
+def record_check_pause_toggle(is_pausing: bool, status: str):
+    """Record a check being paused or resumed."""
+    if is_pausing:
+        CHECKS_TOTAL.labels(status=status).dec()
+        CHECKS_TOTAL.labels(status='paused').inc()
+    else: # Resuming
+        CHECKS_TOTAL.labels(status='paused').dec()
+        CHECKS_TOTAL.labels(status=status).inc()
 
 def record_check_duration(duration_seconds: float):
     """Record a check execution duration"""
@@ -81,11 +100,22 @@ def get_metrics():
 async def initialize_check_counts(session):
     """Initialize check counts from the database at startup."""
     from sqlalchemy import text
+    # Count non-paused checks by status
     result = await session.execute(text("""
         SELECT status, COUNT(*) as count 
         FROM checks 
+        WHERE paused = false
         GROUP BY status
     """))
     counts = {row[0]: row[1] for row in result}
     for status in ["up", "down", "new"]:
         CHECKS_TOTAL.labels(status=status).set(counts.get(status, 0))
+
+    # Count paused checks
+    result_paused = await session.execute(text("""
+        SELECT COUNT(*) as count 
+        FROM checks 
+        WHERE paused = true
+    """))
+    paused_count = result_paused.scalar_one_or_none() or 0
+    CHECKS_TOTAL.labels(status='paused').set(paused_count)
