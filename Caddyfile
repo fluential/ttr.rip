@@ -156,15 +156,15 @@
         reverse_proxy localhost:8000
     }
 
-    # Special handling for ping endpoints (brief micro-caching)
+    # Special handling for ping endpoints (30s micro-caching)
     handle /ping/* {
-        # Ultra-short micro-caching for ping endpoints (1s)
+        # Micro-caching for ping/badge endpoints (30s)
         cache {
-            ttl 1s
+            ttl 30s
         }
         
         # Add cache control header
-        header Cache-Control "public, max-age=1"
+        header Cache-Control "public, max-age=30"
         
         reverse_proxy localhost:8000
     }
