@@ -720,8 +720,8 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         row.innerHTML = `
             <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
             <td>${check.name}</td>
-            <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')"></td>
-            <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')"></td>
+            <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 8ch; text-align: center;"></td>
+            <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 8ch; text-align: center;"></td>
             <td>${lastPing}</td>
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
