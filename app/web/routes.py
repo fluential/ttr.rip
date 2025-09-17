@@ -105,8 +105,20 @@ async def telegram_callback(
 
     user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
     if not user:
-        # This should theoretically not happen due to JIT creation and exception in dependency
-        raise HTTPException(status_code=404, detail="User not found for the provided auth key.")
+        # User is new/transient. Create them now before linking.
+        try:
+            logger.info(f"Telegram callback for a new user with auth_key ...{auth_key[-4:]}. Creating user now.")
+            user_schema = schemas.UserCreate(auth_key=auth_key)
+            user = await crud.create_user(db, user=user_schema)
+        except IntegrityError:
+            await db.rollback()
+            logger.warning(f"Race condition on user creation during Telegram callback for auth_key ...{auth_key[-4:]}. Refetching.")
+            user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
+            if not user:
+                raise HTTPException(status_code=500, detail="Failed to create or find user during Telegram link.")
+        except Exception:
+            await db.rollback()
+            raise
 
     query_params = dict(request.query_params)
     logger.info(f"Handling Telegram auth callback for user ID {user.id} with auth_key ...{user.auth_key[-4:]}")
