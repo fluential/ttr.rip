@@ -268,7 +268,8 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding-top: var(--pico-spacing);
+        margin: 0; /* Override Pico's negative margins */
+        padding: var(--pico-spacing); /* Use padding for spacing */
     }
     dialog > article > header .close {
         position: static;
