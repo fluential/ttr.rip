@@ -580,10 +580,15 @@ async function fetchUserStats() {
 
         summaryDiv.innerHTML = `
             <div class="grid">
-                <div><strong>Total Checks:</strong> ${stats.total_checks}</div>
+                <div><strong>Total:</strong> ${stats.total_checks}</div>
+                <div><strong>Up:</strong> ${stats.up_count}</div>
+                <div><strong>Down:</strong> ${stats.down_count}</div>
+                <div><strong>Paused:</strong> ${stats.paused_count}</div>
+            </div>
+            <div class="grid">
                 <div><strong>Avg. Interval:</strong> ${avgInterval}</div>
                 <div><strong>Avg. Duration:</strong> ${avgDuration}</div>
-                <div><strong>Notifications Queued:</strong> ${stats.user_queued_notifications}</div>
+                <div style="grid-column: span 2;"><strong>Notifications Queued:</strong> ${stats.user_queued_notifications}</div>
             </div>
         `;
     } catch (error) {
@@ -618,7 +623,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     const statusSummary = document.getElementById('status-summary');
     
     tableBody.innerHTML = '';
-    const statusCounts = { up: 0, down: 0, new: 0 };
+    const statusCounts = { up: 0, down: 0, new: 0, paused: 0 };
 
     if (checks.length === 0) {
         tableBody.innerHTML = '<tr><td colspan="9">No checks found. Create one above!</td></tr>';
@@ -626,6 +631,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: 0`;
             statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: 0`;
             statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: 0`;
+            statusSummary.querySelector('.status-paused').innerHTML = `<span>⏸️</span> Paused: 0`;
         }
         updatePagination(null, null);
         return;
@@ -650,9 +656,12 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             currentStatus = 'down';
         }
 
-        if (currentStatus === 'up') statusCounts.up++;
-        else if (currentStatus === 'down') statusCounts.down++;
-        else if (currentStatus === 'new') statusCounts.new++;
+        const displayStatus = check.paused ? 'paused' : currentStatus;
+
+        if (displayStatus === 'up') statusCounts.up++;
+        else if (displayStatus === 'down') statusCounts.down++;
+        else if (displayStatus === 'new') statusCounts.new++;
+        else if (displayStatus === 'paused') statusCounts.paused++;
 
         const statusIcon = {
             'up': '🟢',
@@ -661,7 +670,6 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             'paused': '⏸️'
         };
         
-        const displayStatus = check.paused ? 'paused' : currentStatus;
         const statusText = displayStatus.toUpperCase();
         const badgeUrl = `${window.location.origin}/ping/${check.uuid}/badge.svg`;
 
@@ -696,6 +704,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: ${statusCounts.up}`;
         statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: ${statusCounts.down}`;
         statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: ${statusCounts.new}`;
+        statusSummary.querySelector('.status-paused').innerHTML = `<span>⏸️</span> Paused: ${statusCounts.paused}`;
     }
     updatePagination(data.next_cursor, data.prev_cursor);
     updateSortIndicators();

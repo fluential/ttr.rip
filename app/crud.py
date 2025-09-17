@@ -31,9 +31,15 @@ def _calculate_deadline(check: models.Check) -> Optional[datetime]:
         
     return reference_time + timedelta(seconds=check.interval_seconds + check.grace_seconds)
 
-def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_status: Optional[str]):
+def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_status: Optional[str], is_paused: bool = False):
     """Atomically updates user stats counters in Redis."""
     if settings.DEBUG_MODE or not settings.REDIS_URL or old_status == new_status:
+        return
+
+    # If a check is paused, its contribution is to the 'paused' counter, which is handled
+    # by the toggle_check_pause function. Changes to the underlying status of a paused
+    # check should not affect the visible stats.
+    if is_paused and new_status is not None: # The new_status check prevents affecting deletion
         return
 
     try:
@@ -213,7 +219,7 @@ async def get_check_by_id_and_owner(db: AsyncSession, check_id: int, principal: 
 async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # If the principal has no ID, they have no stats.
     if not principal.id:
-        return schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0)
+        return schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0, paused_count=0)
 
     # --- Redis Counter Strategy ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
@@ -240,6 +246,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
                         up_count=int(cached_counters.get("up", 0)),
                         down_count=int(cached_counters.get("down", 0)),
                         new_count=int(cached_counters.get("new", 0)),
+                        paused_count=int(cached_counters.get("paused", 0)),
                         avg_interval_seconds=averages.avg_interval_seconds if averages else None,
                         avg_duration_seconds=averages.avg_duration_seconds if averages else None,
                         user_queued_notifications=await get_user_queued_notification_count(db, principal)
@@ -255,9 +262,10 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     subquery = base_query.subquery()
     stats_query = select(
         func.count(subquery.c.id).label("total_checks"),
-        func.sum(case((subquery.c.status == 'up', 1), else_=0)).label("up_count"),
-        func.sum(case((subquery.c.status == 'down', 1), else_=0)).label("down_count"),
-        func.sum(case((subquery.c.status == 'new', 1), else_=0)).label("new_count"),
+        func.sum(case((and_(subquery.c.status == 'up', subquery.c.paused == False), 1), else_=0)).label("up_count"),
+        func.sum(case((and_(subquery.c.status == 'down', subquery.c.paused == False), 1), else_=0)).label("down_count"),
+        func.sum(case((and_(subquery.c.status == 'new', subquery.c.paused == False), 1), else_=0)).label("new_count"),
+        func.sum(case((subquery.c.paused == True, 1), else_=0)).label("paused_count"),
         func.avg(subquery.c.interval_seconds).label("avg_interval_seconds"),
         func.avg(subquery.c.last_duration_seconds).label("avg_duration_seconds")
     )
@@ -271,12 +279,13 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             up_count=stats.up_count or 0,
             down_count=stats.down_count or 0,
             new_count=stats.new_count or 0,
+            paused_count=stats.paused_count or 0,
             avg_interval_seconds=stats.avg_interval_seconds,
             avg_duration_seconds=stats.avg_duration_seconds,
             user_queued_notifications=await get_user_queued_notification_count(db, principal)
         )
     else:
-        stats_obj = schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0)
+        stats_obj = schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0, paused_count=0)
 
     # --- Rehydrate Redis Counters ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
@@ -289,6 +298,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
                 pipe.hset(key, "up", stats_obj.up_count)
                 pipe.hset(key, "down", stats_obj.down_count)
                 pipe.hset(key, "new", stats_obj.new_count)
+                pipe.hset(key, "paused", stats_obj.paused_count)
                 pipe.execute()
                 logger.info(f"Rehydrated Redis counters for user {principal.id}")
         except Exception as e:
@@ -365,7 +375,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
     check.deadline = _calculate_deadline(check)
     await db.commit()
     await db.refresh(check)
-    _update_redis_stats_counters(check.owner_id, previous_status, "up")
+    _update_redis_stats_counters(check.owner_id, previous_status, "up", is_paused=check.paused)
 
     if previous_status == "down":
         logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
@@ -384,8 +394,29 @@ async def update_check_start(db: AsyncSession, check: models.Check):
     return check
 
 async def toggle_check_pause(db: AsyncSession, check: models.Check):
-    """Toggles the paused state of a check."""
-    check.paused = not check.paused
+    """Toggles the paused state of a check and updates Redis counters."""
+    is_pausing = not check.paused
+    check.paused = is_pausing
+    
+    # Update redis counters
+    if not settings.DEBUG_MODE and settings.REDIS_URL:
+        try:
+            r = get_redis_connection()
+            if r:
+                pipe = r.pipeline()
+                key = f"user_stats:counters:{check.owner_id}"
+                if is_pausing:
+                    # Decrement status, increment paused
+                    pipe.hincrby(key, check.status, -1)
+                    pipe.hincrby(key, "paused", 1)
+                else: # Resuming
+                    # Decrement paused, increment status
+                    pipe.hincrby(key, "paused", -1)
+                    pipe.hincrby(key, check.status, 1)
+                pipe.execute()
+        except Exception as e:
+            logger.error(f"Could not update Redis stats counters for pause toggle: {e}")
+
     await db.commit()
     await db.refresh(check)
     return check
@@ -396,7 +427,7 @@ async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optio
     check.last_start = None
     await db.commit()
     await db.refresh(check)
-    _update_redis_stats_counters(check.owner_id, previous_status, "down")
+    _update_redis_stats_counters(check.owner_id, previous_status, "down", is_paused=check.paused)
 
     if previous_status != "down":
         message = f"🔴 Check Failed: [{check.name}] reported a failure."
@@ -577,7 +608,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
 
         await db.commit()
         await db.refresh(db_check)
-        _update_redis_stats_counters(principal.id, old_status, new_status)
+        _update_redis_stats_counters(principal.id, old_status, new_status, is_paused=db_check.paused)
     return db_check
 
 
@@ -742,10 +773,16 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
     db_check = result.scalars().first()
     if db_check:
         owner_id = db_check.owner_id
+        is_paused = db_check.paused
         old_status = db_check.status
+        
         await db.delete(db_check)
         await db.commit()
-        _update_redis_stats_counters(owner_id, old_status=old_status, new_status=None)
+
+        # If the check was paused, we decrement the 'paused' counter.
+        # Otherwise, we decrement its last known status counter.
+        status_to_decrement = "paused" if is_paused else old_status
+        _update_redis_stats_counters(owner_id, old_status=status_to_decrement, new_status=None)
 
         # Clean up associated Redis keys
         if not settings.DEBUG_MODE:

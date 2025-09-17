@@ -317,7 +317,8 @@ async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get
     if updated_check.last_duration_seconds:
         metrics.record_check_duration(updated_check.last_duration_seconds)
     
-    return {"message": "OK"}
+    process_time = getattr(request.state, "process_time", 0)
+    return {"message": "OK", "process_time_seconds": process_time}
 
 
 @app.get("/ping/{uuid}/start", status_code=status.HTTP_200_OK)
