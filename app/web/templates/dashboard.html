@@ -17,20 +17,6 @@
 </article>
 
 <article>
-    <header>User Stats</header>
-    <div id="user-stats-summary">
-        <p>Loading user stats...</p>
-    </div>
-</article>
-
-<article>
-    <header>Operational Metrics</header>
-    <div id="operational-metrics-summary">
-        <p>Loading operational metrics...</p>
-    </div>
-</article>
-
-<article>
     <header>Current Checks</header>
     <div class="refresh-controls" style="margin-bottom: 1rem; text-align: right;">
         <div class="refresh-buttons-container">
@@ -46,10 +32,10 @@
                     <th scope="col" data-sort="status">Status</th>
                     <th scope="col" data-sort="name">Name</th>
                     <th scope="col" data-sort="uuid">Ping URL</th>
+                    <th scope="col">Badge URL</th>
                     <th scope="col" data-sort="last_ping">Last Ping</th>
                     <th scope="col" data-sort="last_duration_seconds">Last Duration</th>
                     <th scope="col" data-sort="deadline">Expires in</th>
-                    <th scope="col">Badge URL</th>
                     <th scope="col">Recent Pings</th>
                     <th scope="col">Actions</th>
                 </tr>
@@ -128,6 +114,35 @@
 </details>
 
 <article>
+    <header>Status Pages</header>
+    <div id="status-pages-list">
+        <p>Loading status pages...</p>
+    </div>
+    <details id="new-status-page-section">
+        <summary>New Status Page</summary>
+        <form id="new-status-page-form" style="margin-top: 1.5rem;">
+            <div class="grid">
+                <label for="status-page-name">
+                    Name
+                    <input type="text" id="status-page-name" name="name" placeholder="My Project Status" required>
+                </label>
+                <label for="status-page-slug">
+                    Slug (URL)
+                    <input type="text" id="status-page-slug" name="slug" placeholder="my-project-status" required pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens are allowed.">
+                </label>
+            </div>
+            <fieldset>
+                <legend>Checks to include</legend>
+                <div id="status-page-checks-list">
+                    <p>Loading checks...</p>
+                </div>
+            </fieldset>
+            <button type="submit">Create Status Page</button>
+        </form>
+    </details>
+</article>
+
+<article>
     <header>Account Management</header>
     <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
     <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
@@ -159,32 +174,17 @@
 </article>
 
 <article>
-    <header>Status Pages</header>
-    <div id="status-pages-list">
-        <p>Loading status pages...</p>
+    <header>User Stats</header>
+    <div id="user-stats-summary">
+        <p>Loading user stats...</p>
     </div>
-    <details id="new-status-page-section">
-        <summary>New Status Page</summary>
-        <form id="new-status-page-form" style="margin-top: 1.5rem;">
-            <div class="grid">
-                <label for="status-page-name">
-                    Name
-                    <input type="text" id="status-page-name" name="name" placeholder="My Project Status" required>
-                </label>
-                <label for="status-page-slug">
-                    Slug (URL)
-                    <input type="text" id="status-page-slug" name="slug" placeholder="my-project-status" required pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens are allowed.">
-                </label>
-            </div>
-            <fieldset>
-                <legend>Checks to include</legend>
-                <div id="status-page-checks-list">
-                    <p>Loading checks...</p>
-                </div>
-            </fieldset>
-            <button type="submit">Create Status Page</button>
-        </form>
-    </details>
+</article>
+
+<article>
+    <header>Operational Metrics</header>
+    <div id="operational-metrics-summary">
+        <p>Loading operational metrics...</p>
+    </div>
 </article>
 
 <!-- Recent Pings Modal -->

@@ -680,10 +680,10 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
             <td>${check.name}</td>
             <td><input type="text" class="ping-url" value="Click to copy Ping URL" readonly onclick="copyUrl(this, '${pingUrl}')"></td>
+            <td><input type="text" class="ping-url" value="Click to copy Badge URL" readonly onclick="copyUrl(this, '${badgeUrl}')"></td>
             <td>${lastPing}</td>
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
-            <td><input type="text" class="ping-url" value="Click to copy Badge URL" readonly onclick="copyUrl(this, '${badgeUrl}')"></td>
             <td>
                 <button class="outline action-button" title="Recent Pings" onclick="viewRecentPings(${check.id})" ${!check.last_pings || check.last_pings.length === 0 ? 'disabled' : ''}>📜</button>
             </td>
