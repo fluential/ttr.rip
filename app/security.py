@@ -64,7 +64,9 @@ async def verify_api_csrf_token(
     against the token stored in the cookie. (Double Submit Cookie Pattern)
     """
     csrf_token_cookie = request.cookies.get("csrf_token")
+    logger.debug(f"CSRF check: cookie_token='...{csrf_token_cookie[-4:] if csrf_token_cookie else 'None'}' header_token='...{x_csrf_token[-4:] if x_csrf_token else 'None'}'")
     if not csrf_token_cookie or not x_csrf_token or not secrets.compare_digest(csrf_token_cookie, x_csrf_token):
+        logger.warning("CSRF token mismatch.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
 
 
@@ -86,8 +88,10 @@ async def get_public_user_from_key(
     )
 
     auth_key = x_auth_key
+    logger.debug(f"get_public_user_from_key called with auth_key: ...{auth_key[-4:] if auth_key else 'None'}")
 
     if not auth_key:
+        logger.warning("Auth key is missing from header.")
         raise credentials_exception
 
     # --- Blacklist Check ---
@@ -103,13 +107,16 @@ async def get_public_user_from_key(
             raise credentials_exception
     # --- End Blacklist Check ---
 
+    logger.debug(f"Looking up user by auth key: ...{auth_key[-4:]}")
     user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
     if not user:
+        logger.warning(f"No user found for auth key ...{auth_key[-4:]}. Returning temporary user object.")
         # User does not exist. Return a temporary, non-persistent User object.
         # This allows read-only operations to proceed for a new key without a DB write.
         # The user will be created in the DB when they perform a write action (e.g., create_check).
         return db_models.User(auth_key=auth_key)
     
+    logger.debug(f"User found for auth key ...{auth_key[-4:]}: user_id={user.id}")
     return user
 
 
