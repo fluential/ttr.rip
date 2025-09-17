@@ -204,7 +204,7 @@ app = FastAPI(lifespan=lifespan, title="ttr.rip")
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
-    start_time = time.time()
+    start_time = time.perf_counter()
     
     # Record API request metrics
     path = request.url.path
@@ -226,7 +226,7 @@ async def add_process_time_header(request: Request, call_next):
     response.headers["Vary"] = "Accept-Encoding, Accept-Language"
     
     # Record response time and status
-    process_time = time.time() - start_time
+    process_time = time.perf_counter() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     request.state.process_time = process_time
     
