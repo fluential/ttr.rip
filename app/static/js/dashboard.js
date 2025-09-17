@@ -410,38 +410,50 @@ async function handleStatusPageFormSubmit(event) {
     event.preventDefault();
     const form = event.target;
     const editingId = form.dataset.editingId;
+    const submitButton = form.querySelector('button[type="submit"]');
 
-    const selectedChecks = Array.from(form.querySelectorAll('input[name="check_ids"]:checked')).map(cb => parseInt(cb.value));
+    submitButton.disabled = true;
+    submitButton.setAttribute('aria-busy', 'true');
 
-    const data = {
-        name: form.querySelector('#status-page-name').value,
-        slug: form.querySelector('#status-page-slug').value,
-        check_ids: selectedChecks
-    };
+    try {
+        const selectedChecks = Array.from(form.querySelectorAll('input[name="check_ids"]:checked')).map(cb => parseInt(cb.value));
 
-    const headers = {
-        'X-Auth-Key': authKey,
-        'X-CSRF-Token': csrfToken,
-        'Content-Type': 'application/json'
-    };
+        const data = {
+            name: form.querySelector('#status-page-name').value,
+            slug: form.querySelector('#status-page-slug').value,
+            check_ids: selectedChecks
+        };
 
-    let response;
-    let url = '/api/v1/status-pages';
-    let method = 'POST';
+        const headers = {
+            'X-Auth-Key': authKey,
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json'
+        };
 
-    if (editingId) {
-        url += `/${editingId}`;
-        method = 'PUT';
-    }
+        let response;
+        let url = '/api/v1/status-pages';
+        let method = 'POST';
 
-    response = await fetch(url, { method, headers, body: JSON.stringify(data) });
+        if (editingId) {
+            url += `/${editingId}`;
+            method = 'PUT';
+        }
 
-    if (response.ok) {
-        cancelStatusPageEdit();
-        fetchStatusPages();
-    } else {
-        const error = await response.json();
-        alert(`Failed to ${editingId ? 'update' : 'create'} status page: ${error.detail}`);
+        response = await fetch(url, { method, headers, body: JSON.stringify(data) });
+
+        if (response.ok) {
+            cancelStatusPageEdit();
+            fetchStatusPages();
+        } else {
+            const error = await response.json();
+            alert(`Failed to ${editingId ? 'update' : 'create'} status page: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error submitting status page form:', error);
+        alert(`An unexpected error occurred: ${error.message}`);
+    } finally {
+        submitButton.disabled = false;
+        submitButton.removeAttribute('aria-busy');
     }
 }
 
