@@ -154,6 +154,12 @@ th[data-sort].sort-desc::after {
 
 #pings-modal article header {
     padding-top: 1.5rem;
+    position: relative;
+}
+
+#pings-modal article header .close {
+    top: 0.25rem;
+    right: 0.5rem;
 }
 
 .ping-log-entry p {
