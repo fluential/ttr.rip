@@ -187,6 +187,18 @@
     </div>
 </article>
 
+<style>
+    /* Fix for modal header overflow */
+    dialog > article > header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    dialog > article > header .close {
+        position: static;
+    }
+</style>
+
 <!-- Recent Pings Modal -->
 <dialog id="pings-modal">
     <article>
