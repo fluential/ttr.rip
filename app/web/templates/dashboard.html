@@ -104,6 +104,7 @@
                     Cron Expression
                     <input type="text" id="schedule" name="schedule" placeholder="* * * * *">
                 </label>
+                <button type="button" class="outline secondary" id="show-calendar-btn" style="margin-bottom: 1rem;">On-Calendar Schedule...</button>
             </div>
             <div class="grid">
                 <label for="grace_seconds">
@@ -258,6 +259,15 @@
         padding: 0.1rem 0.3rem;
         border-radius: var(--pico-border-radius);
     }
+    /* On-Calendar Modal Checkbox Grid */
+    .grid-checkboxes {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: 0.5rem;
+    }
+    .grid-checkboxes label {
+        margin-bottom: 0;
+    }
 </style>
 
 <!-- Recent Pings Modal -->
@@ -285,6 +295,49 @@
     <option value="Asia/Tokyo">
     <option value="Australia/Sydney">
 </datalist>
+
+<!-- On-Calendar Schedule Modal -->
+<dialog id="on-calendar-modal">
+    <article>
+        <header>
+            <span>On-Calendar Schedule</span>
+            <a href="#close" aria-label="Close" class="close" onclick="document.getElementById('on-calendar-modal').close()"></a>
+        </header>
+        
+        <fieldset>
+            <legend>Allowed Times of Day (UTC)</legend>
+            <div class="grid">
+                <label for="time-from">
+                    From
+                    <input type="time" id="time-from" name="time-from" value="00:00">
+                </label>
+                <label for="time-to">
+                    To
+                    <input type="time" id="time-to" name="time-to" value="23:59">
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Allowed Days of Week</legend>
+            <div id="dow-grid" class="grid-checkboxes">
+                <!-- JS will populate this -->
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Allowed Days of Month</legend>
+            <div id="dom-grid" class="grid-checkboxes">
+                <!-- JS will populate this -->
+            </div>
+        </fieldset>
+
+        <footer>
+            <button type="button" class="secondary" onclick="document.getElementById('on-calendar-modal').close()">Cancel</button>
+            <button type="button" id="apply-calendar-btn">Apply</button>
+        </footer>
+    </article>
+</dialog>
 
 <!-- Last Content Modal -->
 <dialog id="content-modal">

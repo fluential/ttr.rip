@@ -106,6 +106,39 @@ async function rotateApiKey() {
     }
 }
 
+function buildCronExpression() {
+    // Times of Day
+    const timeFrom = document.getElementById('time-from').value;
+    const timeTo = document.getElementById('time-to').value;
+    let hourPart = '*';
+    if (timeFrom !== '00:00' || timeTo !== '23:59') {
+        const fromHour = parseInt(timeFrom.split(':')[0]);
+        const toHour = parseInt(timeTo.split(':')[0]);
+        hourPart = `${fromHour}-${toHour}`;
+    }
+
+    // Days of Week
+    const dowCheckboxes = document.querySelectorAll('#dow-grid input[type="checkbox"]');
+    const checkedDow = Array.from(dowCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+    let dowPart = '*';
+    if (checkedDow.length > 0 && checkedDow.length < 7) {
+        dowPart = checkedDow.join(',');
+    }
+
+    // Days of Month
+    const domCheckboxes = document.querySelectorAll('#dom-grid input[type="checkbox"]');
+    const checkedDom = Array.from(domCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+    let domPart = '*';
+    if (checkedDom.length > 0 && checkedDom.length < 31) {
+        domPart = checkedDom.join(',');
+    }
+
+    // Assemble the expression (minute hour dom month dow)
+    const cronExpression = `* ${hourPart} ${domPart} * ${dowPart}`;
+    document.getElementById('schedule').value = cronExpression;
+    document.getElementById('on-calendar-modal').close();
+}
+
 async function handleUnlinkTelegram() {
     if (!confirm('Are you sure you want to disconnect your Telegram account? You will no longer be able to log in via Telegram.')) {
         return;
@@ -1074,6 +1107,49 @@ function viewRecentPings(checkId) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // On-Calendar Modal setup
+    const showCalendarBtn = document.getElementById('show-calendar-btn');
+    if (showCalendarBtn) {
+        showCalendarBtn.addEventListener('click', () => {
+            // Reset modal to default state when opening
+            document.getElementById('time-from').value = '00:00';
+            document.getElementById('time-to').value = '23:59';
+            document.querySelectorAll('#dow-grid input, #dom-grid input').forEach(cb => cb.checked = false);
+            document.getElementById('on-calendar-modal').showModal();
+        });
+    }
+
+    const applyCalendarBtn = document.getElementById('apply-calendar-btn');
+    if (applyCalendarBtn) {
+        applyCalendarBtn.addEventListener('click', buildCronExpression);
+    }
+
+    // Populate checkbox grids
+    const dowGrid = document.getElementById('dow-grid');
+    if (dowGrid) {
+        const days = [{label: 'Mon', value: 1}, {label: 'Tue', value: 2}, {label: 'Wed', value: 3}, {label: 'Thu', value: 4}, {label: 'Fri', value: 5}, {label: 'Sat', value: 6}, {label: 'Sun', value: 0}];
+        dowGrid.innerHTML = days.map(day => `
+            <label>
+                <input type="checkbox" value="${day.value}">
+                ${day.label}
+            </label>
+        `).join('');
+    }
+
+    const domGrid = document.getElementById('dom-grid');
+    if (domGrid) {
+        let checkboxes = '';
+        for (let i = 1; i <= 31; i++) {
+            checkboxes += `
+                <label>
+                    <input type="checkbox" value="${i}">
+                    ${i}
+                </label>
+            `;
+        }
+        domGrid.innerHTML = checkboxes;
+    }
+
     // Schedule type toggle
     document.querySelectorAll('input[name="schedule-type"]').forEach(radio => {
         radio.addEventListener('change', (event) => {
