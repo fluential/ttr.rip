@@ -249,12 +249,17 @@ function updateConnectionStatus(status) {
         isConnectionLost = true;
         statusBar.textContent = 'Connection to the server was lost. Retrying...';
         statusBar.className = 'error';
+        document.body.classList.add('connection-error');
+        document.body.classList.remove('connection-success');
     } else if (status === 'success') {
         isConnectionLost = false;
         statusBar.textContent = 'Connection restored. Data is up to date.';
         statusBar.className = 'success';
+        document.body.classList.remove('connection-error');
+        document.body.classList.add('connection-success');
         setTimeout(() => {
             statusBar.className = ''; // Hide the bar
+            document.body.classList.remove('connection-success');
         }, 2500);
     }
 }

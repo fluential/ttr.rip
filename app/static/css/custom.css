@@ -203,3 +203,13 @@ th[data-sort].sort-desc::after {
     height: 2.5rem;
     background-color: var(--pico-color-green-600);
 }
+
+body.connection-error {
+    box-shadow: inset 0 0 0 5px var(--pico-color-red-600);
+    transition: box-shadow 0.3s ease-in-out;
+}
+
+body.connection-success {
+    box-shadow: inset 0 0 0 5px var(--pico-color-green-600);
+    transition: box-shadow 0.3s ease-in-out;
+}
