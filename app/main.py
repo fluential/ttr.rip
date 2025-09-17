@@ -58,6 +58,13 @@ async def lifespan(app: FastAPI):
                 r.ping()
                 logger.info("Successfully connected to Redis for Celery broker.")
                 app.state.redis_connected = True
+
+                # Clear stale user stats counters on startup to prevent inconsistencies
+                logger.info("Clearing stale user stats counters from Redis...")
+                user_stats_keys = r.keys("user_stats:counters:*")
+                if user_stats_keys:
+                    r.delete(*user_stats_keys)
+                    logger.info(f"Deleted {len(user_stats_keys)} stale user stats counters.")
                 
                 # Start Celery worker if enabled for testing/dev
                 if settings.AUTO_START_EMBEDDED_WORKER:
