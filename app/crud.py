@@ -1,6 +1,7 @@
 import uuid
 import json
 import base64
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Union, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -297,7 +298,50 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     return stats_obj
 
 
-async def update_check_ping(db: AsyncSession, check: models.Check):
+def _validate_content(check: models.Check, content: Optional[str]) -> tuple[bool, str]:
+    """
+    Validates if the content matches the check's criteria.
+    Returns a tuple of (validation_passed, reason).
+    """
+    if not check.expected_content:
+        return True, "" # No content validation required
+
+    if content is None:
+        content = "" # Treat no content as an empty string
+
+    rule = check.expected_content_type or 'present'
+    pattern = check.expected_content
+    use_regex = check.use_regex_for_content
+
+    match_found = False
+    try:
+        if use_regex:
+            # Use re.DOTALL to allow '.' to match newlines
+            if re.search(pattern, content, re.DOTALL):
+                match_found = True
+        else:
+            if pattern in content:
+                match_found = True
+    except re.error as e:
+        logger.warning(f"Invalid regex for check {check.id}: {e}")
+        return False, f"Invalid regex: {e}" # Fail on invalid regex
+
+    if rule == 'present' and not match_found:
+        return False, "Expected content not found"
+    
+    if rule == 'absent' and match_found:
+        return False, "Unexpected content was found"
+
+    return True, ""
+
+
+async def update_check_ping(db: AsyncSession, check: models.Check, content: Optional[str] = None):
+    validation_passed, reason = _validate_content(check, content)
+    if not validation_passed:
+        logger.info(f"Check '{check.name}' (ID: {check.id}) failed content validation: {reason}.")
+        # The content is already stored in Redis by the ping endpoint, so we don't need to pass it here.
+        return await update_check_fail(db, check, reason=reason)
+
     now = datetime.now(timezone.utc)
     if check.last_start:
         last_start = check.last_start
@@ -346,7 +390,7 @@ async def toggle_check_pause(db: AsyncSession, check: models.Check):
     await db.refresh(check)
     return check
 
-async def update_check_fail(db: AsyncSession, check: models.Check):
+async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optional[str] = None):
     previous_status = check.status
     check.status = "down"
     check.last_start = None
@@ -356,6 +400,8 @@ async def update_check_fail(db: AsyncSession, check: models.Check):
 
     if previous_status != "down":
         message = f"🔴 Check Failed: [{check.name}] reported a failure."
+        if reason:
+            message += f" Reason: {reason}."
         notifications.schedule_all_notifications(check, message)
 
     return check

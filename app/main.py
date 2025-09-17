@@ -309,35 +309,8 @@ async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get
         except Exception as e:
             logger.error(f"Failed to store ping content in Redis for check {db_check.id}: {e}")
 
-    # --- Content Validation ---
-    validation_passed = True
-    if db_check.expected_content and db_check.expected_content_type in ['present', 'absent']:
-        found = False
-        try:
-            if db_check.use_regex_for_content:
-                if re.search(db_check.expected_content, content):
-                    found = True
-            else:
-                if db_check.expected_content in content:
-                    found = True
-        except re.error as e:
-            logger.warning(f"Invalid regex for check {db_check.id}: {e}")
-            # Treat invalid regex as a failed check
-            found = False
-
-        if db_check.expected_content_type == 'present' and not found:
-            validation_passed = False
-            logger.info(f"Content validation failed for check {db_check.id}: expected content not found.")
-        elif db_check.expected_content_type == 'absent' and found:
-            validation_passed = False
-            logger.info(f"Content validation failed for check {db_check.id}: unexpected content was found.")
-    # --- End Content Validation ---
-
     previous_status = db_check.status
-    if validation_passed:
-        updated_check = await crud.update_check_ping(db, check=db_check)
-    else:
-        updated_check = await crud.update_check_fail(db, check=db_check)
+    updated_check = await crud.update_check_ping(db, check=db_check, content=content)
 
     # Record check metrics
     metrics.record_check_update(updated_check.status, previous_status)
@@ -401,7 +374,7 @@ async def fail_check(uuid: str, db: AsyncSession = Depends(get_db)):
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
     previous_status = db_check.status
-    updated_check = await crud.update_check_fail(db, check=db_check)
+    updated_check = await crud.update_check_fail(db, check=db_check, reason="Manual failure triggered")
     
     # Record check metrics
     metrics.record_check_update(updated_check.status, previous_status)
