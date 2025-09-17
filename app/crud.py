@@ -3,6 +3,8 @@ import json
 import base64
 import re
 from datetime import datetime, timezone, timedelta
+from croniter import croniter
+import pytz
 from typing import Union, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -75,6 +77,35 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
         # Set a special status if Redis fails to indicate an issue
         for check in checks:
             check.status = "unknown"
+
+
+def _calculate_next_deadline(check: models.Check, from_time: datetime) -> Optional[datetime]:
+    """Calculates the next deadline for a check from a given time."""
+    try:
+        tz = pytz.timezone(check.tz)
+        now_in_tz = from_time.astimezone(tz)
+    except pytz.UnknownTimeZoneError:
+        logger.warning(f"Unknown timezone '{check.tz}' for check {check.id}. Falling back to UTC.")
+        tz = pytz.utc
+        now_in_tz = from_time.astimezone(tz)
+
+    if check.schedule:
+        try:
+            # Croniter works with naive datetimes in the target timezone
+            base_time = now_in_tz.replace(tzinfo=None)
+            itr = croniter(check.schedule, base_time)
+            next_run_naive = itr.get_next(datetime)
+            # Re-apply timezone
+            next_run_aware = tz.localize(next_run_naive)
+        except Exception as e:
+            logger.error(f"Invalid cron schedule '{check.schedule}' for check {check.id}: {e}")
+            return None
+    elif check.interval_seconds is not None:
+        next_run_aware = now_in_tz + timedelta(seconds=check.interval_seconds)
+    else:
+        return None # Should not happen if validation is correct
+
+    return next_run_aware + timedelta(seconds=check.grace_seconds)
 
 def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_status: Optional[str], is_paused: bool = False):
     """Atomically updates user stats counters in Redis."""
@@ -437,14 +468,16 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
         
         r.hset(key, mapping=runtime_update)
         
+        # Reset failure count on success
+        r.hset(key, "failure_count", 0)
+        
         # Update deadline in the database for the scheduler
-        deadline = now + timedelta(seconds=check.interval_seconds + check.grace_seconds)
-        check.deadline = deadline
+        check.deadline = _calculate_next_deadline(check, now)
         await db.commit()
 
         _update_redis_stats_counters(check.owner_id, previous_status, "up", is_paused=check.paused)
 
-        if previous_status == "down":
+        if previous_status == "down" and check.notify_on_up:
             logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
             message = f"🟢 Check Up: [{check.name}] is back up."
             if duration_seconds is not None:
@@ -522,11 +555,26 @@ async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optio
             "status": "down",
             "last_start": "", # Clear last_start
         }
+        
+        # --- Conditional Notification Logic ---
+        should_notify = True
+        # Use a default of 0 if notify_after_failures is None
+        notify_threshold = check.notify_after_failures or 0
+        
+        if notify_threshold > 0:
+            failure_count = r.hincrby(key, "failure_count", 1)
+            if failure_count < notify_threshold:
+                should_notify = False
+        else:
+            # If threshold is 0, always notify on first failure.
+            r.hset(key, "failure_count", 1)
+        # --- End Logic ---
+
         r.hset(key, mapping=runtime_update)
 
         _update_redis_stats_counters(check.owner_id, previous_status, "down", is_paused=check.paused)
 
-        if previous_status != "down":
+        if previous_status != "down" and should_notify:
             message = f"🔴 Check Failed: [{check.name}] reported a failure."
             if reason:
                 message += f" Reason: {reason}."
@@ -659,7 +707,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         
         db_check = models.Check(**db_check_data)
         # Set initial deadline based on creation time
-        db_check.deadline = db_check.created_at + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
+        db_check.deadline = _calculate_next_deadline(db_check, db_check.created_at)
         db.add(db_check)
         await db.commit()
         await db.refresh(db_check)
@@ -731,10 +779,10 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
                     now = datetime.now(timezone.utc)
                     reference_time = datetime.fromisoformat(last_ping_str) if last_ping_str else db_check.created_at
                     
-                    deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
-                    db_check.deadline = deadline # Update deadline in DB
+                    # Recalculate deadline with new settings
+                    db_check.deadline = _calculate_next_deadline(db_check, reference_time)
 
-                    if now > deadline:
+                    if db_check.deadline and now > db_check.deadline:
                         new_status = "down"
                     else:
                         new_status = "up" if last_ping_str else "new"

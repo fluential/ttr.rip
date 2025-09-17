@@ -38,12 +38,19 @@ class UserKeyResponse(BaseModel):
     auth_key: str
 
 # Check Schemas
+from pydantic import BaseModel, model_validator
+from typing import Optional, Union, Any
+
 class CheckBase(BaseModel):
     name: str
     slug: Optional[str] = None
-    interval_seconds: int
+    schedule: Optional[str] = None
+    tz: str = "UTC"
+    interval_seconds: Optional[int] = None
     grace_seconds: int
     max_runtime_seconds: Optional[int] = None
+    notify_after_failures: Optional[int] = None
+    notify_on_up: bool = True
     expected_content: Optional[str] = None
     expected_content_type: Optional[str] = None # 'present' or 'absent'
     use_regex_for_content: bool = False
@@ -58,8 +65,12 @@ class CheckUpdate(CheckBase):
 class CheckExport(BaseModel):
     name: str
     slug: Optional[str] = None
-    interval_seconds: int
+    schedule: Optional[str] = None
+    tz: str
+    interval_seconds: Optional[int] = None
     grace_seconds: int
+    notify_after_failures: Optional[int] = None
+    notify_on_up: bool
     expected_content: Optional[str] = None
     expected_content_type: Optional[str] = None
     use_regex_for_content: bool

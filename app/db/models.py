@@ -68,11 +68,20 @@ class Check(Base):
     slug: Optional[str] = Column(String, unique=True, index=True, nullable=True)
     name: str = Column(String, index=True)
     created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    interval_seconds: int = Column(Integer)
+    
+    # Scheduling
+    schedule: Optional[str] = Column(String, nullable=True)
+    tz: str = Column(String, default="UTC", nullable=False)
+    interval_seconds: Optional[int] = Column(Integer, nullable=True)
     grace_seconds: int = Column(Integer)
+
     deadline: Optional[datetime] = Column(DateTime(timezone=True), nullable=True, index=True)
     max_runtime_seconds: Optional[int] = Column(Integer, nullable=True)
     paused: bool = Column(Boolean, default=False, nullable=False)
+
+    # Conditional Notifications
+    notify_after_failures: Optional[int] = Column(Integer, nullable=True)
+    notify_on_up: bool = Column(Boolean, default=True, nullable=False)
 
     # Content validation settings
     expected_content: Optional[str] = Column(String, nullable=True)

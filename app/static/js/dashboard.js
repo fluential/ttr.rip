@@ -799,7 +799,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             </td>
             <td>
                 <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;">
-                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${(check.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${check.slug || ''}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds}, '${(check.expected_content || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${check.expected_content_type}', ${check.use_regex_for_content})">✏️</button>
+                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id})">✏️</button>
                     <button class="outline action-button" title="View Last Content" onclick="viewLastContent(${check.id})" ${!check.last_content ? 'disabled' : ''}>📄</button>
                     <button class="outline action-button" title="${check.paused ? 'Resume' : 'Pause'}" onclick="togglePause(${check.id})">${check.paused ? '▶️' : '⏸️'}</button>
                     <button class="outline action-button" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
@@ -845,8 +845,15 @@ function updateSortIndicators() {
     });
 }
 
-function editCheck(event, id, name, slug, interval, grace, maxRuntime, expectedContent, expectedContentType, useRegex) {
+function editCheck(event, id) {
     event.stopPropagation();
+    const check = checksData[id];
+    if (!check) {
+        alert('Could not find check data to edit.');
+        return;
+    }
+    const { name, slug, schedule, tz, interval_seconds, grace_seconds, max_runtime_seconds, notify_after_failures, notify_on_up, expected_content, expected_content_type, use_regex_for_content } = check;
+
     const details = document.getElementById('new-check-section');
     if (details) {
         details.open = true;
@@ -854,12 +861,33 @@ function editCheck(event, id, name, slug, interval, grace, maxRuntime, expectedC
     const form = document.getElementById('new-check-form');
     form.querySelector('#name').value = name;
     form.querySelector('#slug').value = slug || '';
-    form.querySelector('#interval_seconds').value = interval;
-    form.querySelector('#grace_seconds').value = grace;
-    form.querySelector('#max_runtime_seconds').value = maxRuntime || '';
-    form.querySelector('#expected_content').value = expectedContent || '';
-    form.querySelector('#expected_content_type').value = expectedContentType || 'present';
-    form.querySelector('#use_regex_for_content').checked = useRegex;
+    form.querySelector('#grace_seconds').value = grace_seconds;
+    form.querySelector('#tz').value = tz || 'UTC';
+    form.querySelector('#max_runtime_seconds').value = max_runtime_seconds || '';
+    
+    // Handle schedule type
+    const simpleRadio = document.getElementById('schedule-type-simple');
+    const cronRadio = document.getElementById('schedule-type-cron');
+    if (schedule) {
+        cronRadio.checked = true;
+        form.querySelector('#schedule').value = schedule;
+        form.querySelector('#interval_seconds').value = '';
+    } else {
+        simpleRadio.checked = true;
+        form.querySelector('#interval_seconds').value = interval_seconds;
+        form.querySelector('#schedule').value = '';
+    }
+    // Trigger change event to show/hide correct fields
+    document.querySelector('input[name="schedule-type"]:checked').dispatchEvent(new Event('change'));
+
+    // Notification settings
+    form.querySelector('#notify_after_failures').value = notify_after_failures === null ? 0 : notify_after_failures;
+    form.querySelector('#notify_on_up').checked = notify_on_up;
+
+    // Content filtering
+    form.querySelector('#expected_content').value = expected_content || '';
+    form.querySelector('#expected_content_type').value = expected_content_type || 'present';
+    form.querySelector('#use_regex_for_content').checked = use_regex_for_content;
     
     form.dataset.editingId = id;
 
@@ -907,12 +935,20 @@ async function handleFormSubmit(event) {
     const maxRuntimeInput = form.querySelector('#max_runtime_seconds');
     const maxRuntimeValue = maxRuntimeInput.value ? parseInt(maxRuntimeInput.value) : null;
 
+    const scheduleType = form.querySelector('input[name="schedule-type"]:checked').value;
+    const schedule = form.querySelector('#schedule').value;
+    const interval = form.querySelector('#interval_seconds').value;
+
     const data = {
         name: form.querySelector('#name').value,
         slug: form.querySelector('#slug').value || null,
-        interval_seconds: parseInt(form.querySelector('#interval_seconds').value),
+        schedule: scheduleType === 'cron' ? (schedule || null) : null,
+        interval_seconds: scheduleType === 'simple' ? (interval ? parseInt(interval) : null) : null,
+        tz: form.querySelector('#tz').value || 'UTC',
         grace_seconds: parseInt(form.querySelector('#grace_seconds').value),
         max_runtime_seconds: maxRuntimeValue,
+        notify_after_failures: parseInt(form.querySelector('#notify_after_failures').value) || null,
+        notify_on_up: form.querySelector('#notify_on_up').checked,
         expected_content: form.querySelector('#expected_content').value,
         expected_content_type: form.querySelector('#expected_content_type').value,
         use_regex_for_content: form.querySelector('#use_regex_for_content').checked
@@ -1038,6 +1074,17 @@ function viewRecentPings(checkId) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Schedule type toggle
+    document.querySelectorAll('input[name="schedule-type"]').forEach(radio => {
+        radio.addEventListener('change', (event) => {
+            const isSimple = event.target.value === 'simple';
+            document.getElementById('simple-schedule-fields').style.display = isSimple ? 'block' : 'none';
+            document.getElementById('cron-schedule-fields').style.display = isSimple ? 'none' : 'block';
+            document.getElementById('interval_seconds').required = isSimple;
+            document.getElementById('schedule').required = !isSimple;
+        });
+    });
+
     // Set the initial masked value for the auth key
     const authKeyDisplay = document.getElementById('auth-key-display');
     if (authKeyDisplay) {

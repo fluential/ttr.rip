@@ -78,21 +78,65 @@
                 <input type="text" id="slug" name="slug" placeholder="daily-backup-job" pattern="[a-z0-9_-]+" title="a-z, 0-9, -, _">
             </label>
         </div>
-        <div class="grid">
-            <label for="interval_seconds">
-                Interval (seconds)
-                <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
-            </label>
-        <div class="grid">
-            <label for="grace_seconds">
-                Grace (seconds)
-                <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
-            </label>
+        <details>
+            <summary>Scheduling</summary>
+            <fieldset>
+                <legend>Schedule Type</legend>
+                <label for="schedule-type-simple">
+                    <input type="radio" name="schedule-type" id="schedule-type-simple" value="simple" checked>
+                    Simple Interval
+                </label>
+                <label for="schedule-type-cron">
+                    <input type="radio" name="schedule-type" id="schedule-type-cron" value="cron">
+                    Cron Expression
+                </label>
+            </fieldset>
+
+            <div id="simple-schedule-fields">
+                <label for="interval_seconds">
+                    Interval (seconds)
+                    <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
+                </label>
+            </div>
+
+            <div id="cron-schedule-fields" style="display: none;">
+                <label for="schedule">
+                    Cron Expression
+                    <input type="text" id="schedule" name="schedule" placeholder="* * * * *">
+                </label>
+            </div>
+            <div class="grid">
+                <label for="grace_seconds">
+                    Grace (seconds)
+                    <input type="number" id="grace_seconds" name="grace_seconds" placeholder="300" required>
+                </label>
+                <label for="tz">
+                    Time Zone
+                    <input type="text" id="tz" name="tz" list="timezones" value="UTC" placeholder="e.g., Europe/London">
+                </label>
+            </div>
+        </details>
+        <details>
+            <summary>Notification Settings</summary>
+            <div class="grid">
+                <label for="notify_after_failures">
+                    Notify after N failures
+                    <input type="number" id="notify_after_failures" name="notify_after_failures" placeholder="0" min="0" value="0">
+                    <small>Set to 0 to be notified on the first failure.</small>
+                </label>
+                <label for="notify_on_up">
+                    <input type="checkbox" id="notify_on_up" name="notify_on_up" role="switch" checked>
+                    Notify when check is back up
+                </label>
+            </div>
+        </details>
+        <details>
+            <summary>Advanced Options</summary>
             <label for="max_runtime_seconds">
                 Max Runtime (seconds, optional)
                 <input type="number" id="max_runtime_seconds" name="max_runtime_seconds" placeholder="e.g., 3600 for 1 hour">
             </label>
-        </div>
+        </details>
         <details>
             <summary>Content Filtering (Optional)</summary>
             <p><small>Optionally, fail the check if the ping request body or query string does or does not contain specific content.</small></p>
@@ -228,6 +272,19 @@
         </div>
     </article>
 </dialog>
+
+<!-- Timezone Datalist -->
+<datalist id="timezones">
+    <option value="UTC">
+    <option value="Europe/London">
+    <option value="Europe/Berlin">
+    <option value="America/New_York">
+    <option value="America/Chicago">
+    <option value="America/Denver">
+    <option value="America/Los_Angeles">
+    <option value="Asia/Tokyo">
+    <option value="Australia/Sydney">
+</datalist>
 
 <!-- Last Content Modal -->
 <dialog id="content-modal">
