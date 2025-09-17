@@ -9,6 +9,7 @@ let autoRefreshEnabled = true;
 let autoRefreshInterval = 5; // seconds
 let autoRefreshCountdown = autoRefreshInterval;
 let autoRefreshTimer = null;
+let checksData = {}; // Global cache for check data
 
 function getMaskedAuthKey(key) {
     if (key.length <= 4) {
@@ -609,6 +610,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
 
     const data = await response.json();
     const checks = data.items;
+    checks.forEach(c => checksData[c.id] = c); // Update global cache
     allChecksForStatusPage = checks; // Cache for status page form
     populateCheckCheckboxes(); // Populate form now that we have checks
     const tableBody = document.querySelector('#checks-table tbody');
@@ -618,7 +620,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     const statusCounts = { up: 0, down: 0, new: 0 };
 
     if (checks.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="8">No checks found. Create one above!</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="9">No checks found. Create one above!</td></tr>';
         if (statusSummary) {
             statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: 0`;
             statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: 0`;
@@ -662,6 +664,9 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         const statusText = displayStatus.toUpperCase();
         const badgeUrl = `${window.location.origin}/ping/${check.uuid}/badge.svg`;
 
+        row.dataset.checkId = check.id;
+        row.dataset.checkName = check.name;
+
         row.innerHTML = `
             <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
             <td>${check.name}</td>
@@ -670,6 +675,9 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
             <td><img src="${badgeUrl}" alt="Status Badge" style="cursor: pointer;" title="Click to copy Markdown" onclick="copyUrl(this, '[![Status](${badgeUrl})](${pingUrl})')"></td>
+            <td>
+                <button class="outline action-button" title="Recent Pings" onclick="viewRecentPings(${check.id})" ${!check.last_pings || check.last_pings.length === 0 ? 'disabled' : ''}>📜</button>
+            </td>
             <td>
                 <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;">
                     <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${check.name.replace(/'/g, "\\'")}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds}, '${(check.expected_content || '').replace(/'/g, "\\'")}', '${check.expected_content_type}', ${check.use_regex_for_content})">✏️</button>
@@ -864,6 +872,33 @@ async function viewLastContent(checkId) {
         console.error('Error fetching last content:', error);
         alert(`Could not retrieve last captured content: ${error.message}`);
     }
+}
+
+function viewRecentPings(checkId) {
+    const modal = document.getElementById('pings-modal');
+    const contentDiv = document.getElementById('pings-modal-content');
+    const checkNameSpan = document.getElementById('pings-modal-check-name');
+    
+    const check = checksData[checkId];
+    if (!check) return;
+
+    checkNameSpan.textContent = check.name;
+    const pings = check.last_pings;
+
+    if (!pings || pings.length === 0) {
+        contentDiv.innerHTML = '<p>No recent pings recorded.</p>';
+    } else {
+        contentDiv.innerHTML = pings.map(ping => `
+            <div class="ping-log-entry">
+                <p><strong><span class="fi fi-${ping.country_code.toLowerCase()}"></span> ${ping.country_name}</strong> - ${ping.connection_type}</p>
+                <p><small>${new Date(ping.timestamp).toLocaleString()}</small></p>
+                <p><small><strong>IP:</strong> ${ping.ip_address}</small></p>
+                <p><small><strong>Agent:</strong> ${ping.user_agent}</small></p>
+            </div>
+        `).join('<hr class="modal-hr">');
+    }
+
+    modal.showModal();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

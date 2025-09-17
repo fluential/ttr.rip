@@ -146,3 +146,25 @@ th[data-sort].sort-desc::after {
 .container-wide {
     max-width: 1400px;
 }
+
+/* Ping Log Modal */
+#pings-modal article {
+    max-width: 700px;
+}
+
+.ping-log-entry p {
+    margin-bottom: 0.5rem;
+}
+
+.ping-log-entry p small {
+    word-break: break-all;
+}
+
+.modal-hr {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.fi {
+    margin-right: 0.5rem;
+}

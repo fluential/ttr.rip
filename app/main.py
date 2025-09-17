@@ -6,6 +6,8 @@ import subprocess
 import sys
 import os
 import re
+import json
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,7 @@ from app.db import models as db_models
 from app.db.base import engine, get_db
 from app.api.v1.routes import api_router
 from app.web.routes import router as web_router, admin_router
-from app.services import scheduler
+from app.services import scheduler, geoip
 from app import crud, security
 from app.core.config import settings
 from app.core.logging_config import setup_logging
@@ -43,6 +45,10 @@ async def lifespan(app: FastAPI):
     from sqlalchemy.ext.asyncio import AsyncSession
     async with AsyncSession(engine) as session:
         await metrics.initialize_check_counts(session)
+    
+    # Initialize GeoIP service
+    if settings.SAVE_CHECK_LAST_LOGS:
+        geoip.initialize_geoip()
     
     # Check Redis connection and potentially start worker
     if not settings.DEBUG_MODE:
@@ -253,6 +259,32 @@ async def ping_check(uuid: str, request: Request, db: AsyncSession = Depends(get
     db_check = await crud.get_check_by_uuid(db, check_uuid=uuid)
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
+
+    # --- Log Ping if Enabled ---
+    if settings.SAVE_CHECK_LAST_LOGS:
+        try:
+            r = get_redis_connection()
+            if r:
+                ip_address = request.client.host
+                user_agent = request.headers.get("user-agent", "Unknown")
+                geoip_details = geoip.get_geoip_details(ip_address)
+
+                log_entry = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                    **geoip_details,
+                }
+                
+                redis_key = f"ping_logs:{db_check.id}"
+                pipe = r.pipeline()
+                pipe.lpush(redis_key, json.dumps(log_entry))
+                pipe.ltrim(redis_key, 0, 2) # Keep only the last 3 logs
+                pipe.expire(redis_key, timedelta(days=7)) # Expire after 7 days
+                pipe.execute()
+        except Exception as e:
+            logger.error(f"Failed to log ping details to Redis for check {db_check.id}: {e}")
+    # --- End Log Ping ---
 
     # Capture content from GET query params or POST body
     content = ""

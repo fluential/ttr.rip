@@ -122,6 +122,14 @@ class StatusPagePublic(StatusPageBase):
         from_attributes = True
 
 
+class PingLog(BaseModel):
+    timestamp: datetime
+    ip_address: str
+    user_agent: str
+    country_code: str
+    country_name: str
+    connection_type: str
+
 class Check(CheckBase):
     id: int
     uuid: str
@@ -157,6 +165,7 @@ class Check(CheckBase):
     webhook_last_notification_timestamp: Optional[datetime] = None
     owner_id: int
     owner: Optional[User] = None # Include owner details
+    last_pings: list[PingLog] = []
 
     class Config:
         from_attributes = True

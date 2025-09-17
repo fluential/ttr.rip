@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     AUTO_START_EMBEDDED_WORKER: bool = False
     WORKER_CONCURRENCY: int = 50
 
+    # GeoIP and Ping Logging
+    SAVE_CHECK_LAST_LOGS: bool = True
+    GEOIP_DATABASE_PATH: Optional[str] = None
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

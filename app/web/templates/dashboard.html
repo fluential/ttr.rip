@@ -49,11 +49,12 @@
                     <th scope="col" data-sort="last_duration_seconds">Last Duration</th>
                     <th scope="col" data-sort="deadline">Expires in</th>
                     <th scope="col">Badge</th>
+                    <th scope="col">Recent Pings</th>
                     <th scope="col">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="8">Loading...</td></tr>
+                <tr><td colspan="9">Loading...</td></tr>
             </tbody>
         </table>
     </figure>
@@ -184,6 +185,19 @@
         </form>
     </details>
 </article>
+
+<!-- Recent Pings Modal -->
+<dialog id="pings-modal">
+    <article>
+        <header>
+            <a href="#close" aria-label="Close" class="close" onclick="document.getElementById('pings-modal').close()"></a>
+            Recent Pings for <strong id="pings-modal-check-name"></strong>
+        </header>
+        <div id="pings-modal-content">
+            <p>No recent pings recorded.</p>
+        </div>
+    </article>
+</dialog>
 
 <script>
     window.AUTH_KEY = "{{ auth_key }}";
