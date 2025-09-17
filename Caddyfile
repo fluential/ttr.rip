@@ -87,7 +87,7 @@
     }
 
     # Handle sensitive user actions like key rotation and account deletion
-    handle /api/v1/user/* {
+    handle /api/v1/user* {
         @user_actions method POST DELETE
         rate_limit @user_actions {
             zone user_actions {
