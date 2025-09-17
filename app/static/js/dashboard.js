@@ -817,7 +817,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         const row = document.createElement('tr');
         const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
         const pingIdentifier = check.slug || check.uuid;
-        const pingUrl = `${window.location.origin}/ping/${pingIdentifier}`;
+        const pingUrl = `${window.location.origin}/p/${pingIdentifier}`;
 
         const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
         const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
@@ -848,7 +848,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         };
         
         const statusText = displayStatus.toUpperCase();
-        const badgeUrl = `${window.location.origin}/ping/${pingIdentifier}/badge.svg`;
+        const badgeUrl = `${window.location.origin}/p/${pingIdentifier}/badge.svg`;
 
         row.dataset.checkId = check.id;
         row.dataset.checkName = check.name;

@@ -261,7 +261,7 @@ async def add_process_time_header(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-@app.api_route("/ping/{identifier}", methods=["GET", "POST"], status_code=status.HTTP_200_OK)
+@app.api_route("/p/{identifier}", methods=["GET", "POST"], status_code=status.HTTP_200_OK)
 async def ping_check(identifier: str, request: Request, db: AsyncSession = Depends(get_db)):
     db_check = await crud.get_check_by_identifier(db, identifier=identifier)
     if not db_check:
@@ -334,7 +334,7 @@ async def ping_check(identifier: str, request: Request, db: AsyncSession = Depen
     return {"message": response_message, "process_time_seconds": process_time}
 
 
-@app.get("/ping/{identifier}/start", status_code=status.HTTP_200_OK)
+@app.get("/p/{identifier}/start", status_code=status.HTTP_200_OK)
 async def start_check(identifier: str, db: AsyncSession = Depends(get_db)):
     db_check = await crud.get_check_by_identifier(db, identifier=identifier)
     if not db_check:
@@ -353,7 +353,7 @@ BADGE_TEMPLATES = {
     "paused": """<svg xmlns="http://www.w3.org/2000/svg" width="88" height="20"><linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><mask id="a"><rect width="88" height="20" rx="3" fill="#fff"/></mask><g mask="url(#a)"><path fill="#555" d="M0 0h37v20H0z"/><path fill="#9f9f9f" d="M37 0h51v20H37z"/><path fill="url(#b)" d="M0 0h88v20H0z"/></g><g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,sans-serif" font-size="11"><text x="18.5" y="15" fill="#010101" fill-opacity=".3">status</text><text x="18.5" y="14">status</text><text x="61.5" y="15" fill="#010101" fill-opacity=".3">paused</text><text x="61.5" y="14">paused</text></g></svg>""",
 }
 
-@app.get("/ping/{identifier}/badge.svg", response_class=SVGResponse)
+@app.get("/p/{identifier}/badge.svg", response_class=SVGResponse)
 async def get_status_badge(identifier: str, db: AsyncSession = Depends(get_db)):
     db_check = await crud.get_check_by_identifier(db, identifier=identifier)
     if not db_check:
@@ -392,7 +392,7 @@ async def get_status_badge(identifier: str, db: AsyncSession = Depends(get_db)):
     return SVGResponse(content=badge_svg, headers=headers)
 
 
-@app.get("/ping/{identifier}/fail", status_code=status.HTTP_200_OK)
+@app.get("/p/{identifier}/fail", status_code=status.HTTP_200_OK)
 async def fail_check(identifier: str, db: AsyncSession = Depends(get_db)):
     db_check = await crud.get_check_by_identifier(db, identifier=identifier)
     if not db_check:
