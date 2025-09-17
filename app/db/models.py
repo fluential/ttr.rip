@@ -90,6 +90,7 @@ class Check(Base):
     created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     # Scheduling
+    schedule_type: str = Column(String, default="interval", nullable=False)
     schedule: Optional[str] = Column(String, nullable=True)
     tz: str = Column(String, default="UTC", nullable=False)
     interval_seconds: Optional[int] = Column(Integer, nullable=True)

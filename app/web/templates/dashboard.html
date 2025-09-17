@@ -103,6 +103,10 @@
                     <input type="radio" name="schedule-type" id="schedule-type-cron" value="cron">
                     Cron Expression
                 </label>
+                <label for="schedule-type-oncalendar">
+                    <input type="radio" name="schedule-type" id="schedule-type-oncalendar" value="oncalendar">
+                    On-Calendar Expression
+                </label>
             </fieldset>
 
             <div id="simple-schedule-fields">
@@ -112,12 +116,10 @@
                 </label>
             </div>
 
-            <div id="cron-schedule-fields" style="display: none;">
-                <label for="schedule">
-                    Cron Expression
-                    <input type="text" id="schedule" name="schedule" placeholder="* * * * *">
-                </label>
-                <button type="button" class="outline secondary" id="show-calendar-btn" style="margin-bottom: 1rem;">On-Calendar Schedule...</button>
+            <div id="text-schedule-fields" style="display: none;">
+                <label for="schedule" id="schedule-label">Cron Expression</label>
+                <input type="text" id="schedule" name="schedule" placeholder="* * * * *">
+                <button type="button" class="outline secondary" id="show-calendar-btn" style="margin-bottom: 1rem;">Select Schedule...</button>
             </div>
             <div class="grid">
                 <label for="grace_seconds">

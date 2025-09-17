@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from croniter import croniter
 import pytz
+from systemd_calendar import Calendar
 from typing import Union, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -89,7 +90,8 @@ def _calculate_next_deadline(check: models.Check, from_time: datetime) -> Option
         tz = pytz.utc
         now_in_tz = from_time.astimezone(tz)
 
-    if check.schedule:
+    next_run_aware = None
+    if check.schedule_type == 'cron':
         try:
             # Croniter works with naive datetimes in the target timezone
             base_time = now_in_tz.replace(tzinfo=None)
@@ -100,10 +102,21 @@ def _calculate_next_deadline(check: models.Check, from_time: datetime) -> Option
         except Exception as e:
             logger.error(f"Invalid cron schedule '{check.schedule}' for check {check.id}: {e}")
             return None
-    elif check.interval_seconds is not None:
+    elif check.schedule_type == 'oncalendar':
+        try:
+            cal = Calendar(check.schedule)
+            # The library works with timezone-aware datetimes
+            next_run_aware = cal.next_timestamp(now_in_tz)
+        except Exception as e:
+            logger.error(f"Invalid OnCalendar schedule '{check.schedule}' for check {check.id}: {e}")
+            return None
+    elif check.schedule_type == 'interval' and check.interval_seconds is not None:
         next_run_aware = now_in_tz + timedelta(seconds=check.interval_seconds)
     else:
         return None # Should not happen if validation is correct
+
+    if not next_run_aware:
+        return None
 
     return next_run_aware + timedelta(seconds=check.grace_seconds)
 

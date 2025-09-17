@@ -920,7 +920,7 @@ function editCheck(event, id) {
         alert('Could not find check data to edit.');
         return;
     }
-    const { name, slug, tags, schedule, tz, interval_seconds, grace_seconds, max_runtime_seconds, notify_after_failures, notify_on_up, expected_content, expected_content_type, use_regex_for_content } = check;
+    const { name, slug, tags, schedule_type, schedule, tz, interval_seconds, grace_seconds, max_runtime_seconds, notify_after_failures, notify_on_up, expected_content, expected_content_type, use_regex_for_content } = check;
 
     const details = document.getElementById('new-check-section');
     if (details) {
@@ -935,17 +935,13 @@ function editCheck(event, id) {
     form.querySelector('#max_runtime_seconds').value = max_runtime_seconds || '';
     
     // Handle schedule type
-    const simpleRadio = document.getElementById('schedule-type-simple');
-    const cronRadio = document.getElementById('schedule-type-cron');
-    if (schedule) {
-        cronRadio.checked = true;
-        form.querySelector('#schedule').value = schedule;
-        form.querySelector('#interval_seconds').value = '';
-    } else {
-        simpleRadio.checked = true;
-        form.querySelector('#interval_seconds').value = interval_seconds;
-        form.querySelector('#schedule').value = '';
+    const scheduleTypeRadio = document.getElementById(`schedule-type-${schedule_type || 'interval'}`);
+    if (scheduleTypeRadio) {
+        scheduleTypeRadio.checked = true;
     }
+    form.querySelector('#schedule').value = schedule || '';
+    form.querySelector('#interval_seconds').value = interval_seconds || '';
+    
     // Trigger change event to show/hide correct fields
     document.querySelector('input[name="schedule-type"]:checked').dispatchEvent(new Event('change'));
 
@@ -1012,8 +1008,9 @@ async function handleFormSubmit(event) {
         name: form.querySelector('#name').value,
         slug: form.querySelector('#slug').value || null,
         tags: form.querySelector('#tags').value.split(',').map(t => t.trim()).filter(Boolean),
-        schedule: scheduleType === 'cron' ? (schedule || null) : null,
-        interval_seconds: scheduleType === 'simple' ? (interval ? parseInt(interval) : null) : null,
+        schedule_type: scheduleType,
+        schedule: (scheduleType === 'cron' || scheduleType === 'oncalendar') ? (schedule || null) : null,
+        interval_seconds: scheduleType === 'interval' ? (interval ? parseInt(interval) : null) : null,
         tz: form.querySelector('#tz').value || 'UTC',
         grace_seconds: parseInt(form.querySelector('#grace_seconds').value),
         max_runtime_seconds: maxRuntimeValue,
@@ -1191,11 +1188,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Schedule type toggle
     document.querySelectorAll('input[name="schedule-type"]').forEach(radio => {
         radio.addEventListener('change', (event) => {
-            const isSimple = event.target.value === 'simple';
-            document.getElementById('simple-schedule-fields').style.display = isSimple ? 'block' : 'none';
-            document.getElementById('cron-schedule-fields').style.display = isSimple ? 'none' : 'block';
-            document.getElementById('interval_seconds').required = isSimple;
-            document.getElementById('schedule').required = !isSimple;
+            const scheduleType = event.target.value;
+            const simpleFields = document.getElementById('simple-schedule-fields');
+            const textFields = document.getElementById('text-schedule-fields');
+            const scheduleInput = document.getElementById('schedule');
+            const intervalInput = document.getElementById('interval_seconds');
+            const scheduleLabel = document.getElementById('schedule-label');
+            const calendarBtn = document.getElementById('show-calendar-btn');
+
+            simpleFields.style.display = 'none';
+            textFields.style.display = 'none';
+            intervalInput.required = false;
+            scheduleInput.required = false;
+            calendarBtn.style.display = 'none';
+
+            if (scheduleType === 'simple') {
+                simpleFields.style.display = 'block';
+                intervalInput.required = true;
+            } else if (scheduleType === 'cron') {
+                textFields.style.display = 'block';
+                scheduleInput.required = true;
+                scheduleLabel.textContent = 'Cron Expression';
+                scheduleInput.placeholder = '* * * * *';
+                calendarBtn.style.display = 'block';
+            } else if (scheduleType === 'oncalendar') {
+                textFields.style.display = 'block';
+                scheduleInput.required = true;
+                scheduleLabel.textContent = 'On-Calendar Expression';
+                scheduleInput.placeholder = 'Mon,Fri *-*-* 12:00:00';
+            }
         });
     });
 

@@ -53,6 +53,7 @@ class CheckBase(BaseModel):
     name: str
     slug: Optional[str] = None
     tags: list[str] = []
+    schedule_type: str = "interval"
     schedule: Optional[str] = None
     tz: str = "UTC"
     interval_seconds: Optional[int] = None
@@ -63,6 +64,20 @@ class CheckBase(BaseModel):
     expected_content: Optional[str] = None
     expected_content_type: Optional[str] = None # 'present' or 'absent'
     use_regex_for_content: bool = False
+
+    @model_validator(mode='after')
+    def check_schedule_fields(self) -> 'CheckBase':
+        if self.schedule_type == 'interval':
+            if self.interval_seconds is None:
+                raise ValueError('interval_seconds is required for interval schedule type')
+            self.schedule = None
+        elif self.schedule_type in ['cron', 'oncalendar']:
+            if not self.schedule:
+                raise ValueError('schedule is required for cron or oncalendar schedule type')
+            self.interval_seconds = None
+        else:
+            raise ValueError(f"Invalid schedule_type: {self.schedule_type}")
+        return self
 
 class CheckCreate(CheckBase):
     pass
@@ -75,6 +90,7 @@ class CheckExport(BaseModel):
     name: str
     slug: Optional[str] = None
     tags: list[str] = []
+    schedule_type: str
     schedule: Optional[str] = None
     tz: str
     interval_seconds: Optional[int] = None
