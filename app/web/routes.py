@@ -80,6 +80,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     context = {
         "request": request,
         "auth_key": auth_key,
+        "user": user,
         "csrf_token": csrf_token,
         "status_pages": status_pages,
         "process_time": getattr(request.state, "process_time", 0),
@@ -87,6 +88,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
         "debug_mode": settings.DEBUG_MODE,
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
+        "user_slug_enabled": settings.USER_SLUG_ENABLED,
     }
     response = templates.TemplateResponse("dashboard.html", context)
     # Refresh cookie on activity
@@ -221,13 +223,18 @@ async def public_integrations(
     return response
 
 
-@router.get("/s/{slug}", response_class=HTMLResponse)
+@router.get("/s/{user_slug}/{page_slug}", response_class=HTMLResponse)
 async def public_status_page(
-    slug: str,
+    user_slug: str,
+    page_slug: str,
     request: Request,
     db: AsyncSession = Depends(db_base.get_db),
 ):
-    status_page = await crud.get_status_page_by_slug(db, slug=slug)
+    user = await crud.get_user_by_slug(db, slug=user_slug)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    status_page = await crud.get_status_page_by_slug(db, user=user, page_slug=page_slug)
     if not status_page or not status_page.is_public:
         raise HTTPException(status_code=404, detail="Status page not found")
 

@@ -12,6 +12,7 @@ let autoRefreshInterval = 5; // seconds
 let autoRefreshCountdown = autoRefreshInterval;
 let autoRefreshTimer = null;
 let checksData = {}; // Global cache for check data
+let currentUser = null;
 
 function getMaskedAuthKey(key) {
     if (key.length <= 4) {
@@ -292,11 +293,11 @@ async function updateTelegramSection() {
             return;
         }
         
-        const user = await response.json();
+        currentUser = await response.json();
         
-        if (user && user.telegram_user_id) {
+        if (currentUser && currentUser.telegram_user_id) {
             telegramDiv.innerHTML = `
-                <p>Your account is linked to Telegram user: <strong>@${user.telegram_username || user.telegram_first_name}</strong></p>
+                <p>Your account is linked to Telegram user: <strong>@${currentUser.telegram_username || currentUser.telegram_first_name}</strong></p>
                 <button id="unlink-telegram-btn" class="secondary outline">Disconnect Telegram</button>
             `;
             // We need to re-add the event listener to the new button
@@ -340,7 +341,7 @@ function renderStatusPages(statusPages) {
         <div class="grid" style="align-items: center;">
             <div>
                 <strong>${page.name}</strong><br>
-                <small><a href="/s/${page.slug}" target="_blank">/s/${page.slug}</a></small>
+                <small><a href="/s/${currentUser.slug}/${page.slug}" target="_blank">/s/${currentUser.slug}/${page.slug}</a></small>
             </div>
             <div style="text-align: right;">
                 <button class="outline action-button" title="Edit" onclick="editStatusPage(event, ${page.id}, '${(page.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${page.slug.replace(/'/g, "\\'")}', [${page.checks.map(c => c.id)}])">✏️</button>
@@ -919,7 +920,8 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         const row = document.createElement('tr');
         const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
         const pingIdentifier = check.slug || check.uuid;
-        const pingUrl = `${window.location.origin}/p/${pingIdentifier}`;
+        const userSlug = currentUser ? currentUser.slug : '...';
+        const pingUrl = `${window.location.origin}/p/${userSlug}/${pingIdentifier}`;
 
         const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
         const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
@@ -1416,8 +1418,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    await updateTelegramSection(); // Fetch user data first
     await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics(), fetchStatusPages(), fetchAllTags()]);
-    await updateTelegramSection();
     
     const loadTime = performance.now() - window.pageLoadStartTime;
     const clientTimeElem = document.getElementById('client-load-time');
@@ -1477,6 +1479,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // User Slug form listener
+    const userSlugForm = document.getElementById('user-slug-form');
+    if (userSlugForm) {
+        userSlugForm.addEventListener('submit', handleUserSlugSubmit);
+    }
+
     // Sorting listeners
     document.querySelectorAll('#checks-table th[data-sort]').forEach(th => {
         th.addEventListener('click', () => {
@@ -1490,4 +1498,85 @@ document.addEventListener('DOMContentLoaded', async () => {
             fetchChecks(); // Reset to first page on new sort
         });
     });
+});
+
+const checkUserSlugAvailability = debounce(async function(slug) {
+    const feedbackEl = document.getElementById('user-slug-feedback');
+    if (!slug) {
+        feedbackEl.textContent = '';
+        return;
+    }
+    feedbackEl.textContent = 'Checking...';
+    feedbackEl.style.color = 'inherit';
+
+    try {
+        const response = await fetch(`/api/v1/user/slug-check?slug=${encodeURIComponent(slug)}`, {
+            headers: { 'X-Auth-Key': authKey }
+        });
+        if (response.status === 409) {
+            feedbackEl.textContent = 'Slug is already taken.';
+            feedbackEl.style.color = 'var(--pico-color-orange-500)';
+        } else if (response.ok) {
+            feedbackEl.textContent = 'Slug is available.';
+            feedbackEl.style.color = 'var(--pico-color-green-500)';
+        } else {
+            throw new Error('Server error');
+        }
+    } catch (error) {
+        feedbackEl.textContent = 'Could not check availability.';
+        feedbackEl.style.color = 'var(--pico-color-red-500)';
+    }
+}, 500);
+
+async function handleUserSlugSubmit(event) {
+    event.preventDefault();
+    const form = event.target;
+    const slug = form.querySelector('#user-slug').value;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const feedbackEl = document.getElementById('user-slug-feedback');
+
+    submitButton.disabled = true;
+    submitButton.setAttribute('aria-busy', 'true');
+
+    try {
+        const response = await fetch('/api/v1/user/slug', {
+            method: 'POST',
+            headers: {
+                'X-Auth-Key': authKey,
+                'X-CSRF-Token': csrfToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ slug })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to update slug');
+        }
+
+        currentUser.slug = data.slug; // Update local cache
+        feedbackEl.textContent = 'Slug saved successfully!';
+        feedbackEl.style.color = 'var(--pico-color-green-500)';
+        // Refresh checks to update URLs
+        fetchChecks();
+        fetchStatusPages();
+    } catch (error) {
+        feedbackEl.textContent = error.message;
+        feedbackEl.style.color = 'var(--pico-color-red-500)';
+    } finally {
+        submitButton.disabled = false;
+        submitButton.removeAttribute('aria-busy');
+    }
+}
+
+document.getElementById('user-slug')?.addEventListener('input', (e) => {
+    const slug = e.target.value;
+    const feedbackEl = document.getElementById('user-slug-feedback');
+    if (!/^[a-z0-9_-]*$/.test(slug)) {
+        feedbackEl.textContent = 'Invalid characters. Use a-z, 0-9, -, _';
+        feedbackEl.style.color = 'var(--pico-color-red-500)';
+    } else {
+        checkUserSlugAvailability(slug);
+    }
 });

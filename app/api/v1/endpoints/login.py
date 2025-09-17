@@ -90,6 +90,32 @@ async def unlink_telegram(
     await crud.unlink_telegram_from_user(db, user=user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+@router.post("/user/slug", response_model=schemas.User)
+async def update_user_slug(
+    slug_update: schemas.UserSlugUpdate,
+    user: db_models.User = Depends(security.get_public_user_from_key),
+    db: AsyncSession = Depends(db_base.get_db)
+):
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Invalid user.")
+    try:
+        return await crud.update_user_slug(db, user=user, new_slug=slug_update.slug)
+    except IntegrityError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+@router.get("/user/slug-check", response_class=Response)
+async def check_user_slug_availability(
+    slug: str,
+    user: db_models.User = Depends(security.get_public_user_from_key),
+    db: AsyncSession = Depends(db_base.get_db)
+):
+    if not user or not user.id:
+        raise HTTPException(status_code=401, detail="Invalid user.")
+    is_taken = await crud.is_user_slug_taken(db, slug=slug, user_id=user.id)
+    if is_taken:
+        return Response(status_code=status.HTTP_409_CONFLICT)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 @router.post("/user/rotate-key", response_model=schemas.UserKeyResponse)
 async def rotate_api_key(
     response: Response,

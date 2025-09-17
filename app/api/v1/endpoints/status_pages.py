@@ -26,8 +26,8 @@ async def create_status_page(
         raise HTTPException(status_code=401, detail="Cannot create status page for a non-existent user.")
     try:
         return await crud.create_status_page(db=db, status_page=status_page, principal=principal)
-    except IntegrityError:
-        raise HTTPException(status_code=409, detail="A status page with this slug already exists.")
+    except IntegrityError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 @router.put("/{status_page_id}", response_model=schemas.StatusPage)
 async def update_status_page(
@@ -43,8 +43,8 @@ async def update_status_page(
         if not updated:
             raise HTTPException(status_code=404, detail="Status page not found.")
         return updated
-    except IntegrityError:
-        raise HTTPException(status_code=409, detail="A status page with this slug already exists.")
+    except IntegrityError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 @router.delete("/{status_page_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_status_page(

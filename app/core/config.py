@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     SAVE_CHECK_LAST_LOGS: bool = True
     GEOIP_DATABASE_PATH: Optional[str] = None
 
+    # User-specific slugs for URLs
+    USER_SLUG_ENABLED: bool = True
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

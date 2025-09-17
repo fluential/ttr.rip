@@ -213,6 +213,17 @@
 
 <article>
     <header>Account Management</header>
+    {% if user_slug_enabled %}
+    <form id="user-slug-form">
+        <label for="user-slug">
+            User Slug (for URLs)
+            <input type="text" id="user-slug" name="slug" value="{{ user.slug or '' }}" placeholder="your-unique-name" pattern="[a-z0-9_-]+" title="a-z, 0-9, -, _" required>
+            <small id="user-slug-feedback" style="min-height: 1.2em;"></small>
+        </label>
+        <button type="submit" id="save-user-slug-btn" style="width: auto;">Save User Slug</button>
+    </form>
+    <hr>
+    {% endif %}
     <p>This is your unique key. <b>Bookmark this page or save the key!</b> It is the only way to access your checks.</p>
     <input type="text" id="auth-key-display" class="ping-url" value="" readonly onclick="copyAuthKey(this, '{{ auth_key }}')" style="text-align: center; font-size: 1.1rem;">
     

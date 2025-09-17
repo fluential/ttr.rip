@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     Table,
     Float,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 
@@ -50,6 +51,7 @@ class User(Base):
 
     # For admin users
     username: Optional[str] = Column(String, unique=True, index=True, nullable=True)
+    slug: Optional[str] = Column(String, unique=True, index=True, nullable=True)
     hashed_password: Optional[str] = Column(String, nullable=True)
     is_admin: bool = Column(Boolean, default=False, nullable=False)
 
@@ -68,11 +70,12 @@ class User(Base):
 
 class StatusPage(Base):
     __tablename__ = "status_pages"
+    __table_args__ = (UniqueConstraint('owner_id', 'slug', name='_owner_slug_uc'),)
 
     id: int = Column(Integer, primary_key=True, index=True)
     uuid: str = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
     name: str = Column(String, index=True)
-    slug: str = Column(String, unique=True, index=True)
+    slug: str = Column(String, index=True)
     is_public: bool = Column(Boolean, default=True, nullable=False)
     owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
 
@@ -82,10 +85,11 @@ class StatusPage(Base):
 
 class Check(Base):
     __tablename__ = "checks"
+    __table_args__ = (UniqueConstraint('owner_id', 'slug', name='_check_owner_slug_uc'),)
 
     id: int = Column(Integer, primary_key=True, index=True)
     uuid: str = Column(String, unique=True, index=True)
-    slug: Optional[str] = Column(String, unique=True, index=True, nullable=True)
+    slug: Optional[str] = Column(String, index=True, nullable=True)
     name: str = Column(String, index=True)
     created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     

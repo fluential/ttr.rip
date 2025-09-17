@@ -7,6 +7,7 @@ from croniter import croniter
 import pytz
 from oncalendar import OnCalendar
 from typing import Union, Optional, Any
+import mmh3
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, case, or_, and_, text
@@ -170,6 +171,19 @@ def _encode_cursor(value: Any) -> Optional[str]:
     json_str = json.dumps(value)
     return base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8')
 
+def generate_user_slug(input_string: str, salt: str = "") -> str:
+    """Generates a short, URL-friendly hash from an input string."""
+    # Use MurmurHash3 for a fast, non-cryptographic hash
+    hash_val = mmh3.hash(input_string + salt, signed=False)
+    # Base62 encode for a URL-friendly, compact representation
+    alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    base = len(alphabet)
+    encoded = ""
+    while hash_val > 0:
+        hash_val, remainder = divmod(hash_val, base)
+        encoded = alphabet[remainder] + encoded
+    return encoded[:8] # Truncate to 8 characters
+
 def _decode_cursor(cursor: Optional[str]) -> Any:
     if cursor is None:
         return None
@@ -193,6 +207,10 @@ async def get_user_by_auth_key(db: AsyncSession, auth_key: str):
     result = await db.execute(select(models.User).filter(models.User.auth_key == auth_key))
     return result.scalars().first()
 
+async def get_user_by_slug(db: AsyncSession, slug: str):
+    result = await db.execute(select(models.User).filter(models.User.slug == slug))
+    return result.scalars().first()
+
 async def get_user_by_telegram_id(db: AsyncSession, telegram_user_id: int):
     result = await db.execute(select(models.User).filter(models.User.telegram_user_id == telegram_user_id))
     return result.scalars().first()
@@ -202,8 +220,22 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
     if user.password:
         hashed_password = security.get_password_hash(user.password)
     
+    # Generate a unique user slug
+    user_slug = None
+    if settings.USER_SLUG_ENABLED and user.auth_key:
+        base_slug = generate_user_slug(user.auth_key)
+        user_slug = base_slug
+        salt = 0
+        while True:
+            existing_user = await get_user_by_slug(db, user_slug)
+            if not existing_user:
+                break
+            salt += 1
+            user_slug = generate_user_slug(user.auth_key, salt=str(salt))
+
     db_user = models.User(
         username=user.username,
+        slug=user_slug,
         hashed_password=hashed_password,
         is_admin=user.is_admin,
         auth_key=user.auth_key,
@@ -262,6 +294,20 @@ async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key
     await db.refresh(user)
     return user
 
+async def update_user_slug(db: AsyncSession, user: models.User, new_slug: str):
+    """Updates a user's slug after checking for uniqueness."""
+    if not re.match(r"^[a-z0-9_-]+$", new_slug):
+        raise IntegrityError("Slug contains invalid characters.", params=None, orig=None)
+
+    existing_user = await get_user_by_slug(db, new_slug)
+    if existing_user and existing_user.id != user.id:
+        raise IntegrityError("This slug is already taken.", params=None, orig=None)
+    
+    user.slug = new_slug
+    await db.commit()
+    await db.refresh(user)
+    return user
+
 async def get_all_checks_by_owner(db: AsyncSession, principal: models.User):
     """Gets all checks for a given principal, without pagination."""
     if not principal.id:
@@ -297,15 +343,21 @@ async def _handle_tags(db: AsyncSession, owner_id: int, tag_names: list[str]) ->
 
 
 # Check CRUD
-async def get_check_by_identifier(db: AsyncSession, identifier: str):
-    """Gets a check by its UUID or its slug."""
+async def get_check_by_identifier(db: AsyncSession, user: models.User, check_identifier: str):
+    """Gets a check by its UUID or its slug, scoped to a user."""
     try:
         # Check if it's a valid UUID
-        uuid.UUID(identifier)
-        query = select(models.Check).filter(models.Check.uuid == identifier)
+        uuid.UUID(check_identifier)
+        query = select(models.Check).filter(
+            models.Check.uuid == check_identifier,
+            models.Check.owner_id == user.id
+        )
     except ValueError:
         # Assume it's a slug
-        query = select(models.Check).filter(models.Check.slug == identifier)
+        query = select(models.Check).filter(
+            models.Check.slug == check_identifier,
+            models.Check.owner_id == user.id
+        )
     
     result = await db.execute(query)
     return result.scalars().first()
@@ -1106,11 +1158,11 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
 
 
 # Status Page CRUD
-async def get_status_page_by_slug(db: AsyncSession, slug: str):
+async def get_status_page_by_slug(db: AsyncSession, user: models.User, page_slug: str):
     result = await db.execute(
         select(models.StatusPage)
         .options(selectinload(models.StatusPage.checks))
-        .filter(models.StatusPage.slug == slug)
+        .filter(models.StatusPage.slug == page_slug, models.StatusPage.owner_id == user.id)
     )
     return result.scalars().first()
 
@@ -1126,9 +1178,9 @@ async def get_status_pages_by_owner(db: AsyncSession, principal: models.User):
     return result.scalars().all()
 
 async def create_status_page(db: AsyncSession, status_page: schemas.StatusPageCreate, principal: models.User):
-    # Check for slug uniqueness
-    existing = await db.execute(select(models.StatusPage).filter(models.StatusPage.slug == status_page.slug))
-    if existing.scalars().first():
+    # Check for slug uniqueness for this user
+    is_taken = await is_status_page_slug_taken(db, status_page.slug, principal.id)
+    if is_taken:
         raise IntegrityError("Status page with this slug already exists.", params=None, orig=None)
 
     db_status_page = models.StatusPage(
@@ -1160,8 +1212,8 @@ async def update_status_page(db: AsyncSession, status_page_id: int, status_page_
 
     # Check for slug uniqueness if it's being changed
     if status_page_data.slug != db_status_page.slug:
-        existing_result = await db.execute(select(models.StatusPage).filter(models.StatusPage.slug == status_page_data.slug))
-        if existing_result.scalars().first():
+        is_taken = await is_status_page_slug_taken(db, status_page_data.slug, principal.id, db_status_page.id)
+        if is_taken:
             raise IntegrityError("Status page with this slug already exists.", params=None, orig=None)
 
     db_status_page.name = status_page_data.name
@@ -1195,6 +1247,26 @@ async def get_all_tags_by_owner(db: AsyncSession, principal: models.User):
     result = await db.execute(query)
     return result.scalars().all()
 
+
+async def is_user_slug_taken(db: AsyncSession, slug: str, user_id: Optional[int] = None) -> bool:
+    """Checks if a user slug is already taken by another user."""
+    query = select(models.User.id).filter(models.User.slug == slug)
+    if user_id is not None:
+        query = query.filter(models.User.id != user_id)
+    result = await db.execute(query)
+    return result.scalars().first() is not None
+
+async def is_status_page_slug_taken(db: AsyncSession, slug: str, owner_id: int, page_id: Optional[int] = None) -> bool:
+    """Checks if a slug is already taken by another status page for the same owner."""
+    query = select(models.StatusPage.id).filter(
+        models.StatusPage.owner_id == owner_id,
+        models.StatusPage.slug == slug
+    )
+    if page_id is not None:
+        query = query.filter(models.StatusPage.id != page_id)
+    
+    result = await db.execute(query)
+    return result.scalars().first() is not None
 
 async def is_slug_taken(db: AsyncSession, slug: str, owner_id: int, check_id: Optional[int] = None) -> bool:
     """Checks if a slug is already taken by another check for the same owner."""

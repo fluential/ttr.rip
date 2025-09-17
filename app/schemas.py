@@ -26,6 +26,7 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
+    slug: Optional[str] = None
     is_admin: bool
     auth_key: Optional[str] = None
     telegram_user_id: Optional[int] = None
@@ -37,6 +38,9 @@ class User(UserBase):
 
 class UserKeyResponse(BaseModel):
     auth_key: str
+
+class UserSlugUpdate(BaseModel):
+    slug: str
 
 # Tag Schemas
 class Tag(BaseModel):
