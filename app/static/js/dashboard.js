@@ -909,10 +909,10 @@ function viewRecentPings(checkId) {
             const timeAgo = formatTimeDifference(diffSeconds);
             return `
             <div class="ping-log-entry">
-                <p><strong><span class="fi fi-${ping.country_code.toLowerCase()}"></span> ${ping.country_name}</strong> - ${ping.connection_type}</p>
-                <p><small>${pingDate.toLocaleString()} (${timeAgo})</small></p>
-                <p><small><strong>IP:</strong> ${ping.ip_address}</small></p>
-                <p><small><strong>Agent:</strong> ${ping.user_agent}</small></p>
+                <p><strong><span class="fi fi-${ping.country_code.toLowerCase()}"></span> ${ping.country_name}</strong> - <code>${ping.connection_type}</code></p>
+                <p><small><code>${pingDate.toLocaleString()} (${timeAgo})</code></small></p>
+                <p><small><strong>IP:</strong> <code>${ping.ip_address}</code></small></p>
+                <p><small><strong>Agent:</strong> <code>${ping.user_agent}</code></small></p>
             </div>
         `}).join('<hr class="modal-hr">');
     }
