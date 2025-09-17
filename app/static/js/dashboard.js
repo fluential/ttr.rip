@@ -749,7 +749,8 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     checks.forEach(check => {
         const row = document.createElement('tr');
         const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
-        const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
+        const pingIdentifier = check.slug || check.uuid;
+        const pingUrl = `${window.location.origin}/ping/${pingIdentifier}`;
 
         const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
         const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
@@ -780,7 +781,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         };
         
         const statusText = displayStatus.toUpperCase();
-        const badgeUrl = `${window.location.origin}/ping/${check.uuid}/badge.svg`;
+        const badgeUrl = `${window.location.origin}/ping/${pingIdentifier}/badge.svg`;
 
         row.dataset.checkId = check.id;
         row.dataset.checkName = check.name;
@@ -798,7 +799,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             </td>
             <td>
                 <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;">
-                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${(check.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds}, '${(check.expected_content || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${check.expected_content_type}', ${check.use_regex_for_content})">✏️</button>
+                    <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id}, '${(check.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${check.slug || ''}', ${check.interval_seconds}, ${check.grace_seconds}, ${check.max_runtime_seconds}, '${(check.expected_content || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${check.expected_content_type}', ${check.use_regex_for_content})">✏️</button>
                     <button class="outline action-button" title="View Last Content" onclick="viewLastContent(${check.id})" ${!check.last_content ? 'disabled' : ''}>📄</button>
                     <button class="outline action-button" title="${check.paused ? 'Resume' : 'Pause'}" onclick="togglePause(${check.id})">${check.paused ? '▶️' : '⏸️'}</button>
                     <button class="outline action-button" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
@@ -844,7 +845,7 @@ function updateSortIndicators() {
     });
 }
 
-function editCheck(event, id, name, interval, grace, maxRuntime, expectedContent, expectedContentType, useRegex) {
+function editCheck(event, id, name, slug, interval, grace, maxRuntime, expectedContent, expectedContentType, useRegex) {
     event.stopPropagation();
     const details = document.getElementById('new-check-section');
     if (details) {
@@ -852,6 +853,7 @@ function editCheck(event, id, name, interval, grace, maxRuntime, expectedContent
     }
     const form = document.getElementById('new-check-form');
     form.querySelector('#name').value = name;
+    form.querySelector('#slug').value = slug || '';
     form.querySelector('#interval_seconds').value = interval;
     form.querySelector('#grace_seconds').value = grace;
     form.querySelector('#max_runtime_seconds').value = maxRuntime || '';
@@ -907,6 +909,7 @@ async function handleFormSubmit(event) {
 
     const data = {
         name: form.querySelector('#name').value,
+        slug: form.querySelector('#slug').value || null,
         interval_seconds: parseInt(form.querySelector('#interval_seconds').value),
         grace_seconds: parseInt(form.querySelector('#grace_seconds').value),
         max_runtime_seconds: maxRuntimeValue,

@@ -65,6 +65,7 @@ class Check(Base):
 
     id: int = Column(Integer, primary_key=True, index=True)
     uuid: str = Column(String, unique=True, index=True)
+    slug: Optional[str] = Column(String, unique=True, index=True, nullable=True)
     name: str = Column(String, index=True)
     created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     interval_seconds: int = Column(Integer)

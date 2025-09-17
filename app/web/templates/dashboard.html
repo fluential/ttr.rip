@@ -73,11 +73,16 @@
                 Name
                 <input type="text" id="name" name="name" placeholder="Daily Backup" required>
             </label>
+            <label for="slug">
+                Slug (Optional, for URL)
+                <input type="text" id="slug" name="slug" placeholder="daily-backup-job" pattern="[a-z0-9_-]+" title="a-z, 0-9, -, _">
+            </label>
+        </div>
+        <div class="grid">
             <label for="interval_seconds">
                 Interval (seconds)
                 <input type="number" id="interval_seconds" name="interval_seconds" placeholder="86400" required>
             </label>
-        </div>
         <div class="grid">
             <label for="grace_seconds">
                 Grace (seconds)

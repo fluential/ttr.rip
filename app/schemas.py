@@ -40,6 +40,7 @@ class UserKeyResponse(BaseModel):
 # Check Schemas
 class CheckBase(BaseModel):
     name: str
+    slug: Optional[str] = None
     interval_seconds: int
     grace_seconds: int
     max_runtime_seconds: Optional[int] = None
@@ -56,6 +57,7 @@ class CheckUpdate(CheckBase):
 
 class CheckExport(BaseModel):
     name: str
+    slug: Optional[str] = None
     interval_seconds: int
     grace_seconds: int
     expected_content: Optional[str] = None

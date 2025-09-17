@@ -226,8 +226,17 @@ async def get_all_checks_by_owner(db: AsyncSession, principal: models.User):
     return result.scalars().all()
 
 # Check CRUD
-async def get_check_by_uuid(db: AsyncSession, check_uuid: str):
-    result = await db.execute(select(models.Check).filter(models.Check.uuid == check_uuid))
+async def get_check_by_identifier(db: AsyncSession, identifier: str):
+    """Gets a check by its UUID or its slug."""
+    try:
+        # Check if it's a valid UUID
+        uuid.UUID(identifier)
+        query = select(models.Check).filter(models.Check.uuid == identifier)
+    except ValueError:
+        # Assume it's a slug
+        query = select(models.Check).filter(models.Check.slug == identifier)
+    
+    result = await db.execute(query)
     return result.scalars().first()
 
 async def get_user_queued_notification_count(db: AsyncSession, principal: models.User) -> Union[int, str]:
@@ -638,8 +647,12 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
 
     try:
         # Now, principal is guaranteed to be a persisted User object.
+        check_data = check.model_dump()
+        if not check_data.get("slug"):
+            check_data["slug"] = None # Ensure empty string is saved as NULL
+
         db_check_data = {
-            **check.model_dump(),
+            **check_data,
             "uuid": str(uuid.uuid4()),
             "owner_id": principal.id
         }
@@ -672,6 +685,12 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         final_check = result.scalars().one()
         
         return final_check
+    except IntegrityError as e:
+        await db.rollback()
+        if "UNIQUE constraint failed: checks.slug" in str(e).lower():
+            raise IntegrityError("A check with this slug already exists.", params=None, orig=e)
+        # Re-raise other integrity errors (like user creation race condition)
+        raise
     except Exception as e:
         logger.error(f"Error during check creation phase: {e}", exc_info=True)
         await db.rollback()
@@ -691,6 +710,9 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
     db_check = result.scalars().first()
     if db_check:
         update_data = check_data.model_dump()
+        if "slug" in update_data and not update_data["slug"]:
+            update_data["slug"] = None # Ensure empty string is saved as NULL
+
         for key, value in update_data.items():
             setattr(db_check, key, value)
 
@@ -723,8 +745,15 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
             except Exception as e:
                 logger.error(f"Failed to re-evaluate status for check {db_check.id} during update: {e}")
         
-        await db.commit()
-        await db.refresh(db_check)
+        try:
+            await db.commit()
+            await db.refresh(db_check)
+        except IntegrityError as e:
+            await db.rollback()
+            if "UNIQUE constraint failed: checks.slug" in str(e).lower():
+                raise IntegrityError("A check with this slug already exists.", params=None, orig=e)
+            raise
+
         _update_redis_stats_counters(principal.id, old_status, new_status, is_paused=db_check.paused)
         metrics.record_check_update(new_status, old_status, is_paused=db_check.paused)
     return db_check
