@@ -196,12 +196,12 @@ th[data-sort].sort-desc::after {
 
 #connection-status.error {
     height: 2.5rem;
-    background-color: var(--pico-color-red-600);
+    background-color: var(--pico-color-red-500);
 }
 
 #connection-status.success {
     height: 2.5rem;
-    background-color: var(--pico-color-green-600);
+    background-color: var(--pico-color-green-500);
 }
 
 #connection-border-overlay {
@@ -217,9 +217,9 @@ th[data-sort].sort-desc::after {
 }
 
 #connection-border-overlay.error {
-    border-color: var(--pico-color-red-600);
+    border-color: var(--pico-color-red-500);
 }
 
 #connection-border-overlay.success {
-    border-color: var(--pico-color-green-600);
+    border-color: var(--pico-color-green-500);
 }
