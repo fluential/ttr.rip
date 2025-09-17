@@ -291,11 +291,9 @@ async def get_status_badge(uuid: str, db: AsyncSession = Depends(get_db)):
     status = "paused" if db_check.paused else db_check.status
     badge_svg = BADGE_TEMPLATES.get(status, BADGE_TEMPLATES["new"])
     
-    # Add cache control headers to prevent aggressive caching
+    # Add cache control headers. Allow caching for 30 seconds.
     headers = {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
+        "Cache-Control": "public, max-age=30",
     }
     return SVGResponse(content=badge_svg, headers=headers)
 
