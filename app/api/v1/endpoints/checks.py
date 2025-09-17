@@ -33,7 +33,7 @@ async def read_checks(
     cursor: Optional[str] = None,
     tag: Optional[str] = None,
 ):
-    allowed_sort_fields = ['id', 'name', 'status', 'created_at', 'last_ping', 'last_duration_seconds', 'uuid', 'deadline']
+    allowed_sort_fields = ['id', 'name', 'created_at', 'uuid', 'deadline']
     if sort_by not in allowed_sort_fields:
         raise HTTPException(status_code=400, detail=f"Invalid sort field: {sort_by}")
 
