@@ -282,31 +282,6 @@ def revoke_admin_refresh_token(refresh_token: str):
         return
 
 
-# --- Scopes for X-Auth-Key ---
-
-def require_scopes(required: list[str]):
-    async def _checker(x_auth_key: Optional[str] = Header(None, alias="X-Auth-Key")):
-        # If no key, the main auth dependency will fail; don't double-handle here.
-        if not x_auth_key:
-            return
-        try:
-            r = get_redis_connection()
-            if not r:
-                return  # If Redis is unavailable, do not enforce to avoid breaking availability
-            ak_hash = hashlib.sha256(x_auth_key.encode()).hexdigest()
-            scopes_key = f"authkey:scopes:{ak_hash}"
-            if r.scard(scopes_key) == 0:
-                return  # No scopes configured => allow by default
-            existing = set(s.decode() if isinstance(s, bytes) else s for s in r.smembers(scopes_key))
-            if not set(required).issubset(existing):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient scopes")
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error checking scopes: {e}")
-            # Fail-open to avoid availability impact; adjust if you prefer fail-closed.
-            return
-    return _checker
 
 
 async def get_telegram_session_data(
