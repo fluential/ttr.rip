@@ -321,12 +321,26 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
                     **geoip_details,
                 }
                 
-                redis_key = f"ping_logs:{db_check.id}"
-                pipe = r.pipeline()
-                pipe.lpush(redis_key, json.dumps(log_entry))
-                pipe.ltrim(redis_key, 0, 2) # Keep only the last 3 logs
-                pipe.expire(redis_key, timedelta(days=7)) # Expire after 7 days
-                pipe.execute()
+                key = crud.get_check_runtime_redis_key(db_check.id)
+                # Update last_pings JSON array inside the runtime hash (keep last 3)
+                try:
+                    existing = r.hget(key, "last_pings")
+                except Exception:
+                    existing = None
+                logs = []
+                if existing:
+                    try:
+                        if isinstance(existing, bytes):
+                            existing = existing.decode()
+                        parsed = json.loads(existing)
+                        if isinstance(parsed, list):
+                            logs = parsed
+                    except Exception:
+                        logs = []
+                logs.insert(0, log_entry)
+                if len(logs) > 3:
+                    logs = logs[:3]
+                r.hset(key, "last_pings", json.dumps(logs))
         except Exception as e:
             logger.error(f"Failed to log ping details to Redis for check {db_check.id}: {e}")
     # --- End Log Ping ---
@@ -345,12 +359,13 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
         except Exception:
             content = "[Could not decode request body]"
 
-    # Store content in Redis with a 1-hour TTL
+    # Store content in runtime Redis hash
     if not settings.DEBUG_MODE:
         try:
             r = get_redis_connection()
             if r:
-                r.set(f"check_content:{db_check.id}", content, ex=3600)
+                key = crud.get_check_runtime_redis_key(db_check.id)
+                r.hset(key, "last_content", content)
         except Exception as e:
             logger.error(f"Failed to store ping content in Redis for check {db_check.id}: {e}")
 

@@ -56,16 +56,12 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
         pipe = r.pipeline()
         for check in checks:
             key = get_check_runtime_redis_key(check.id)
-            pipe.hmget(key, "status", "last_ping", "last_start", "last_duration_seconds")
-            pipe.lrange(f"ping_logs:{check.id}", 0, 2)
-            pipe.get(f"check_content:{check.id}")
+            pipe.hmget(key, "status", "last_ping", "last_start", "last_duration_seconds", "last_pings", "last_content")
         
         results = pipe.execute()
 
         for i, check in enumerate(checks):
-            status_val, last_ping_str, last_start_str, last_duration_str = results[i * 3]
-            ping_logs = results[i * 3 + 1]
-            last_content = results[i * 3 + 2]
+            status_val, last_ping_str, last_start_str, last_duration_str, last_pings_json, last_content = results[i]
 
             # Normalize potential bytes from Redis
             if isinstance(status_val, bytes):
@@ -76,13 +72,27 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
                 last_start_str = last_start_str.decode()
             if isinstance(last_duration_str, bytes):
                 last_duration_str = last_duration_str.decode()
+            if isinstance(last_content, bytes):
+                last_content = last_content.decode()
 
             check.status = status_val or "new"
             check.last_ping = datetime.fromisoformat(last_ping_str) if last_ping_str else None
             check.last_start = datetime.fromisoformat(last_start_str) if last_start_str else None
             check.last_duration_seconds = float(last_duration_str) if last_duration_str else None
-            
-            check.last_pings = [json.loads(log) for log in ping_logs] if ping_logs else []
+
+            # Parse last_pings JSON array (keep [] on error)
+            last_pings_list = []
+            try:
+                if last_pings_json:
+                    if isinstance(last_pings_json, bytes):
+                        last_pings_json = last_pings_json.decode()
+                    parsed = json.loads(last_pings_json)
+                    if isinstance(parsed, list):
+                        last_pings_list = parsed
+            except Exception:
+                last_pings_list = []
+
+            check.last_pings = last_pings_list
             check.last_content = last_content if last_content else None
 
     except Exception as e:
@@ -846,7 +856,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
                 r = get_redis_connection()
                 if r:
                     key = get_check_runtime_redis_key(db_check.id)
-                    r.hset(key, mapping={"status": "new"})
+                    r.hset(key, mapping={"status": "new", "last_pings": "[]"})
             except Exception as e:
                 logger.error(f"Failed to initialize Redis runtime status for check {db_check.id}: {e}")
 

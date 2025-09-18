@@ -166,9 +166,9 @@ async def get_check_last_content(
         try:
             r = get_redis_connection()
             if r:
-                redis_content = r.get(f"check_content:{check_id}")
+                redis_content = r.hget(crud.get_check_runtime_redis_key(check_id), "last_content")
                 if redis_content:
-                    content = redis_content
+                    content = redis_content.decode() if isinstance(redis_content, bytes) else redis_content
         except Exception as e:
             logger.error(f"Failed to retrieve content from Redis for check {check_id}: {e}")
             content = "Error retrieving content from storage."
