@@ -2,7 +2,6 @@ import asyncio
 import logging
 from celery import Celery
 from sqlalchemy.future import select
-from sqlalchemy import text
 from sqlalchemy.orm import selectinload
 import httpx
 from datetime import datetime, timezone
@@ -112,7 +111,7 @@ def send_webhook_notification_task(check_id: int, message: str):
 async def _check_overdue_jobs():
     """The core async logic for finding and processing overdue checks."""
     from app.services import notifications
-    from app.crud import _update_redis_stats_counters
+    from app.crud import get_check_runtime_redis_key
 
     now_utc = datetime.now(timezone.utc)
     logger.info("Scheduler task running check cycle...")
@@ -121,8 +120,8 @@ async def _check_overdue_jobs():
         async with session.begin():
             # --- Find overdue checks ---
             overdue_query = select(Check).where(
-                Check.status.in_(["up", "new"]),
                 Check.paused == False,
+                Check.deadline.isnot(None),
                 Check.deadline < now_utc
             )
             result = await session.execute(overdue_query)
@@ -130,48 +129,136 @@ async def _check_overdue_jobs():
 
             if overdue_checks:
                 logger.info(f"Scheduler found {len(overdue_checks)} overdue checks.")
+                try:
+                    r = get_redis_connection()
+                except Exception as e:
+                    r = None
+                    logger.error(f"Redis connection error while processing overdue checks: {e}")
                 for check in overdue_checks:
-                    if check.status != "down":
-                        old_status = check.status
+                    if not r:
+                        logger.warning(f"Skipping overdue processing for check {check.id} due to Redis unavailability.")
+                        continue
+                    # Atomically set status to 'down' and update counters
+                    lua = """
+local runtime_key = KEYS[1]
+local user_counters = KEYS[2]
+local global_counters = KEYS[3]
+local is_paused = ARGV[1]
+local prev = redis.call('HGET', runtime_key, 'status')
+if not prev then prev = 'new' end
+if prev ~= 'down' then
+  redis.call('HSET', runtime_key, 'status', 'down', 'last_start', '')
+  if is_paused ~= '1' then
+    redis.call('HINCRBY', user_counters, prev, -1)
+    redis.call('HINCRBY', global_counters, prev, -1)
+    redis.call('HINCRBY', user_counters, 'down', 1)
+    redis.call('HINCRBY', global_counters, 'down', 1)
+  end
+end
+return prev
+"""
+                    runtime_key = get_check_runtime_redis_key(check.id)
+                    user_key = f"user_stats:counters:{check.owner_id}"
+                    global_key = "metrics:checks_status_counts"
+                    try:
+                        prev = r.eval(lua, 3, runtime_key, user_key, global_key, "1" if check.paused else "0")
+                        previous_status = prev.decode() if isinstance(prev, bytes) else prev
+                    except Exception as e:
+                        logger.error(f"Failed to update Redis status for overdue check {check.id}: {e}")
+                        continue
+
+                    if previous_status != "down":
                         logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN (overdue).")
-                        check.status = "down"
                         message = f"🔴 Check Down: [{check.name}] is overdue."
                         notifications.schedule_all_notifications(check, message)
-                        _update_redis_stats_counters(check.owner_id, old_status, "down")
             else:
                 logger.info("Scheduler found no overdue checks.")
 
             # --- Find checks that exceeded max runtime ---
-            runtime_query = select(Check).where(
-                Check.last_start.isnot(None),
+            # First, get candidates from DB (those with a configured max runtime and not paused)
+            runtime_candidates_query = select(Check).where(
                 Check.max_runtime_seconds.isnot(None),
-                Check.paused == False,
-                Check.last_start < now_utc - text("max_runtime_seconds * '1 second'::interval")
+                Check.paused == False
             )
-            # SQLite version for compatibility
-            if "sqlite" in settings.DATABASE_URL:
-                runtime_query = select(Check).where(
-                    Check.last_start.isnot(None),
-                    Check.max_runtime_seconds.isnot(None),
-                    Check.paused == False
-                ).where(
-                    text("julianday(:now) - julianday(last_start) > max_runtime_seconds / 86400.0")
-                )
-            
-            result = await session.execute(runtime_query, {"now": now_utc})
-            long_running_checks = result.scalars().all()
+            result = await session.execute(runtime_candidates_query)
+            runtime_candidates = result.scalars().all()
+
+            long_running_checks = []
+            if runtime_candidates:
+                try:
+                    r = get_redis_connection()
+                except Exception as e:
+                    r = None
+                    logger.error(f"Redis connection error while processing long-running checks: {e}")
+
+                if r:
+                    pipe = r.pipeline()
+                    keys = []
+                    for check in runtime_candidates:
+                        key = get_check_runtime_redis_key(check.id)
+                        keys.append((check, key))
+                        pipe.hmget(key, "last_start", "status")
+                    redis_results = pipe.execute()
+                    for (check, _), (last_start_str, status_val) in zip(keys, redis_results):
+                        if isinstance(last_start_str, bytes):
+                            last_start_str = last_start_str.decode()
+                        if isinstance(status_val, bytes):
+                            status_val = status_val.decode()
+                        if not last_start_str:
+                            continue
+                        try:
+                            last_start = datetime.fromisoformat(last_start_str)
+                        except Exception:
+                            continue
+                        if (now_utc - last_start).total_seconds() > (check.max_runtime_seconds or 0):
+                            if status_val != "down":
+                                long_running_checks.append(check)
 
             if long_running_checks:
                 logger.info(f"Scheduler found {len(long_running_checks)} long-running checks.")
+                # Lua to set down and clear last_start, update counters
+                lua = """
+local runtime_key = KEYS[1]
+local user_counters = KEYS[2]
+local global_counters = KEYS[3]
+local is_paused = ARGV[1]
+local prev = redis.call('HGET', runtime_key, 'status')
+if not prev then prev = 'new' end
+if prev ~= 'down' then
+  redis.call('HSET', runtime_key, 'status', 'down', 'last_start', '')
+  if is_paused ~= '1' then
+    redis.call('HINCRBY', user_counters, prev, -1)
+    redis.call('HINCRBY', global_counters, prev, -1)
+    redis.call('HINCRBY', user_counters, 'down', 1)
+    redis.call('HINCRBY', global_counters, 'down', 1)
+  end
+end
+return prev
+"""
+                try:
+                    r = get_redis_connection()
+                except Exception as e:
+                    r = None
+                    logger.error(f"Redis connection error while updating long-running checks: {e}")
+
                 for check in long_running_checks:
-                    if check.status != "down":
-                        old_status = check.status
+                    if not r:
+                        logger.warning(f"Skipping long-running processing for check {check.id} due to Redis unavailability.")
+                        continue
+                    runtime_key = get_check_runtime_redis_key(check.id)
+                    user_key = f"user_stats:counters:{check.owner_id}"
+                    global_key = "metrics:checks_status_counts"
+                    try:
+                        prev = r.eval(lua, 3, runtime_key, user_key, global_key, "1" if check.paused else "0")
+                        previous_status = prev.decode() if isinstance(prev, bytes) else prev
+                    except Exception as e:
+                        logger.error(f"Failed to update Redis status for long-running check {check.id}: {e}")
+                        continue
+
+                    if previous_status != "down":
                         logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN (exceeded max runtime).")
-                        check.status = "down"
-                        check.last_start = None # Clear start time to prevent re-triggering
                         message = f"🔴 Check Down: [{check.name}] exceeded its max runtime of {check.max_runtime_seconds}s."
                         notifications.schedule_all_notifications(check, message)
-                        _update_redis_stats_counters(check.owner_id, old_status, "down")
             else:
                 logger.info("Scheduler found no long-running checks.")
 
