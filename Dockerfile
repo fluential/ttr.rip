@@ -2,20 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Caddy
+# Install build tools for custom Caddy
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    debian-keyring \
-    debian-archive-keyring \
-    apt-transport-https \
     curl \
-    gnupg \
-    && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg \
-    && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list \
-    && apt-get update \
-    && apt-get install -y caddy \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get purge -y --auto-remove curl gnupg
+    golang \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build Caddy with the rate-limit module
+RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+RUN /root/go/bin/xcaddy build --with github.com/mholt/caddy-ratelimit
+RUN mv ./caddy /usr/bin/caddy
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
