@@ -1,4 +1,11 @@
+@import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css");
 /* Blueprint Theme */
+/* Icon utility */
+.bi {
+    font-size: 1.1em;
+    vertical-align: -10%;
+    margin-right: 0.25rem;
+}
 
 /* Light Mode Variables */
 :root {
@@ -47,9 +54,31 @@ h1, h2, h3, h4, h5, h6, strong {
 }
 
 article {
-    border-style: dashed;
-    padding: 1.5rem 1rem;
+    border: 2px dashed var(--card-border-color);
+    background: var(--card-background-color);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem 0;
 }
+
+/* Wider section headers (bleed beyond article padding) */
+:root { --section-header-bleed: 0.75rem; --section-header-radius: 8px; --section-header-gradient: linear-gradient(90deg, #e8f4f6 0%, #ffffff 100%); }
+[data-theme="dark"] { --section-header-bleed: 0.75rem; --section-header-radius: 8px; --section-header-gradient: linear-gradient(90deg, #0F3A5D 0%, #0D2B45 100%); }
+
+article > header,
+details#new-check-section > summary {
+    margin-left: calc(-1 * var(--section-header-bleed));
+    margin-right: calc(-1 * var(--section-header-bleed));
+    padding: 0.75rem 1.25rem;
+    background: var(--section-header-gradient);
+    border-bottom: 2px dashed var(--primary);
+    border-top-left-radius: var(--section-header-radius);
+    border-top-right-radius: var(--section-header-radius);
+    margin-bottom: 1rem;
+    color: var(--h1-color);
+}
+
+details#new-check-section > summary { cursor: pointer; }
 
 #checks-table thead th {
     font-family: 'Special Elite', cursive;
@@ -60,17 +89,28 @@ article {
 
 /* Navigation Bar */
 nav {
-    background: var(--card-background-color);
+    background: linear-gradient(90deg, var(--card-background-color) 0%, #e8f4f6 50%, var(--card-background-color) 100%);
     border-bottom: 2px dashed var(--primary);
+    padding: 0.5rem 1rem !important;
+}
+
+[data-theme="dark"] nav {
+    background: linear-gradient(90deg, #0D2B45 0%, #0F3A5D 50%, #0D2B45 100%);
 }
 
 nav ul li a, nav ul li select {
     transition: all 0.2s ease-in-out;
+    border: 1px dashed var(--form-element-border-color);
+    background: var(--card-background-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    color: var(--h1-color);
 }
 
 nav ul li a:hover, nav ul li select:hover {
-    background-color: var(--primary-focus);
-    color: var(--primary-hover);
+    background: linear-gradient(90deg, var(--primary-focus), transparent);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 
 nav ul li a#theme-switcher {
@@ -87,6 +127,15 @@ nav ul li a#theme-switcher {
     display: inline-flex;
     justify-content: center;
     align-items: center;
+    border: 1px dashed var(--form-element-border-color);
+    border-radius: 6px;
+    background: var(--card-background-color);
+}
+
+.action-button:hover {
+    background: var(--primary-focus);
+    border-color: var(--primary);
+    color: var(--primary);
 }
 
 /* Status Page Theme */

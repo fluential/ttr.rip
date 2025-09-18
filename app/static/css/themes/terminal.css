@@ -1,4 +1,11 @@
+@import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css");
 /* Terminal Theme */
+/* Icon utility */
+.bi {
+    font-size: 1.1em;
+    vertical-align: -10%;
+    margin-right: 0.25rem;
+}
 
 /* Light Mode Variables (Green on White) */
 :root {
@@ -58,8 +65,26 @@ article, details, input, select, textarea, button {
 
 article {
     border: 1px solid var(--primary);
-    padding: 1.5rem 1rem;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem 0;
+    background: var(--card-background-color);
 }
+
+/* Wider section headers (bleed beyond article padding) */
+:root { --section-header-bleed: 0.75rem; --section-header-gradient: linear-gradient(90deg, #ffffff 0%, #f4fff4 100%); }
+[data-theme="dark"] { --section-header-bleed: 0.75rem; --section-header-gradient: linear-gradient(90deg, #000000 0%, #111111 100%); }
+
+article > header,
+details#new-check-section > summary {
+    margin-left: calc(-1 * var(--section-header-bleed));
+    margin-right: calc(-1 * var(--section-header-bleed));
+    padding: 0.5rem 1.25rem;
+    background: var(--section-header-gradient);
+    border-bottom: 1px solid var(--primary);
+    margin-bottom: 1rem;
+}
+
+details#new-check-section > summary { cursor: pointer; }
 
 article > header, details#new-check-section > summary {
     font-size: 1.2rem;
@@ -70,21 +95,28 @@ article > header, details#new-check-section > summary {
 
 /* Navigation Bar */
 nav {
-    background: var(--background-color);
+    background: linear-gradient(90deg, var(--background-color) 0%, rgba(0,0,0,0) 50%, var(--background-color) 100%);
     border-bottom: 1px solid var(--primary);
-    padding: 0.25rem 1rem !important;
+    padding: 0.5rem 1rem !important;
     margin-bottom: 1.5rem;
+}
+
+[data-theme="light"] nav {
+    background: linear-gradient(90deg, #ffffff 0%, #f4fff4 50%, #ffffff 100%);
 }
 
 nav ul li a, nav ul li select {
     transition: none;
-    border: none;
-    padding: 5px 10px;
+    border: 1px solid var(--form-element-border-color);
+    padding: 6px 12px;
+    background: var(--card-background-color);
+    color: var(--text-color);
 }
 
 nav ul li a:hover, nav ul li select:hover {
     background-color: var(--primary);
     color: var(--primary-inverse);
+    border-color: var(--primary);
 }
 
 nav ul li a#theme-switcher {
@@ -100,6 +132,15 @@ nav ul li a#theme-switcher {
     display: inline-flex;
     justify-content: center;
     align-items: center;
+    border: 1px solid var(--form-element-border-color);
+    background: var(--card-background-color);
+    color: var(--text-color);
+}
+
+.action-button:hover {
+    background: var(--primary);
+    color: var(--primary-inverse);
+    border-color: var(--primary);
 }
 
 /* Status Page Theme */

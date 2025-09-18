@@ -1,4 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300..700&display=swap');
 /* Solarized Theme */
+/* Icon utility for Material Symbols */
+.icon, .material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.2em;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  vertical-align: -10%;
+  margin-right: 0.25rem;
+}
 
 /* Light Mode Variables */
 :root {
@@ -67,8 +86,32 @@ h1, h2, h3, h4, h5, h6, strong {
 }
 
 article {
-    padding: 1.5rem 1rem;
+    background: var(--card-background-color);
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem 0;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
 }
+
+/* Wider section headers (bleed beyond article padding) */
+:root { --section-header-bleed: 0.75rem; --section-header-radius: 8px; --section-header-gradient: linear-gradient(90deg, var(--base2) 0%, var(--base3) 100%); }
+[data-theme="dark"] { --section-header-bleed: 0.75rem; --section-header-radius: 8px; --section-header-gradient: linear-gradient(90deg, var(--base02) 0%, var(--base03) 100%); }
+
+article > header,
+details#new-check-section > summary {
+    margin-left: calc(-1 * var(--section-header-bleed));
+    margin-right: calc(-1 * var(--section-header-bleed));
+    padding: 0.75rem 1.25rem;
+    background: var(--section-header-gradient);
+    border-bottom: 1px solid var(--card-border-color);
+    border-top-left-radius: var(--section-header-radius);
+    border-top-right-radius: var(--section-header-radius);
+    margin-bottom: 1rem;
+    color: var(--h1-color);
+}
+
+details#new-check-section > summary { cursor: pointer; }
 
 #checks-table thead th {
     font-size: 1.1rem;
@@ -78,17 +121,30 @@ article {
 
 /* Navigation Bar */
 nav {
-    background: var(--card-background-color);
+    background: linear-gradient(90deg, var(--card-background-color) 0%, var(--base2) 50%, var(--card-background-color) 100%);
     border-bottom: 1px solid var(--card-border-color);
+    padding: 0.5rem 1rem !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] nav {
+    background: linear-gradient(90deg, var(--base03) 0%, var(--base02) 50%, var(--base03) 100%);
 }
 
 nav ul li a, nav ul li select {
     transition: all 0.2s ease-in-out;
+    border: 1px solid var(--form-element-border-color);
+    background: var(--card-background-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    color: var(--text-color);
 }
 
 nav ul li a:hover, nav ul li select:hover {
-    background-color: var(--primary-focus);
-    color: var(--primary-hover);
+    background: linear-gradient(90deg, var(--primary-focus), transparent);
+    color: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-focus);
 }
 
 nav ul li a#theme-switcher {
@@ -105,6 +161,16 @@ nav ul li a#theme-switcher {
     display: inline-flex;
     justify-content: center;
     align-items: center;
+    border: 1px solid var(--form-element-border-color);
+    border-radius: 6px;
+    background: var(--card-background-color);
+    color: var(--text-color);
+}
+
+.action-button:hover {
+    background: var(--primary-focus);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 
 /* Status Page Theme */
