@@ -37,6 +37,11 @@ RUN mkdir -p /var/cache/caddy && chown -R nobody:nogroup /var/cache/caddy
 RUN echo '#!/bin/bash\n\
 set -euo pipefail\n\
 \n\
+# Ensure .env exists; fall back to .env.example\n\
+if [ ! -f "/app/.env" ] && [ -f "/app/.env.example" ]; then\n\
+  cp /app/.env.example /app/.env\n\
+fi\n\
+\n\
 ALEMBIC_MAX_TRIES=${ALEMBIC_MAX_TRIES:-30}\n\
 ALEMBIC_SLEEP_SECONDS=${ALEMBIC_SLEEP_SECONDS:-2}\n\
 \n\

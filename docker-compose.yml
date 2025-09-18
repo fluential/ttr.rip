@@ -45,7 +45,7 @@ services:
       retries: 12
       start_period: 30s
     env_file:
-      - .env
+      - .env.example
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=INFO
@@ -63,7 +63,7 @@ services:
     volumes:
       - ./app:/app/app
     env_file:
-      - .env
+      - .env.example
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=INFO
@@ -83,7 +83,7 @@ services:
     volumes:
       - ./app:/app/app
     env_file:
-      - .env
+      - .env.example
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=INFO
