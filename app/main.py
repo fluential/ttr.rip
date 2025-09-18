@@ -297,21 +297,28 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
         try:
             r = get_redis_connection()
             if r:
-                ip_address = request.client.host
+                # Derive client IP: prefer X-Forwarded-For, then X-Real-IP, then socket
+                xff = request.headers.get("x-forwarded-for")
+                if xff:
+                    ip_address = xff.split(",")[0].strip()
+                else:
+                    ip_address = request.headers.get("x-real-ip") or (request.client.host if request.client else None)
+                if not ip_address:
+                    ip_address = "0.0.0.0"
+
                 user_agent = request.headers.get("user-agent", "Unknown")
-                
-                # Check for GeoIP headers from Caddy first
-                country_code = request.headers.get("x-geoip-country-code")
-                country_name = request.headers.get("x-geoip-country-name")
-                
-                if country_code and country_name:
+
+                # Prefer GeoIP headers injected by Caddy; fallback to local DB lookup
+                country_code = request.headers.get("x-geoip-country-code") or request.headers.get("x-geoip-country_code")
+                country_name = request.headers.get("x-geoip-country-name") or request.headers.get("x-geoip-country_name")
+
+                if country_code or country_name:
                     geoip_details = {
-                        "country_code": country_code,
-                        "country_name": country_name,
-                        "connection_type": "Unknown", # Not available from Caddy GeoIP
+                        "country_code": (country_code or ""),
+                        "country_name": country_name or "",
+                        "connection_type": "Unknown",  # Not available from Caddy GeoIP
                     }
                 else:
-                    # Fallback to internal lookup if headers are not present
                     geoip_details = geoip.get_geoip_details(ip_address)
 
                 log_entry = {
