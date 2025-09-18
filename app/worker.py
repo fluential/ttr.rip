@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import threading
+import atexit
 from celery import Celery
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -37,6 +39,23 @@ celery_app.conf.update(
         },
     },
 )
+
+# Use a single, long-lived asyncio event loop in this process to avoid
+# cross-loop connection reuse issues with asyncpg/SQLAlchemy.
+_event_loop = asyncio.new_event_loop()
+_loop_thread = threading.Thread(target=_event_loop.run_forever, daemon=True)
+_loop_thread.start()
+
+def run_coro(coro):
+    """Run an async coroutine in the worker's dedicated event loop."""
+    return asyncio.run_coroutine_threadsafe(coro, _event_loop).result()
+
+@atexit.register
+def _shutdown_event_loop():
+    try:
+        _event_loop.call_soon_threadsafe(_event_loop.stop)
+    except Exception:
+        pass
 
 if settings.DEBUG_MODE:
     logger.info("DEBUG_MODE is on. Celery will run tasks eagerly without a broker.")
@@ -92,19 +111,19 @@ async def _send_webhook_notification(check_id: int, message: str):
 
 @celery_app.task(name="send_telegram_notification_task")
 def send_telegram_notification_task(check_id: int, message: str):
-    asyncio.run(_send_telegram_notification(check_id, message))
+    run_coro(_send_telegram_notification(check_id, message))
 
 @celery_app.task(name="send_slack_notification_task")
 def send_slack_notification_task(check_id: int, message: str):
-    asyncio.run(_send_slack_notification(check_id, message))
+    run_coro(_send_slack_notification(check_id, message))
 
 @celery_app.task(name="send_discord_notification_task")
 def send_discord_notification_task(check_id: int, message: str):
-    asyncio.run(_send_discord_notification(check_id, message))
+    run_coro(_send_discord_notification(check_id, message))
 
 @celery_app.task(name="send_webhook_notification_task")
 def send_webhook_notification_task(check_id: int, message: str):
-    asyncio.run(_send_webhook_notification(check_id, message))
+    run_coro(_send_webhook_notification(check_id, message))
 
 
 async def _check_overdue_jobs():
@@ -267,4 +286,4 @@ return prev
 @celery_app.task(name="app.worker.check_overdue_jobs_task")
 def check_overdue_jobs_task():
     """Celery task wrapper to run the async scheduler logic."""
-    asyncio.run(_check_overdue_jobs())
+    run_coro(_check_overdue_jobs())

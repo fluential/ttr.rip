@@ -87,7 +87,7 @@ services:
   worker:
     build: .
     container_name: ttl_rip_worker
-    command: celery -A app.worker.celery_app worker --loglevel=info -P solo
+    command: celery -A app.worker.celery_app worker --loglevel=info -P solo -B
     volumes:
       - ./app:/app/app
     env_file:
@@ -104,25 +104,6 @@ services:
       web:
         condition: service_healthy
 
-  beat:
-    build: .
-    container_name: ttl_rip_beat
-    command: celery -A app.worker.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule
-    volumes:
-      - ./app:/app/app
-    env_file:
-      - .env.example
-    environment:
-      - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=INFO
-      - CELERY_WORKER_HIJACK_ROOT_LOGGER=false
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      web:
-        condition: service_healthy
 
 volumes:
   postgres_data:
