@@ -409,6 +409,8 @@
 <script>
     window.AUTH_KEY = "{{ auth_key }}";
     window.CSRF_TOKEN = "{{ csrf_token }}";
+    window.USER_SLUG = "{{ user.slug or '' }}";
+    window.PING_BASE = "/p/{{ user.slug or '' }}";
 </script>
 <script src="/static/js/dashboard.js?v={{ process_time }}" defer></script>
 {% endblock %}

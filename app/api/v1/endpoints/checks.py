@@ -40,6 +40,8 @@ async def read_checks(
     if sort_by not in allowed_sort_fields:
         raise HTTPException(status_code=400, detail=f"Invalid sort field: {sort_by}")
 
+    principal = await crud.ensure_user_has_slug(db, principal)
+
     items, next_cursor, prev_cursor = await crud.get_checks_by_owner(
         db=db, 
         principal=principal, 
@@ -84,6 +86,8 @@ async def read_dashboard_aggregate(
     allowed_sort_fields = ['id', 'name', 'created_at', 'uuid', 'deadline']
     if sort_by not in allowed_sort_fields:
         raise HTTPException(status_code=400, detail=f"Invalid sort field: {sort_by}")
+
+    principal = await crud.ensure_user_has_slug(db, principal)
 
     items, next_cursor, prev_cursor = await crud.get_checks_by_owner(
         db=db, 

@@ -16,6 +16,10 @@ let currentUser = null;
 let dashboardAggregateEtag = null;
 let metricsEtag = null;
 
+function getUserSlug() {
+    return (currentUser && currentUser.slug) || (window.USER_SLUG || '');
+}
+
 function getMaskedAuthKey(key) {
     if (key.length <= 4) {
         return '****';
@@ -350,11 +354,12 @@ function renderStatusPages(statusPages) {
         return;
     }
 
+    const userSlug = getUserSlug();
     listDiv.innerHTML = statusPages.map(page => `
         <div class="grid" style="align-items: center;">
             <div>
                 <strong>${page.name}</strong><br>
-                <small><a href="/s/${currentUser.slug}/${page.slug}" target="_blank">/s/${currentUser.slug}/${page.slug}</a></small>
+                <small><a href="/s/${userSlug}/${page.slug}" target="_blank">/s/${userSlug}/${page.slug}</a></small>
             </div>
             <div style="text-align: right;">
                 <button class="outline action-button" title="Edit" onclick="editStatusPage(event, ${page.id}, '${(page.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}', '${page.slug.replace(/'/g, "\\'")}', [${page.checks.map(c => c.id)}])">✏️</button>
@@ -568,7 +573,7 @@ async function fetchDashboardAggregate() {
             const row = document.createElement('tr');
             const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
             const pingIdentifier = check.slug || check.uuid;
-            const userSlug = currentUser ? currentUser.slug : '...';
+            const userSlug = getUserSlug();
             const pingUrl = `${window.location.origin}/p/${userSlug}/${pingIdentifier}`;
 
             const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
@@ -596,7 +601,7 @@ async function fetchDashboardAggregate() {
                 'paused': '⏸️'
             };
             const statusText = displayStatus.toUpperCase();
-            const badgeUrl = `${window.location.origin}/p/${pingIdentifier}/badge.svg`;
+            const badgeUrl = `${window.location.origin}/p/${userSlug}/${pingIdentifier}/badge.svg`;
 
             row.dataset.checkId = check.id;
             row.dataset.checkName = check.name;
@@ -1109,7 +1114,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         const row = document.createElement('tr');
         const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
         const pingIdentifier = check.slug || check.uuid;
-        const userSlug = currentUser ? currentUser.slug : '...';
+        const userSlug = getUserSlug();
         const pingUrl = `${window.location.origin}/p/${userSlug}/${pingIdentifier}`;
 
         const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
@@ -1141,7 +1146,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         };
         
         const statusText = displayStatus.toUpperCase();
-        const badgeUrl = `${window.location.origin}/p/${pingIdentifier}/badge.svg`;
+        const badgeUrl = `${window.location.origin}/p/${userSlug}/${pingIdentifier}/badge.svg`;
 
         row.dataset.checkId = check.id;
         row.dataset.checkName = check.name;
