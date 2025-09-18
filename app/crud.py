@@ -272,18 +272,18 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
     if user.password:
         hashed_password = security.get_password_hash(user.password)
     
-    # Generate a unique user slug
+    # Generate a unique user slug (always generate a slug to ensure ping URLs are never empty)
     user_slug = None
-    if settings.USER_SLUG_ENABLED and user.auth_key:
-        base_slug = generate_user_slug(user.auth_key)
-        user_slug = base_slug
-        salt = 0
-        while True:
-            existing_user = await get_user_by_slug(db, user_slug)
-            if not existing_user:
-                break
-            salt += 1
-            user_slug = generate_user_slug(user.auth_key, salt=str(salt))
+    base_input = user.auth_key or (user.username or str(uuid.uuid4()))
+    base_slug = generate_user_slug(base_input)
+    user_slug = base_slug
+    salt = 0
+    while True:
+        existing_user = await get_user_by_slug(db, user_slug)
+        if not existing_user:
+            break
+        salt += 1
+        user_slug = generate_user_slug(base_input, salt=str(salt))
 
     db_user = models.User(
         username=user.username,
@@ -344,6 +344,26 @@ async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key
     # Commit all changes (user key and re-encrypted tokens)
     await db.commit()
     await db.refresh(user)
+    return user
+
+async def ensure_user_has_slug(db: AsyncSession, user: models.User) -> models.User:
+    """
+    Ensure the user has a non-empty slug. If missing, generate a unique slug and persist it.
+    This is safe to call on every request; it only writes when slug is None/empty.
+    """
+    if user and not user.slug:
+        base_input = user.auth_key or (user.username or str(uuid.uuid4()))
+        slug = generate_user_slug(base_input)
+        salt = 0
+        while True:
+            existing_user = await get_user_by_slug(db, slug)
+            if not existing_user or existing_user.id == user.id:
+                break
+            salt += 1
+            slug = generate_user_slug(base_input, salt=str(salt))
+        user.slug = slug
+        await db.commit()
+        await db.refresh(user)
     return user
 
 async def update_user_slug(db: AsyncSession, user: models.User, new_slug: str):

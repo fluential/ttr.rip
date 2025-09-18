@@ -86,6 +86,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
 
     status_pages = []
     if user and user.id:
+        user = await crud.ensure_user_has_slug(db, user)
         status_pages = await crud.get_status_pages_by_owner(db, principal=user)
 
     logger.info(f"Dashboard loading. TELEGRAM_AUTH_ENABLED: {settings.TELEGRAM_AUTH_ENABLED}, TELEGRAM_BOT_NAME: '{settings.TELEGRAM_BOT_NAME}'")
@@ -139,6 +140,7 @@ async def telegram_callback(
             await db.rollback()
             raise
 
+    user = await crud.ensure_user_has_slug(db, user)
     query_params = dict(request.query_params)
     logger.info(f"Handling Telegram auth callback for user ID {user.id} with auth_key ...{user.auth_key[-4:]}")
     if not security.validate_telegram_hash(query_params.copy()):
@@ -188,6 +190,9 @@ async def telegram_login_callback(
         logger.info(f"Successfully created new user {user.id} for Telegram user {login_data.username}.")
     else:
         logger.info(f"Telegram login successful for existing user {user.id} (Telegram ID: {login_data.id})")
+
+    # Ensure the user has a slug for ping URLs
+    user = await crud.ensure_user_has_slug(db, user)
 
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     response.set_cookie(key="auth_key", value=user.auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax", secure=not settings.DEBUG_MODE)
