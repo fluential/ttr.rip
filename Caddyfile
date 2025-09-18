@@ -8,10 +8,6 @@
     # Add rate_limit ordering to ensure it runs before reverse_proxy
     order rate_limit before reverse_proxy
     
-    # Configure GeoIP database path
-    geoip {
-        db_path /usr/share/GeoIP/GeoLite2-Country.mmdb
-    }
 }
 
 :8080 {
@@ -241,10 +237,7 @@
             ttl 30s
         }
         header Cache-Control "public, max-age=30"
-        reverse_proxy localhost:8000 {
-            header_up X-GeoIP-Country-Code {geoip_country_code}
-            header_up X-GeoIP-Country-Name {geoip_country_name}
-        }
+        reverse_proxy localhost:8000
     }
 
     # All other /p/* routes are active pings; do not cache, add limits
@@ -268,10 +261,7 @@
                 burst 100
             }
         }
-        reverse_proxy localhost:8000 {
-            header_up X-GeoIP-Country-Code {geoip_country_code}
-            header_up X-GeoIP-Country-Name {geoip_country_name}
-        }
+        reverse_proxy localhost:8000
     }
 
     # Handle all other requests

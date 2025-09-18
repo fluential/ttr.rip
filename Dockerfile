@@ -2,8 +2,7 @@
 FROM caddy:2-builder AS caddy-builder
 RUN xcaddy build \
     --with github.com/mholt/caddy-ratelimit \
-    --with github.com/ueffel/caddy-brotli \
-    --with github.com/caddyserver/caddy-geoip
+    --with github.com/ueffel/caddy-brotli
 
 # Stage 2: Runtime image
 FROM python:3.11-slim
@@ -20,10 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy custom Caddy binary from builder
 COPY --from=caddy-builder /usr/bin/caddy /usr/bin/caddy
 
-# Download GeoIP database
-RUN mkdir -p /usr/share/GeoIP/
-RUN curl -L -o /usr/share/GeoIP/GeoLite2-Country.mmdb.gz "https://git.io/GeoLite2-Country.mmdb.gz" && \
-    gunzip /usr/share/GeoIP/GeoLite2-Country.mmdb.gz
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
