@@ -277,7 +277,20 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
             if r:
                 ip_address = request.client.host
                 user_agent = request.headers.get("user-agent", "Unknown")
-                geoip_details = geoip.get_geoip_details(ip_address)
+                
+                # Check for GeoIP headers from Caddy first
+                country_code = request.headers.get("x-geoip-country-code")
+                country_name = request.headers.get("x-geoip-country-name")
+                
+                if country_code and country_name:
+                    geoip_details = {
+                        "country_code": country_code,
+                        "country_name": country_name,
+                        "connection_type": "Unknown", # Not available from Caddy GeoIP
+                    }
+                else:
+                    # Fallback to internal lookup if headers are not present
+                    geoip_details = geoip.get_geoip_details(ip_address)
 
                 log_entry = {
                     "timestamp": datetime.now(timezone.utc).isoformat(),

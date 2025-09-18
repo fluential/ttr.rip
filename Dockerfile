@@ -11,8 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Build Caddy with the rate-limit module
 RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-RUN /root/go/bin/xcaddy build --with github.com/mholt/caddy-ratelimit
+RUN /root/go/bin/xcaddy build \
+    --with github.com/mholt/caddy-ratelimit \
+    --with github.com/ueffel/caddy-brotli \
+    --with github.com/caddyserver/caddy-geoip
 RUN mv ./caddy /usr/bin/caddy
+
+# Download GeoIP database
+RUN mkdir -p /usr/share/GeoIP/
+RUN curl -L -o /usr/share/GeoIP/GeoLite2-Country.mmdb.gz "https://git.io/GeoLite2-Country.mmdb.gz" && \
+    gunzip /usr/share/GeoIP/GeoLite2-Country.mmdb.gz
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

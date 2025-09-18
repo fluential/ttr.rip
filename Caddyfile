@@ -7,9 +7,17 @@
     }
     # Add rate_limit ordering to ensure it runs before reverse_proxy
     order rate_limit before reverse_proxy
+    
+    # Configure GeoIP database path
+    geoip {
+        db_path /usr/share/GeoIP/GeoLite2-Country.mmdb
+    }
 }
 
 :8080 {
+    # Enable Brotli and Zstandard compression
+    encode brotli zstd gzip
+
     # Enable response header to show when caching is active
     header /* {
         X-Cache-Status {http.cache.status}
@@ -157,7 +165,7 @@
     }
 
     # Special handling for ping endpoints (30s micro-caching)
-    handle /ping/* {
+    handle /p/* {
         # Micro-caching for ping/badge endpoints (30s)
         cache {
             ttl 30s
@@ -166,7 +174,10 @@
         # Add cache control header
         header Cache-Control "public, max-age=30"
         
-        reverse_proxy localhost:8000
+        reverse_proxy localhost:8000 {
+            header_up X-GeoIP-Country-Code {geoip_country_code}
+            header_up X-GeoIP-Country-Name {geoip_country_name}
+        }
     }
 
     # Handle all other requests
