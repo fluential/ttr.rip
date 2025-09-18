@@ -1,21 +1,24 @@
+# Stage 1: Build a custom Caddy with required plugins
+FROM caddy:2-builder AS caddy-builder
+RUN xcaddy build \
+    --with github.com/mholt/caddy-ratelimit \
+    --with github.com/ueffel/caddy-brotli \
+    --with github.com/caddyserver/caddy-geoip
+
+# Stage 2: Runtime image
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install build tools for custom Caddy
+# Install minimal runtime deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    golang \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
-# Build Caddy with the rate-limit module
-RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-RUN /root/go/bin/xcaddy build \
-    --with github.com/mholt/caddy-ratelimit \
-    --with github.com/ueffel/caddy-brotli \
-    --with github.com/caddyserver/caddy-geoip
-RUN mv ./caddy /usr/bin/caddy
+# Copy custom Caddy binary from builder
+COPY --from=caddy-builder /usr/bin/caddy /usr/bin/caddy
 
 # Download GeoIP database
 RUN mkdir -p /usr/share/GeoIP/
