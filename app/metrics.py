@@ -1,7 +1,11 @@
 import time
+import logging
 from typing import Dict, Optional, Set
 from prometheus_client import Counter, Gauge, Histogram, Info
 import prometheus_client
+from app.core.redis_pool import get_redis_connection
+
+logger = logging.getLogger(__name__)
 
 # Define metrics
 CHECKS_TOTAL = Gauge("ttl_checks_total", "Total number of checks", ["status"])
@@ -39,14 +43,35 @@ def record_check_update(status: str, previous_status: Optional[str] = None, is_p
     CHECKS_TOTAL.labels(status=status).inc()
     if previous_status and previous_status != status:
         CHECKS_TOTAL.labels(status=previous_status).dec()
+    # Cache in Redis (global counters)
+    try:
+        r = get_redis_connection()
+        if r:
+            r.hincrby("metrics:checks_status_counts", status, 1)
+            if previous_status and previous_status != status:
+                r.hincrby("metrics:checks_status_counts", previous_status, -1)
+    except Exception as e:
+        logger.error(f"Failed to update Redis global status counters on record_check_update: {e}")
 
 def record_check_creation():
     """Record the creation of a new check."""
     CHECKS_TOTAL.labels(status='new').inc()
+    try:
+        r = get_redis_connection()
+        if r:
+            r.hincrby("metrics:checks_status_counts", "new", 1)
+    except Exception as e:
+        logger.error(f"Failed to update Redis global status counters on record_check_creation: {e}")
 
 def record_check_deletion(status: str):
     """Record the deletion of a check."""
     CHECKS_TOTAL.labels(status=status).dec()
+    try:
+        r = get_redis_connection()
+        if r:
+            r.hincrby("metrics:checks_status_counts", status, -1)
+    except Exception as e:
+        logger.error(f"Failed to update Redis global status counters on record_check_deletion: {e}")
 
 def record_check_pause_toggle(is_pausing: bool, status: str):
     """Record a check being paused or resumed."""
@@ -56,6 +81,18 @@ def record_check_pause_toggle(is_pausing: bool, status: str):
     else: # Resuming
         CHECKS_TOTAL.labels(status='paused').dec()
         CHECKS_TOTAL.labels(status=status).inc()
+    # Cache in Redis (global counters)
+    try:
+        r = get_redis_connection()
+        if r:
+            if is_pausing:
+                r.hincrby("metrics:checks_status_counts", status, -1)
+                r.hincrby("metrics:checks_status_counts", "paused", 1)
+            else:
+                r.hincrby("metrics:checks_status_counts", "paused", -1)
+                r.hincrby("metrics:checks_status_counts", status, 1)
+    except Exception as e:
+        logger.error(f"Failed to update Redis global status counters on record_check_pause_toggle: {e}")
 
 def record_check_duration(duration_seconds: float):
     """Record a check execution duration"""
@@ -99,38 +136,57 @@ def get_metrics():
     return prometheus_client.generate_latest()
 
 async def initialize_check_counts(session):
-    """Initialize check counts from Redis and the database at startup."""
-    from app.core.redis_pool import get_redis_connection
-    from sqlalchemy import text
-    import logging
-
+    """Initialize check counts at startup from cached Redis counters if present, without scanning."""
     # Initialize all to 0 first
-    for status in ["up", "down", "new", "paused"]:
-        CHECKS_TOTAL.labels(status=status).set(0)
+    for s in ["up", "down", "new", "paused"]:
+        CHECKS_TOTAL.labels(status=s).set(0)
 
-    # Count paused checks from the database
-    try:
-        result_paused = await session.execute(text("SELECT COUNT(*) as count FROM checks WHERE paused = true"))
-        paused_count = result_paused.scalar_one_or_none() or 0
-        CHECKS_TOTAL.labels(status='paused').set(paused_count)
-    except Exception as e:
-        logging.error(f"Failed to initialize paused check count from DB: {e}")
-
-    # Count active checks from Redis
     try:
         r = get_redis_connection()
         if r:
-            logging.info("Initializing active check counts from Redis...")
-            status_counts = {"up": 0, "down": 0, "new": 0}
-            # Note: SCAN can be slow on large databases. This is a startup-only task.
-            for key in r.scan_iter(match='check_runtime:*', count=1000):
-                status = r.hget(key, "status")
-                if status in status_counts:
-                    status_counts[status] += 1
-            
-            for status, count in status_counts.items():
-                if count > 0:
-                    CHECKS_TOTAL.labels(status=status).set(count)
-            logging.info("Finished initializing active check counts from Redis.")
+            counts = r.hgetall("metrics:checks_status_counts") or {}
+            # Normalize values (handle bytes or str)
+            def _get_int(key: str) -> int:
+                v = counts.get(key)
+                if v is None and isinstance(counts, dict):
+                    v = counts.get(key.encode())  # type: ignore
+                if v is None:
+                    return 0
+                try:
+                    if isinstance(v, bytes):
+                        v = v.decode()
+                    return int(v)
+                except Exception:
+                    return 0
+
+            up = _get_int("up")
+            down = _get_int("down")
+            new = _get_int("new")
+            paused = _get_int("paused")
+
+            CHECKS_TOTAL.labels(status="up").set(up)
+            CHECKS_TOTAL.labels(status="down").set(down)
+            CHECKS_TOTAL.labels(status="new").set(new)
+            CHECKS_TOTAL.labels(status="paused").set(paused)
+
+            logger.info(f"Initialized check counts from Redis cache: up={up}, down={down}, new={new}, paused={paused}")
+            return
     except Exception as e:
-        logging.error(f"Failed to initialize check counts from Redis: {e}")
+        logger.error(f"Failed reading cached global status counters from Redis: {e}")
+
+    # Fallback: if Redis cache is missing/unavailable, set paused from DB (others remain 0)
+    try:
+        from sqlalchemy import text
+        result_paused = await session.execute(text("SELECT COUNT(*) as count FROM checks WHERE paused = true"))
+        paused_count = result_paused.scalar_one_or_none() or 0
+        CHECKS_TOTAL.labels(status='paused').set(paused_count)
+        # Optionally seed Redis with paused count so next startup has it
+        try:
+            r = get_redis_connection()
+            if r:
+                r.hset("metrics:checks_status_counts", mapping={"paused": paused_count})
+        except Exception:
+            pass
+        logger.info(f"Initialized paused check count from DB: paused={paused_count}; other counts default to 0.")
+    except Exception as e:
+        logger.error(f"Failed to initialize paused check count from DB: {e}")

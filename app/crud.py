@@ -55,21 +55,32 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
 
         pipe = r.pipeline()
         for check in checks:
-            pipe.hgetall(get_check_runtime_redis_key(check.id))
+            key = get_check_runtime_redis_key(check.id)
+            pipe.hmget(key, "status", "last_ping", "last_start", "last_duration_seconds")
             pipe.lrange(f"ping_logs:{check.id}", 0, 2)
             pipe.get(f"check_content:{check.id}")
         
         results = pipe.execute()
 
         for i, check in enumerate(checks):
-            runtime_data = results[i * 3]
+            status_val, last_ping_str, last_start_str, last_duration_str = results[i * 3]
             ping_logs = results[i * 3 + 1]
             last_content = results[i * 3 + 2]
 
-            check.status = runtime_data.get("status", "new")
-            check.last_ping = datetime.fromisoformat(lp) if (lp := runtime_data.get("last_ping")) else None
-            check.last_start = datetime.fromisoformat(ls) if (ls := runtime_data.get("last_start")) else None
-            check.last_duration_seconds = float(lds) if (lds := runtime_data.get("last_duration_seconds")) else None
+            # Normalize potential bytes from Redis
+            if isinstance(status_val, bytes):
+                status_val = status_val.decode()
+            if isinstance(last_ping_str, bytes):
+                last_ping_str = last_ping_str.decode()
+            if isinstance(last_start_str, bytes):
+                last_start_str = last_start_str.decode()
+            if isinstance(last_duration_str, bytes):
+                last_duration_str = last_duration_str.decode()
+
+            check.status = status_val or "new"
+            check.last_ping = datetime.fromisoformat(last_ping_str) if last_ping_str else None
+            check.last_start = datetime.fromisoformat(last_start_str) if last_start_str else None
+            check.last_duration_seconds = float(last_duration_str) if last_duration_str else None
             
             check.last_pings = [json.loads(log) for log in ping_logs] if ping_logs else []
             check.last_content = last_content if last_content else None
@@ -1092,13 +1103,12 @@ async def delete_user_and_data(db: AsyncSession, user: models.User):
                 pipe = r.pipeline()
                 # Clean up user stats counters
                 pipe.delete(f"user_stats:counters:{user.id}")
-                # Clean up check-related keys (if any)
+                # Clean up check-related keys (explicit and non-blocking)
                 if check_ids:
                     for check_id in check_ids:
-                        key_pattern = f"check:{check_id}:*"
-                        keys = r.keys(key_pattern)
-                        if keys:
-                            pipe.delete(*keys)
+                        pipe.unlink(get_check_runtime_redis_key(check_id))
+                        pipe.unlink(f"ping_logs:{check_id}")
+                        pipe.unlink(f"check_content:{check_id}")
                 pipe.execute()
                 logger.info(f"Cleaned up Redis entries for deleted user {user.id}")
         except Exception as e:
@@ -1145,9 +1155,9 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
                 r = get_redis_connection()
                 if r:
                     pipe = r.pipeline()
-                    pipe.delete(get_check_runtime_redis_key(check_id))
-                    pipe.delete(f"ping_logs:{check_id}")
-                    pipe.delete(f"check_content:{check_id}")
+                    pipe.unlink(get_check_runtime_redis_key(check_id))
+                    pipe.unlink(f"ping_logs:{check_id}")
+                    pipe.unlink(f"check_content:{check_id}")
                     pipe.execute()
                     logger.info(f"Cleaned up Redis entries for deleted check {check_id}")
             except Exception as e:
