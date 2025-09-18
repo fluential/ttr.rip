@@ -38,37 +38,51 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   worker:
     build: .
     container_name: ttl_rip_worker
-    command: bash -c 'for i in $(seq 1 30); do alembic upgrade head && ok=1 && break || sleep 2; done; if [ -z "$ok" ]; then echo "Migrations failed"; exit 1; fi; celery -A app.worker.celery_app worker --loglevel=info --pool=threads -c 50'
+    command: celery -A app.worker.celery_app worker --loglevel=info --pool=threads -c 50
     volumes:
       - ./app:/app/app
     env_file:
       - .env
     depends_on:
-      - redis
-      - db
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
 
   beat:
     build: .
     container_name: ttl_rip_beat
-    command: bash -c 'for i in $(seq 1 30); do alembic upgrade head && ok=1 && break || sleep 2; done; if [ -z "$ok" ]; then echo "Migrations failed"; exit 1; fi; celery -A app.worker.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule'
+    command: celery -A app.worker.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule
     volumes:
       - ./app:/app/app
     env_file:
       - .env
     depends_on:
-      - redis
-      - db
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
 
 volumes:
   postgres_data:
