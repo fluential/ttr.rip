@@ -45,14 +45,13 @@
             header X-Auth-Key *
         }
         
-        # Cache key based on request attributes including ETag support
+        # Cache key based on request attributes (do not include conditional headers to avoid fragmentation)
         key {
             method
             host
             path
             query
             header Accept
-            header If-None-Match
         }
     }
 
@@ -125,35 +124,105 @@
         reverse_proxy localhost:8000
     }
 
-    handle /api/v1/* {
-        # User-specific rate limiting for authenticated requests
+    # Handle admin login with rate limiting
+    handle /admin/login {
+        @admin_login method POST
+        rate_limit @admin_login {
+            zone admin_login {
+                key {remote_host}
+                events 10
+                window 60s
+                burst 5
+            }
+        }
+        reverse_proxy localhost:8000
+    }
+
+    # Handle admin token refresh with primary cookie-based and fallback IP rate limits
+    handle /admin/token/refresh {
+        @refresh method POST
+        rate_limit @refresh {
+            zone admin_refresh_cookie {
+                key {http.request.cookie.admin_refresh}
+                events 12
+                window 10m
+                burst 2
+            }
+        }
         rate_limit {
+            zone admin_refresh_ip {
+                key {remote_host}
+                events 30
+                window 10m
+                burst 5
+            }
+        }
+        reverse_proxy localhost:8000
+    }
+
+    handle /api/v1/* {
+        # Rate limiting based on auth type with fallback to IP
+        @api_with_auth_key header X-Auth-Key *
+        @api_with_bearer header Authorization Bearer*
+        @api_no_auth not {
+            header X-Auth-Key *
+            header Authorization *
+        }
+
+        rate_limit @api_with_auth_key {
             zone authenticated_api {
                 key {http.request.header.X-Auth-Key}
-                events 120     # 120 requests per minute per auth key
+                events 120
                 window 60s
                 burst 30
+            }
+        }
+        rate_limit @api_with_bearer {
+            zone admin_api {
+                key {http.request.header.Authorization}
+                events 240
+                window 60s
+                burst 60
+            }
+        }
+        rate_limit @api_no_auth {
+            zone api_by_ip {
+                key {remote_host}
+                events 60
+                window 60s
+                burst 20
+            }
+        }
+
+        # Specific limit for metrics summary (public)
+        @metrics_summary path /api/v1/metrics/summary
+        rate_limit @metrics_summary {
+            zone metrics_ip {
+                key {remote_host}
+                events 60
+                window 60s
+                burst 20
             }
         }
         
         # Micro-caching for API endpoints - 5 seconds
         cache {
             ttl 5s
-            
+
             # Only cache GET requests for API endpoints
             disable_if {
                 not {method} match GET
             }
 
-            # Key the cache by the auth key to prevent users from seeing each other's data
+            # Key the cache by auth and method to prevent cross-user leaks; avoid conditional headers
             key {
                 method
                 host
                 path
                 query
                 header Accept
-                header If-None-Match
                 header X-Auth-Key
+                header Authorization
             }
         }
         
@@ -164,16 +233,41 @@
         reverse_proxy localhost:8000
     }
 
-    # Special handling for ping endpoints (30s micro-caching)
-    handle /p/* {
-        # Micro-caching for ping/badge endpoints (30s)
+    # Special handling for ping and badge endpoints
+    @badge path_regexp badge ^/p/.+/badge\.svg$
+    handle @badge {
+        # Cache badges (static-ish) for 30s
         cache {
             ttl 30s
         }
-        
-        # Add cache control header
         header Cache-Control "public, max-age=30"
-        
+        reverse_proxy localhost:8000 {
+            header_up X-GeoIP-Country-Code {geoip_country_code}
+            header_up X-GeoIP-Country-Name {geoip_country_name}
+        }
+    }
+
+    # All other /p/* routes are active pings; do not cache, add limits
+    @ping not @badge
+    handle @ping {
+        # Per-check limiter (by path)
+        rate_limit {
+            zone ping_per_check {
+                key {path}
+                events 120
+                window 60s
+                burst 30
+            }
+        }
+        # Per-IP limiter
+        rate_limit {
+            zone ping_per_ip {
+                key {remote_host}
+                events 600
+                window 60s
+                burst 100
+            }
+        }
         reverse_proxy localhost:8000 {
             header_up X-GeoIP-Country-Code {geoip_country_code}
             header_up X-GeoIP-Country-Name {geoip_country_name}
