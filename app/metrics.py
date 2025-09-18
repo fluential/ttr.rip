@@ -43,35 +43,14 @@ def record_check_update(status: str, previous_status: Optional[str] = None, is_p
     CHECKS_TOTAL.labels(status=status).inc()
     if previous_status and previous_status != status:
         CHECKS_TOTAL.labels(status=previous_status).dec()
-    # Cache in Redis (global counters)
-    try:
-        r = get_redis_connection()
-        if r:
-            r.hincrby("metrics:checks_status_counts", status, 1)
-            if previous_status and previous_status != status:
-                r.hincrby("metrics:checks_status_counts", previous_status, -1)
-    except Exception as e:
-        logger.error(f"Failed to update Redis global status counters on record_check_update: {e}")
 
 def record_check_creation():
     """Record the creation of a new check."""
     CHECKS_TOTAL.labels(status='new').inc()
-    try:
-        r = get_redis_connection()
-        if r:
-            r.hincrby("metrics:checks_status_counts", "new", 1)
-    except Exception as e:
-        logger.error(f"Failed to update Redis global status counters on record_check_creation: {e}")
 
 def record_check_deletion(status: str):
     """Record the deletion of a check."""
     CHECKS_TOTAL.labels(status=status).dec()
-    try:
-        r = get_redis_connection()
-        if r:
-            r.hincrby("metrics:checks_status_counts", status, -1)
-    except Exception as e:
-        logger.error(f"Failed to update Redis global status counters on record_check_deletion: {e}")
 
 def record_check_pause_toggle(is_pausing: bool, status: str):
     """Record a check being paused or resumed."""
@@ -81,18 +60,6 @@ def record_check_pause_toggle(is_pausing: bool, status: str):
     else: # Resuming
         CHECKS_TOTAL.labels(status='paused').dec()
         CHECKS_TOTAL.labels(status=status).inc()
-    # Cache in Redis (global counters)
-    try:
-        r = get_redis_connection()
-        if r:
-            if is_pausing:
-                r.hincrby("metrics:checks_status_counts", status, -1)
-                r.hincrby("metrics:checks_status_counts", "paused", 1)
-            else:
-                r.hincrby("metrics:checks_status_counts", "paused", -1)
-                r.hincrby("metrics:checks_status_counts", status, 1)
-    except Exception as e:
-        logger.error(f"Failed to update Redis global status counters on record_check_pause_toggle: {e}")
 
 def record_check_duration(duration_seconds: float):
     """Record a check execution duration"""

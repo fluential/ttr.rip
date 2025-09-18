@@ -14,6 +14,7 @@ from sqlalchemy import func, case, or_, and_, text
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.exc import IntegrityError
 import logging
+import time
 from app.db import models
 from app import schemas, security, metrics
 from app.services import notifications
@@ -23,6 +24,45 @@ from app.core.config import settings
 from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
+
+# --- Buffered Redis HINCRBY (coalesce increments) ---
+
+_INCR_BUFFER: dict[tuple[str, str], int] = {}
+_INCR_EXPIRE_KEYS: set[str] = set()
+_LAST_FLUSH_TS: float = 0.0
+_FLUSH_INTERVAL: float = 0.5  # seconds
+
+def _buffer_hincrby(key: str, field: str, delta: int):
+    global _LAST_FLUSH_TS
+    _INCR_BUFFER[(key, field)] = _INCR_BUFFER.get((key, field), 0) + delta
+    _INCR_EXPIRE_KEYS.add(key)
+    now = time.time()
+    if now - _LAST_FLUSH_TS >= _FLUSH_INTERVAL:
+        _flush_incr_buffer()
+
+def _flush_incr_buffer():
+    global _LAST_FLUSH_TS
+    if not _INCR_BUFFER:
+        _LAST_FLUSH_TS = time.time()
+        return
+    try:
+        r = get_redis_connection()
+        if not r:
+            return
+        pipe = r.pipeline()
+        for (key, field), delta in list(_INCR_BUFFER.items()):
+            if delta != 0:
+                pipe.hincrby(key, field, delta)
+        # Apply expirations (30 days) for any touched keys
+        for key in list(_INCR_EXPIRE_KEYS):
+            pipe.expire(key, timedelta(days=30))
+        pipe.execute()
+    except Exception as e:
+        logger.error(f"Failed to flush Redis increment buffer: {e}")
+    finally:
+        _INCR_BUFFER.clear()
+        _INCR_EXPIRE_KEYS.clear()
+        _LAST_FLUSH_TS = time.time()
 
 def get_check_runtime_redis_key(check_id: int) -> str:
     """Returns the Redis key for a check's runtime data."""
@@ -143,7 +183,7 @@ def _calculate_next_deadline(check: models.Check, from_time: datetime) -> Option
     return next_run_aware + timedelta(seconds=check.grace_seconds)
 
 def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_status: Optional[str], is_paused: bool = False):
-    """Atomically updates user stats counters in Redis."""
+    """Buffered updates to user stats counters in Redis (coalesced flush)."""
     if settings.DEBUG_MODE or not settings.REDIS_URL or old_status == new_status:
         return
 
@@ -154,33 +194,24 @@ def _update_redis_stats_counters(user_id: int, old_status: Optional[str], new_st
         return
 
     try:
-        r = get_redis_connection()
-        if not r:
-            return
-        
-        pipe = r.pipeline()
         key = f"user_stats:counters:{user_id}"
 
         # Decrement old status counter if it exists
         if old_status:
-            pipe.hincrby(key, old_status, -1)
+            _buffer_hincrby(key, old_status, -1)
         
         # Increment new status counter if it exists
         if new_status:
-            pipe.hincrby(key, new_status, 1)
+            _buffer_hincrby(key, new_status, 1)
         
         # Update total count
         if old_status and not new_status: # Deletion
-            pipe.hincrby(key, "total", -1)
+            _buffer_hincrby(key, "total", -1)
         elif not old_status and new_status: # Creation
-            pipe.hincrby(key, "total", 1)
-        
-        # Set a 30-day expiry on the stats key to prevent orphaned data
-        pipe.expire(key, timedelta(days=30))
-        pipe.execute()
-        logger.debug(f"Updated Redis stats for user {user_id}: {old_status} -> {new_status}")
+            _buffer_hincrby(key, "total", 1)
+        logger.debug(f"Buffered Redis stats for user {user_id}: {old_status} -> {new_status}")
     except Exception as e:
-        logger.error(f"Could not update Redis stats counters for user {user_id}: {e}")
+        logger.error(f"Could not buffer Redis stats counters for user {user_id}: {e}")
 
 
 def _encode_cursor(value: Any) -> Optional[str]:
@@ -572,24 +603,38 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
             last_ping = datetime.fromisoformat(last_ping_str)
             duration_seconds = (now - last_ping).total_seconds()
 
-        # Update runtime fields in Redis
-        runtime_update = {
-            "status": "up",
-            "last_ping": now.isoformat(),
-            "last_start": "", # Clear last_start
-        }
-        if duration_seconds is not None:
-            runtime_update["last_duration_seconds"] = duration_seconds
-        
-        r.hset(key, mapping=runtime_update)
-        
-        # Reset failure count on success
-        r.hset(key, "failure_count", 0)
+        # Atomic update runtime + counters via Lua
+        lua = """
+local runtime_key = KEYS[1]
+local user_counters = KEYS[2]
+local global_counters = KEYS[3]
+local new_status = ARGV[1]
+local is_paused = ARGV[2]
+local now_iso = ARGV[3]
+local last_duration = ARGV[4]
+local clear_last_start = ARGV[5]
+local prev = redis.call('HGET', runtime_key, 'status')
+if not prev then prev = 'new' end
+redis.call('HSET', runtime_key, 'status', new_status, 'last_ping', now_iso)
+if clear_last_start == '1' then redis.call('HSET', runtime_key, 'last_start','') end
+if last_duration and last_duration ~= '' then redis.call('HSET', runtime_key, 'last_duration_seconds', last_duration) end
+if new_status == 'up' then redis.call('HSET', runtime_key, 'failure_count', 0) end
+if is_paused ~= '1' then
+  if prev ~= new_status then
+    redis.call('HINCRBY', user_counters, prev, -1)
+    redis.call('HINCRBY', global_counters, prev, -1)
+    redis.call('HINCRBY', user_counters, new_status, 1)
+    redis.call('HINCRBY', global_counters, new_status, 1)
+  end
+end
+return prev
+"""
+        user_key = f"user_stats:counters:{check.owner_id}"
+        global_key = "metrics:checks_status_counts"
+        _ = r.eval(lua, 3, key, user_key, global_key, "up", "1" if check.paused else "0", now.isoformat(), str(duration_seconds or ""), "1")
         
         # Update deadline in the database for the scheduler
         check.deadline = _calculate_next_deadline(check, now)
-
-        _update_redis_stats_counters(check.owner_id, previous_status, "up", is_paused=check.paused)
 
         if previous_status == "down" and check.notify_on_up:
             logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
@@ -644,22 +689,35 @@ async def toggle_check_pause(db: AsyncSession, check: models.Check):
     
     check.paused = is_pausing
     
-    # Update redis counters
+    # Update Redis counters atomically with Lua
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
             r = get_redis_connection()
             if r:
-                pipe = r.pipeline()
-                key = f"user_stats:counters:{check.owner_id}"
-                if is_pausing:
-                    # Decrement status, increment paused
-                    pipe.hincrby(key, current_status, -1)
-                    pipe.hincrby(key, "paused", 1)
-                else: # Resuming
-                    # Decrement paused, increment status
-                    pipe.hincrby(key, "paused", -1)
-                    pipe.hincrby(key, current_status, 1)
-                pipe.execute()
+                lua = """
+local runtime_key = KEYS[1]
+local user_counters = KEYS[2]
+local global_counters = KEYS[3]
+local is_pausing = ARGV[1]
+local status = redis.call('HGET', runtime_key, 'status')
+if not status then status = 'new' end
+if is_pausing == '1' then
+  redis.call('HINCRBY', user_counters, status, -1)
+  redis.call('HINCRBY', user_counters, 'paused', 1)
+  redis.call('HINCRBY', global_counters, status, -1)
+  redis.call('HINCRBY', global_counters, 'paused', 1)
+else
+  redis.call('HINCRBY', user_counters, 'paused', -1)
+  redis.call('HINCRBY', user_counters, status, 1)
+  redis.call('HINCRBY', global_counters, 'paused', -1)
+  redis.call('HINCRBY', global_counters, status, 1)
+end
+return status
+"""
+                runtime_key = get_check_runtime_redis_key(check.id)
+                user_key = f"user_stats:counters:{check.owner_id}"
+                global_key = "metrics:checks_status_counts"
+                _ = r.eval(lua, 3, runtime_key, user_key, global_key, "1" if is_pausing else "0")
         except Exception as e:
             logger.error(f"Could not update Redis stats counters for pause toggle: {e}")
 
@@ -681,30 +739,40 @@ async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optio
             return check, reason
 
         key = get_check_runtime_redis_key(check.id)
-        previous_status = r.hget(key, "status") or "new"
 
-        runtime_update = {
-            "status": "down",
-            "last_start": "", # Clear last_start
-        }
-        
+        # Lua: mark down, increment failure_count, and update counters atomically
+        lua = """
+local runtime_key = KEYS[1]
+local user_counters = KEYS[2]
+local global_counters = KEYS[3]
+local is_paused = ARGV[1]
+local prev = redis.call('HGET', runtime_key, 'status')
+if not prev then prev = 'new' end
+redis.call('HSET', runtime_key, 'status', 'down', 'last_start', '')
+local failure_count = redis.call('HINCRBY', runtime_key, 'failure_count', 1)
+if is_paused ~= '1' then
+  if prev ~= 'down' then
+    redis.call('HINCRBY', user_counters, prev, -1)
+    redis.call('HINCRBY', global_counters, prev, -1)
+    redis.call('HINCRBY', user_counters, 'down', 1)
+    redis.call('HINCRBY', global_counters, 'down', 1)
+  end
+end
+return {prev, tostring(failure_count)}
+"""
+        user_key = f"user_stats:counters:{check.owner_id}"
+        global_key = "metrics:checks_status_counts"
+        result = r.eval(lua, 3, key, user_key, global_key, "1" if check.paused else "0")
+
+        previous_status = result[0].decode() if isinstance(result[0], bytes) else result[0]
+        failure_count = int(result[1].decode() if isinstance(result[1], bytes) else result[1])
+
         # --- Conditional Notification Logic ---
         should_notify = True
-        # Use a default of 0 if notify_after_failures is None
         notify_threshold = check.notify_after_failures or 0
-        
-        if notify_threshold > 0:
-            failure_count = r.hincrby(key, "failure_count", 1)
-            if failure_count < notify_threshold:
-                should_notify = False
-        else:
-            # If threshold is 0, always notify on first failure.
-            r.hset(key, "failure_count", 1)
+        if notify_threshold > 0 and failure_count < notify_threshold:
+            should_notify = False
         # --- End Logic ---
-
-        r.hset(key, mapping=runtime_update)
-
-        _update_redis_stats_counters(check.owner_id, previous_status, "down", is_paused=check.paused)
 
         if previous_status != "down" and should_notify:
             message = f"🔴 Check Failed: [{check.name}] reported a failure."
@@ -861,6 +929,11 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
                 logger.error(f"Failed to initialize Redis runtime status for check {db_check.id}: {e}")
 
         _update_redis_stats_counters(principal.id, old_status=None, new_status="new")
+        # Increment global counters (buffered)
+        try:
+            _buffer_hincrby("metrics:checks_status_counts", "new", 1)
+        except Exception:
+            pass
         metrics.record_check_creation()
         
         result = await db.execute(
@@ -1157,6 +1230,11 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         # Otherwise, we decrement its last known status counter.
         status_to_decrement = "paused" if is_paused else old_status
         _update_redis_stats_counters(owner_id, old_status=status_to_decrement, new_status=None)
+        # Decrement global counters (buffered)
+        try:
+            _buffer_hincrby("metrics:checks_status_counts", status_to_decrement, -1)
+        except Exception:
+            pass
         metrics.record_check_deletion(status_to_decrement)
 
         # Clean up associated Redis keys
