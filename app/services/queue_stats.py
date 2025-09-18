@@ -31,6 +31,7 @@ def get_queue_stats():
         }
 
 
+
 def _store_cache(data: dict):
     global _CACHE, _CACHE_TS
     _CACHE = data
