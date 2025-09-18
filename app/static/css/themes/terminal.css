@@ -78,6 +78,7 @@ article > header,
 details#new-check-section > summary {
     margin-left: calc(-1 * var(--section-header-bleed));
     margin-right: calc(-1 * var(--section-header-bleed));
+    margin-top: 0;
     padding: 0.5rem 1.25rem;
     background: var(--section-header-gradient);
     border-bottom: 1px solid var(--primary);
