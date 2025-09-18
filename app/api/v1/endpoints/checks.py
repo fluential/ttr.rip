@@ -244,7 +244,7 @@ async def update_check_webhook_settings(
     return updated_check
 
 
-@router.get("/{check_id}/content", response_class=JSONResponse)
+@router.get("/{check_id}/content", response_class=ORJSONResponse)
 async def get_check_last_content(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -429,7 +429,7 @@ async def delete_check(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/export", response_class=JSONResponse)
+@router.get("/export", response_class=ORJSONResponse)
 async def export_checks(
     db: AsyncSession = Depends(db_base.get_db),
     principal: db_models.User = Depends(security.get_public_user_from_key),
