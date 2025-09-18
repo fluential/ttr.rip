@@ -232,6 +232,18 @@ async def add_process_time_header(request: Request, call_next):
     
     # Add Vary header to prevent cache poisoning
     response.headers["Vary"] = "Accept-Encoding, Accept-Language"
+
+    # Security headers and CSP (strong CSP for user dashboard)
+    if settings.SECURITY_HEADERS_ENABLED:
+        # Common
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        # Strong CSP only on user-facing pages (not API/static/admin)
+        if not path.startswith("/api") and not path.startswith("/static") and not path.startswith("/admin") and not path.startswith("/p/") and not path.startswith("/metrics"):
+            # Apply CSP to home, dashboard, and public integrations/status pages
+            if path == "/" or path.startswith("/dashboard") or path.startswith("/check/") or path.startswith("/s/"):
+                response.headers["Content-Security-Policy"] = settings.CSP_USER_DASHBOARD
     
     # Record response time and status
     process_time = time.perf_counter() - start_time

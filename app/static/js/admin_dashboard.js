@@ -1,5 +1,40 @@
-const apiToken = window.API_TOKEN;
+let apiToken = sessionStorage.getItem('admin_access_token');
 const csrfToken = window.CSRF_TOKEN;
+
+async function refreshAdminToken() {
+    try {
+        const res = await fetch('/admin/token/refresh', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': getCsrfToken() }
+        });
+        if (!res.ok) throw new Error('Refresh failed');
+        const data = await res.json();
+        apiToken = data.access_token;
+        sessionStorage.setItem('admin_access_token', apiToken);
+        return true;
+    } catch (e) {
+        console.error('Could not refresh token:', e);
+        sessionStorage.removeItem('admin_access_token');
+        window.location.href = '/admin/login';
+        return false;
+    }
+}
+
+async function fetchWithAuth(url, options = {}) {
+    const opts = { ...options };
+    opts.headers = {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${apiToken}`,
+    };
+    let res = await fetch(url, opts);
+    if (res.status === 401) {
+        const refreshed = await refreshAdminToken();
+        if (!refreshed) return res;
+        opts.headers['Authorization'] = `Bearer ${apiToken}`;
+        res = await fetch(url, opts);
+    }
+    return res;
+}
 let currentSortBy = 'id';
 let currentSortDir = 'desc';
 let pageSize = 25;
@@ -156,9 +191,7 @@ function toggleAutoRefresh() {
 
 async function fetchSystemStats() {
     try {
-        const response = await fetch('/api/v1/admin/stats', {
-            headers: { 'Authorization': `Bearer ${apiToken}` }
-        });
+        const response = await fetchWithAuth('/api/v1/admin/stats');
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch stats');
@@ -233,9 +266,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     if (cursor) {
         url += `&cursor=${cursor}`;
     }
-    const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${apiToken}` }
-    });
+    const response = await fetchWithAuth(url);
     const data = await response.json();
     const checks = data.items;
     const tableBody = document.querySelector('#checks-table tbody');
@@ -390,13 +421,13 @@ async function handleFormSubmit(event) {
 
     let response;
     if (editingId) {
-        response = await fetch(`/api/v1/checks/${editingId}`, {
+        response = await fetchWithAuth(`/api/v1/checks/${editingId}`, {
             method: 'PUT',
             headers: headers,
             body: JSON.stringify(data)
         });
     } else {
-        response = await fetch('/api/v1/checks', {
+        response = await fetchWithAuth('/api/v1/checks', {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(data)
@@ -414,10 +445,9 @@ async function handleFormSubmit(event) {
 async function deleteCheck(checkId) {
     if (!confirm('Are you sure you want to delete this check?')) return;
 
-    const response = await fetch(`/api/v1/checks/${checkId}`, {
+    const response = await fetchWithAuth(`/api/v1/checks/${checkId}`, {
         method: 'DELETE',
         headers: { 
-            'Authorization': `Bearer ${apiToken}`,
             'X-CSRF-Token': getCsrfToken()
         }
     });

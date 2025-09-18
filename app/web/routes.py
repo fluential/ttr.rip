@@ -297,34 +297,62 @@ async def handle_login(
 ):
     user = await crud.get_user_by_username(db, username=username)
     if user and user.is_admin and security.verify_password(password, user.hashed_password):
-        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = security.create_access_token(
-            data={"sub": user.username}, expires_delta=access_token_expires
+        # Issue short-lived access token (header-only) and long-lived refresh cookie
+        access_token = security.create_admin_access_token(user.username, expires_minutes=10)
+        refresh_token = security.create_admin_refresh_token(user.username)
+
+        # Set refresh cookie (HttpOnly, Secure, Strict)
+        response = HTMLResponse(
+            content=f"""
+<!doctype html><html><head><meta charset="utf-8"><title>Redirecting…</title></head>
+<body>
+<script>
+// Store access token in sessionStorage and redirect to admin dashboard
+try {{
+    sessionStorage.setItem('admin_access_token', {json.dumps(access_token)});
+}} catch (e) {{}}
+window.location.replace('/admin/dashboard');
+</script>
+<noscript>Login successful. Please enable JavaScript and <a href="/admin/dashboard">continue</a>.</noscript>
+</body></html>
+""",
+            status_code=status.HTTP_200_OK
         )
-        response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
-        response.set_cookie(key="auth_token", value=access_token, httponly=True, samesite="Strict", secure=not settings.DEBUG_MODE)
+        response.set_cookie(
+            key="admin_refresh",
+            value=refresh_token,
+            httponly=True,
+            secure=not settings.DEBUG_MODE,
+            samesite="Strict",
+            max_age=settings.ADMIN_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        )
+        # Also ensure a CSRF token cookie exists for refresh endpoint
+        csrf_token = security.generate_csrf_token()
+        response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax", secure=not settings.DEBUG_MODE)
         return response
     return RedirectResponse(url="/admin/login?error=1", status_code=status.HTTP_302_FOUND)
 
 @admin_router.get("/logout", response_class=HTMLResponse)
-async def logout():
+async def logout(request: Request):
+    # Revoke refresh if present
+    refresh_token = request.cookies.get("admin_refresh")
+    if refresh_token:
+        try:
+            security.revoke_admin_refresh_token(refresh_token)
+        except Exception as e:
+            logger.error(f"Failed to revoke admin refresh token during logout: {e}")
     response = RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
-    response.delete_cookie("auth_token")
+    response.delete_cookie("admin_refresh")
     return response
 
 @admin_router.get("/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db), admin_user: db_models.User = Depends(security.get_current_admin_user)):
-    token = request.cookies.get("auth_token")
-    if not token:
-        return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
-    
-    status_pages = await crud.get_status_pages_by_owner(db=db, principal=admin_user)
+async def admin_dashboard(request: Request):
+    # Serve SPA shell; JS will use header-only API with access token from sessionStorage
     csrf_token = security.generate_csrf_token()
     context = {
         "request": request,
-        "api_token": token,
         "csrf_token": csrf_token,
-        "status_pages": status_pages,
+        "status_pages": [],  # Loaded via API
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
@@ -338,35 +366,20 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(db_base.g
 async def admin_integrations(
     request: Request,
     check_id: int,
-    db: AsyncSession = Depends(db_base.get_db),
-    admin_user: db_models.User = Depends(security.get_current_admin_user),
 ):
-    token = request.cookies.get("auth_token")
-    if not token:
-        return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
-    
-    # Use the authorization-aware CRUD function for defense in depth.
-    check = await crud.get_check_by_id_and_owner(db, check_id=check_id, principal=admin_user)
-
-    if not check:
-        return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
-
-    # For security, don't populate the bot token in the form
-    # We only need to know if a token exists, not what it is
-    has_token = bool(check.telegram_bot_token)
+    # Serve SPA shell; JS will load check details via API
     csrf_token = security.generate_csrf_token()
-    status_pages = await crud.get_status_pages_by_owner(db=db, principal=admin_user)
-
+    # Minimal context with check placeholder to keep templates stable
+    check_placeholder = {"id": check_id, "name": ""}
     context = {
         "request": request,
-        "check": check,
-        "api_token": token,
+        "check": check_placeholder,
         "csrf_token": csrf_token,
-        "status_pages": status_pages,
+        "status_pages": [],  # Loaded via API
         "is_admin": True,
-        "telegram_bot_token": "",  # Always empty for security
-        "has_telegram_bot_token": has_token,  # Just indicate if one exists
-        "telegram_bot_token_placeholder": "[Existing token hidden for security]" if has_token else "Enter your Telegram bot token",
+        "telegram_bot_token": "",
+        "has_telegram_bot_token": False,
+        "telegram_bot_token_placeholder": "Enter your Telegram bot token",
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,

@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     # User-specific slugs for URLs
     USER_SLUG_ENABLED: bool = True
 
+    # Admin auth model (SPA): refresh token lifetime (days)
+    ADMIN_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # X-Auth-Key hardening
+    XAUTH_ENFORCE_ORIGIN: bool = False
+    XAUTH_ENFORCE_IP: bool = False
+    USER_ALLOWED_REQUEST_ORIGINS: list[str] = []
+
+    # Security headers
+    SECURITY_HEADERS_ENABLED: bool = True
+    CSP_USER_DASHBOARD: str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

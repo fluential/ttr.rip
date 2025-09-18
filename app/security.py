@@ -73,6 +73,7 @@ async def verify_api_csrf_token(
 async def get_public_user_from_key(
     x_auth_key: Optional[str] = Header(None, alias="X-Auth-Key"),
     db: AsyncSession = Depends(db_base.get_db),
+    request: Request = None,
 ) -> db_models.User:
     """
     Dependency for public, key-based authentication via the X-Auth-Key header.
@@ -89,6 +90,63 @@ async def get_public_user_from_key(
 
     if not auth_key:
         raise credentials_exception
+
+    # --- Track usage and enforce optional IP/Origin restrictions ---
+    client_ip = None
+    try:
+        client_ip = request.client.host if request and request.client else None
+    except Exception:
+        client_ip = None
+    origin = None
+    try:
+        origin = request.headers.get("origin") or request.headers.get("referer")
+    except Exception:
+        origin = None
+
+    try:
+        r = get_redis_connection()
+        if r:
+            ak_hash = hashlib.sha256(auth_key.encode()).hexdigest()
+            # Record last-used info
+            usage_key = f"authkey:usage:{ak_hash}"
+            r.hset(
+                usage_key,
+                mapping={
+                    "last_used": datetime.now(timezone.utc).isoformat(),
+                    "ip": client_ip or "",
+                    "origin": origin or "",
+                    "ua": (request.headers.get("user-agent") if request else "") or "",
+                },
+            )
+            r.expire(usage_key, 30 * 24 * 3600)  # keep 30 days
+            r.incr(f"authkey:usage_count:{ak_hash}")
+
+            # Per-key IP restriction
+            allowed_ip_set = f"authkey:allowed_ips:{ak_hash}"
+            try:
+                if r.scard(allowed_ip_set) > 0:
+                    if not client_ip or not r.sismember(allowed_ip_set, client_ip):
+                        logger.warning(f"Auth key usage from disallowed IP {client_ip}")
+                        raise credentials_exception
+            except Exception:
+                # If Redis fails evaluating the set, fail closed only if global enforcement is enabled
+                if settings.XAUTH_ENFORCE_IP:
+                    raise credentials_exception
+
+            # Per-key Origin restriction
+            allowed_origin_set = f"authkey:allowed_origins:{ak_hash}"
+            try:
+                if r.scard(allowed_origin_set) > 0:
+                    if not origin or not r.sismember(allowed_origin_set, origin):
+                        logger.warning(f"Auth key usage from disallowed Origin/Referer {origin}")
+                        raise credentials_exception
+            except Exception:
+                if settings.XAUTH_ENFORCE_ORIGIN:
+                    raise credentials_exception
+    except Exception as e:
+        # Do not block on tracking errors; only enforce if explicit settings require it
+        logger.error(f"Error during X-Auth usage tracking/enforcement: {e}")
+    # --- End usage tracking and enforcement ---
 
     # --- Blacklist Check ---
     if not settings.DEBUG_MODE:
@@ -115,7 +173,6 @@ async def get_public_user_from_key(
 
 async def get_current_admin_user(
     token_from_header: Optional[str] = Depends(oauth2_scheme),
-    token_from_cookie: Optional[str] = Cookie(None, alias="auth_token"),
     db: AsyncSession = Depends(db_base.get_db)
 ) -> db_models.User:
     """
@@ -123,7 +180,7 @@ async def get_current_admin_user(
     Tries to get token from Authorization header first, then from a cookie.
     Ensures the user is an admin.
     """
-    token = token_from_header or token_from_cookie
+    token = token_from_header
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -154,6 +211,102 @@ def create_telegram_session_token(data: dict):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+# --- Admin Refresh Token utilities (SPA model) ---
+
+def _store_admin_refresh_jti(jti: str, username: str, expires_in_seconds: int):
+    try:
+        r = get_redis_connection()
+        if r:
+            r.setex(f"refresh:admin:{jti}", expires_in_seconds, username)
+    except Exception as e:
+        logger.error(f"Failed to store admin refresh JTI: {e}")
+        raise
+
+def _revoke_admin_refresh_jti(jti: str):
+    try:
+        r = get_redis_connection()
+        if r:
+            r.delete(f"refresh:admin:{jti}")
+    except Exception as e:
+        logger.error(f"Failed to revoke admin refresh JTI: {e}")
+
+def create_admin_access_token(username: str, expires_minutes: int = 10) -> str:
+    return create_access_token({"sub": username}, timedelta(minutes=expires_minutes))
+
+def create_admin_refresh_token(username: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.ADMIN_REFRESH_TOKEN_EXPIRE_DAYS)
+    jti = secrets.token_urlsafe(16)
+    payload = {"sub": username, "type": "admin_refresh", "jti": jti, "exp": expire}
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    _store_admin_refresh_jti(jti, username, settings.ADMIN_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600)
+    return token
+
+def rotate_admin_refresh_token(refresh_token: str) -> tuple[str, str]:
+    """
+    Validates the provided refresh token, rotates it (revokes old JTI, issues new),
+    and returns (username, new_refresh_token).
+    Raises HTTPException on invalid/expired token.
+    """
+    try:
+        payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "admin_refresh":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+        username = payload.get("sub")
+        jti = payload.get("jti")
+        if not username or not jti:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+        # Check JTI allowlist
+        r = get_redis_connection()
+        if not r or not r.exists(f"refresh:admin:{jti}"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked or expired")
+
+        # Revoke old and issue new
+        _revoke_admin_refresh_jti(jti)
+        new_token = create_admin_refresh_token(username)
+        return username, new_token
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+def revoke_admin_refresh_token(refresh_token: str):
+    try:
+        payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "admin_refresh":
+            return
+        jti = payload.get("jti")
+        if jti:
+            _revoke_admin_refresh_jti(jti)
+    except JWTError:
+        return
+
+
+# --- Scopes for X-Auth-Key ---
+
+def require_scopes(required: list[str]):
+    async def _checker(x_auth_key: Optional[str] = Header(None, alias="X-Auth-Key")):
+        # If no key, the main auth dependency will fail; don't double-handle here.
+        if not x_auth_key:
+            return
+        try:
+            r = get_redis_connection()
+            if not r:
+                return  # If Redis is unavailable, do not enforce to avoid breaking availability
+            ak_hash = hashlib.sha256(x_auth_key.encode()).hexdigest()
+            scopes_key = f"authkey:scopes:{ak_hash}"
+            if r.scard(scopes_key) == 0:
+                return  # No scopes configured => allow by default
+            existing = set(s.decode() if isinstance(s, bytes) else s for s in r.smembers(scopes_key))
+            if not set(required).issubset(existing):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient scopes")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error checking scopes: {e}")
+            # Fail-open to avoid availability impact; adjust if you prefer fail-closed.
+            return
+    return _checker
 
 
 async def get_telegram_session_data(

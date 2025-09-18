@@ -16,7 +16,7 @@ async def read_status_pages(
 ):
     return await crud.get_status_pages_by_owner(db=db, principal=principal)
 
-@router.post("", response_model=schemas.StatusPage, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=schemas.StatusPage, status_code=status.HTTP_201_CREATED, dependencies=[Depends(security.require_scopes(["status_pages:write"]))])
 async def create_status_page(
     status_page: schemas.StatusPageCreate,
     db: AsyncSession = Depends(db_base.get_db),
@@ -29,7 +29,7 @@ async def create_status_page(
     except IntegrityError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-@router.put("/{status_page_id}", response_model=schemas.StatusPage)
+@router.put("/{status_page_id}", response_model=schemas.StatusPage, dependencies=[Depends(security.require_scopes(["status_pages:write"]))])
 async def update_status_page(
     status_page_id: int,
     status_page: schemas.StatusPageUpdate,
@@ -46,7 +46,7 @@ async def update_status_page(
     except IntegrityError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-@router.delete("/{status_page_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{status_page_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(security.require_scopes(["status_pages:delete"]))])
 async def delete_status_page(
     status_page_id: int,
     db: AsyncSession = Depends(db_base.get_db),

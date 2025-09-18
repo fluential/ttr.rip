@@ -78,7 +78,7 @@ async def read_tags(
     return await crud.get_all_tags_by_owner(db=db, principal=principal)
 
 
-@router.post("", response_model=schemas.Check, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=schemas.Check, status_code=status.HTTP_201_CREATED, dependencies=[Depends(security.require_scopes(["checks:write"]))])
 async def create_check(
     check: schemas.CheckCreate,
     db: AsyncSession = Depends(db_base.get_db),
@@ -86,7 +86,7 @@ async def create_check(
 ):
     return await crud.create_check(db=db, check=check, principal=principal)
 
-@router.put("/{check_id}", response_model=schemas.Check)
+@router.put("/{check_id}", response_model=schemas.Check, dependencies=[Depends(security.require_scopes(["checks:write"]))])
 async def update_check(
     check_id: int,
     check: schemas.CheckUpdate,
@@ -98,7 +98,7 @@ async def update_check(
         raise HTTPException(status_code=404, detail="Check not found")
     return updated_check
 
-@router.put("/{check_id}/telegram", response_model=schemas.Check)
+@router.put("/{check_id}/telegram", response_model=schemas.Check, dependencies=[Depends(security.require_scopes(["checks:write"]))])
 async def update_check_telegram_settings(
     check_id: int,
     telegram_settings: schemas.TelegramSettingsUpdate,
@@ -111,7 +111,7 @@ async def update_check_telegram_settings(
     return updated_check
 
 
-@router.put("/{check_id}/slack", response_model=schemas.Check)
+@router.put("/{check_id}/slack", response_model=schemas.Check, dependencies=[Depends(security.require_scopes(["checks:write"]))])
 async def update_check_slack_settings(
     check_id: int,
     slack_settings: schemas.SlackSettingsUpdate,
@@ -124,7 +124,7 @@ async def update_check_slack_settings(
     return updated_check
 
 
-@router.put("/{check_id}/discord", response_model=schemas.Check)
+@router.put("/{check_id}/discord", response_model=schemas.Check, dependencies=[Depends(security.require_scopes(["checks:write"]))])
 async def update_check_discord_settings(
     check_id: int,
     discord_settings: schemas.DiscordSettingsUpdate,
@@ -137,7 +137,7 @@ async def update_check_discord_settings(
     return updated_check
 
 
-@router.put("/{check_id}/webhook", response_model=schemas.Check)
+@router.put("/{check_id}/webhook", response_model=schemas.Check, dependencies=[Depends(security.require_scopes(["checks:write"]))])
 async def update_check_webhook_settings(
     check_id: int,
     webhook_settings: schemas.WebhookSettingsUpdate,
@@ -175,7 +175,7 @@ async def get_check_last_content(
     
     return JSONResponse(content={"content": content})
 
-@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+@router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_telegram_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -196,7 +196,7 @@ async def test_telegram_notification(
     return check
 
 
-@router.post("/{check_id}/slack/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+@router.post("/{check_id}/slack/test", response_model=schemas.Check, status_code=status.HTTP_200_OK, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_slack_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -213,7 +213,7 @@ async def test_slack_notification(
     return check
 
 
-@router.post("/{check_id}/discord/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+@router.post("/{check_id}/discord/test", response_model=schemas.Check, status_code=status.HTTP_200_OK, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_discord_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -230,7 +230,7 @@ async def test_discord_notification(
     return check
 
 
-@router.post("/{check_id}/webhook/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
+@router.post("/{check_id}/webhook/test", response_model=schemas.Check, status_code=status.HTTP_200_OK, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_webhook_notification(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -246,7 +246,7 @@ async def test_webhook_notification(
     await db.refresh(check)
     return check
 
-@router.post("/{check_id}/telegram/test-queue", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{check_id}/telegram/test-queue", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_telegram_notification_queue(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -265,7 +265,7 @@ async def test_telegram_notification_queue(
     return {"message": "Test notification queued."}
 
 
-@router.post("/{check_id}/slack/test-queue", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{check_id}/slack/test-queue", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_slack_notification_queue(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -280,7 +280,7 @@ async def test_slack_notification_queue(
     return {"message": "Test notification queued."}
 
 
-@router.post("/{check_id}/discord/test-queue", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{check_id}/discord/test-queue", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_discord_notification_queue(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -295,7 +295,7 @@ async def test_discord_notification_queue(
     return {"message": "Test notification queued."}
 
 
-@router.post("/{check_id}/webhook/test-queue", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{check_id}/webhook/test-queue", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(security.require_scopes(["checks:notify"]))])
 async def test_webhook_notification_queue(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -310,7 +310,7 @@ async def test_webhook_notification_queue(
     return {"message": "Test notification queued."}
 
 
-@router.post("/{check_id}/toggle-pause", response_model=schemas.Check)
+@router.post("/{check_id}/toggle-pause", response_model=schemas.Check, dependencies=[Depends(security.require_scopes(["checks:write"]))])
 async def toggle_pause_check(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -323,7 +323,7 @@ async def toggle_pause_check(
     return await crud.toggle_check_pause(db=db, check=check)
 
 
-@router.delete("/{check_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{check_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(security.require_scopes(["checks:delete"]))])
 async def delete_check(
     check_id: int,
     db: AsyncSession = Depends(db_base.get_db),
@@ -335,7 +335,7 @@ async def delete_check(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/export", response_class=JSONResponse)
+@router.get("/export", response_class=JSONResponse, dependencies=[Depends(security.require_scopes(["checks:export"]))])
 async def export_checks(
     db: AsyncSession = Depends(db_base.get_db),
     principal: db_models.User = Depends(security.get_public_user_from_key),
@@ -353,7 +353,7 @@ async def export_checks(
     return JSONResponse(content=export_data, headers=headers)
 
 
-@router.post("/import", response_model=schemas.CheckImportResponse)
+@router.post("/import", response_model=schemas.CheckImportResponse, dependencies=[Depends(security.require_scopes(["checks:import"]))])
 async def import_checks(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(db_base.get_db),

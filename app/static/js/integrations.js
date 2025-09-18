@@ -1,6 +1,51 @@
 const checkId = window.CHECK_ID;
 const isAdmin = window.IS_ADMIN;
-const apiToken = window.API_TOKEN;
+let apiToken = sessionStorage.getItem('admin_access_token');
+
+function getCsrfToken() {
+    const cookies = document.cookie.split(';').map(c => c.trim());
+    const csrfCookie = cookies.find(c => c.startsWith('csrf_token='));
+    return csrfCookie ? csrfCookie.split('=')[1] : null;
+}
+
+async function refreshAdminToken() {
+    try {
+        const res = await fetch('/admin/token/refresh', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': getCsrfToken() }
+        });
+        if (!res.ok) throw new Error('Refresh failed');
+        const data = await res.json();
+        apiToken = data.access_token;
+        sessionStorage.setItem('admin_access_token', apiToken);
+        return true;
+    } catch (e) {
+        console.error('Could not refresh token:', e);
+        sessionStorage.removeItem('admin_access_token');
+        window.location.href = '/admin/login';
+        return false;
+    }
+}
+
+async function fetchWithAuth(url, options = {}) {
+    const opts = { ...options };
+    if (isAdmin) {
+        opts.headers = {
+            ...(options.headers || {}),
+            'Authorization': `Bearer ${apiToken}`,
+        };
+    } else {
+        opts.headers = { ...(options.headers || {}), 'X-Auth-Key': authKey };
+    }
+    let res = await fetch(url, opts);
+    if (isAdmin && res.status === 401) {
+        const refreshed = await refreshAdminToken();
+        if (!refreshed) return res;
+        opts.headers['Authorization'] = `Bearer ${apiToken}`;
+        res = await fetch(url, opts);
+    }
+    return res;
+}
 const authKey = window.AUTH_KEY;
 const csrfToken = window.CSRF_TOKEN;
 
@@ -60,10 +105,7 @@ async function handleFormSubmit(event) {
     data[`${integration}_enabled`] = form.querySelector(`input[name="${integration}_enabled"]`).checked;
 
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken };
-    if (isAdmin) headers['Authorization'] = `Bearer ${apiToken}`;
-    else headers['X-Auth-Key'] = authKey;
-
-    const response = await fetch(`/api/v1/checks/${checkId}/${integration}`, {
+    const response = await fetchWithAuth(`/api/v1/checks/${checkId}/${integration}`, {
         method: 'PUT',
         headers: headers,
         body: JSON.stringify(data)
@@ -97,11 +139,8 @@ async function handleTestClick(event, useQueue = false) {
     formMessage.style.color = 'inherit';
 
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken };
-    if (isAdmin) headers['Authorization'] = `Bearer ${apiToken}`;
-    else headers['X-Auth-Key'] = authKey;
-
     const url = `/api/v1/checks/${checkId}/${integration}/test${useQueue ? '-queue' : ''}`;
-    const response = await fetch(url, { method: 'POST', headers: headers });
+    const response = await fetchWithAuth(url, { method: 'POST', headers: headers });
 
     button.removeAttribute('aria-busy');
     button.disabled = false;
