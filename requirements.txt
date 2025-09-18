@@ -14,3 +14,4 @@ httpx
 celery
 redis
 prometheus-client
+orjson
