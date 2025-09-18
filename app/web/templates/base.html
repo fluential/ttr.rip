@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@700&family=Share+Tech+Mono&family=Special+Elite&family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7/css/flag-icons.min.css"/>
-    <link rel="stylesheet" id="theme-style" href="">
+    <link rel="stylesheet" id="theme-style" href="/static/css/themes/cyberpunk.css">
     <link rel="stylesheet" href="/static/css/custom.css">
     <style>
         /* Reduce base font size to make the UI more compact */
@@ -54,7 +54,7 @@
                 <li>
                     <select id="theme-selector" style="margin-bottom: 0;">
                         <option value="retro">Retro</option>
-                        <option value="cyberpunk">Cyberpunk</option>
+                        <option value="cyberpunk" selected>Cyberpunk</option>
                         <option value="blueprint">Blueprint</option>
                         <option value="terminal">Terminal</option>
                         <option value="solarized">Solarized</option>
@@ -125,8 +125,8 @@
         }
 
         // Set theme on initial load
-        const savedAppTheme = localStorage.getItem('appTheme') || 'retro';
-        const savedColorMode = localStorage.getItem('colorMode') || 'dark';
+        const savedAppTheme = localStorage.getItem('appTheme') || 'cyberpunk';
+        const savedColorMode = localStorage.getItem('colorMode') === 'light' ? 'light' : 'dark';
         
         setAppTheme(savedAppTheme);
         setColorMode(savedColorMode);
