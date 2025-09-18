@@ -39,7 +39,7 @@ async def home(request: Request):
     }
     response = templates.TemplateResponse("public_login.html", context)
     response.delete_cookie("auth_key")
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 @router.post("/dashboard", response_class=HTMLResponse, dependencies=[Depends(security.verify_form_csrf_token)])
@@ -48,7 +48,7 @@ async def login_with_key(request: Request, auth_key: str = Form(...), db: AsyncS
     # If it's a valid key for an existing user, they'll see their checks.
     # If it's a new key, a user will be created when they create their first check.
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 @router.get("/new", response_class=HTMLResponse)
@@ -57,7 +57,7 @@ async def new_anonymous_user(request: Request, db: AsyncSession = Depends(db_bas
     # We no longer create the user here. It will be created just-in-time.
     
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 
@@ -107,8 +107,8 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     }
     response = templates.TemplateResponse("dashboard.html", context)
     # Refresh cookie on activity
-    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax", secure=not settings.DEBUG_MODE)
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 
@@ -189,7 +189,7 @@ async def telegram_login_callback(
         logger.info(f"Telegram login successful for existing user {user.id} (Telegram ID: {login_data.id})")
 
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="auth_key", value=user.auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax")
+    response.set_cookie(key="auth_key", value=user.auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 
@@ -234,7 +234,7 @@ async def public_integrations(
         "debug_mode": settings.DEBUG_MODE,
     }
     response = templates.TemplateResponse("integrations.html", context)
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 
@@ -285,7 +285,7 @@ async def login_page(request: Request):
         "csrf_token": csrf_token,
     }
     response = templates.TemplateResponse("login.html", context)
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 @admin_router.post("/login", response_class=HTMLResponse, dependencies=[Depends(security.verify_form_csrf_token)])
@@ -302,7 +302,7 @@ async def handle_login(
             data={"sub": user.username}, expires_delta=access_token_expires
         )
         response = RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_302_FOUND)
-        response.set_cookie(key="auth_token", value=access_token, httponly=True, samesite="Lax")
+        response.set_cookie(key="auth_token", value=access_token, httponly=True, samesite="Strict", secure=not settings.DEBUG_MODE)
         return response
     return RedirectResponse(url="/admin/login?error=1", status_code=status.HTTP_302_FOUND)
 
@@ -330,7 +330,7 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(db_base.g
         "debug_mode": settings.DEBUG_MODE,
     }
     response = templates.TemplateResponse("admin_dashboard.html", context)
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
 
 
@@ -372,5 +372,5 @@ async def admin_integrations(
         "debug_mode": settings.DEBUG_MODE,
     }
     response = templates.TemplateResponse("integrations.html", context)
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax")
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=True, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
