@@ -30,6 +30,7 @@ def get_queue_stats():
             "total_reserved": 0,
         }
 
+
 def _store_cache(data: dict):
     global _CACHE, _CACHE_TS
     _CACHE = data
