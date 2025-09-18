@@ -24,10 +24,9 @@ if config.config_file_name is not None:
 
 # Set the database URL from application settings
 # This ensures that Alembic uses the same database as the application.
-# The asyncpg driver is replaced with postgresql for compatibility with Alembic's sync operations.
+# Use the async URL directly when running with async engine.
 if settings.DATABASE_URL:
-    sync_db_url = settings.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
-    config.set_main_option("sqlalchemy.url", sync_db_url)
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 else:
     raise ValueError("DATABASE_URL is not set in the application settings.")
 
