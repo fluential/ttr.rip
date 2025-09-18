@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
 import logging
+import json
 
 from app.db import base as db_base
 from app.db import models as db_models
