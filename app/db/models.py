@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     Table,
     Float,
+    Index,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
@@ -85,13 +86,19 @@ class StatusPage(Base):
 
 class Check(Base):
     __tablename__ = "checks"
-    __table_args__ = (UniqueConstraint('owner_id', 'slug', name='_check_owner_slug_uc'),)
+    __table_args__ = (
+        UniqueConstraint('owner_id', 'slug', name='_check_owner_slug_uc'),
+        Index('ix_checks_owner_id_created_at', 'owner_id', 'created_at'),
+        Index('ix_checks_owner_id_deadline', 'owner_id', 'deadline'),
+        Index('ix_checks_owner_id_name', 'owner_id', 'name'),
+        Index('ix_checks_owner_id_uuid', 'owner_id', 'uuid'),
+    )
 
     id: int = Column(Integer, primary_key=True, index=True)
     uuid: str = Column(String, unique=True, index=True)
     slug: Optional[str] = Column(String, index=True, nullable=True)
     name: str = Column(String, index=True)
-    created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Column(DateTime(timezone=True), index=True, default=lambda: datetime.now(timezone.utc))
     
     # Scheduling
     schedule_type: str = Column(String, default="interval", nullable=False)
