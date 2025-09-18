@@ -77,7 +77,6 @@ async def _send_notification(check_id: int, message: str, send_function):
                     logger.error(f"Could not decrement queued notification count for check {check_id}: {e}")
 
             await send_function(check, message)
-            await session.commit()
 
 async def _send_telegram_notification(check_id: int, message: str):
     await _send_notification(check_id, message, _execute_telegram_send)
@@ -262,7 +261,7 @@ return prev
             else:
                 logger.info("Scheduler found no long-running checks.")
 
-            await session.commit()
+            
 
 
 @celery_app.task(name="app.worker.check_overdue_jobs_task")

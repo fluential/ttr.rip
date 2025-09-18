@@ -87,7 +87,7 @@ services:
   worker:
     build: .
     container_name: ttl_rip_worker
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A app.worker.celery_app worker --loglevel=info -P solo
     volumes:
       - ./app:/app/app
     env_file:
