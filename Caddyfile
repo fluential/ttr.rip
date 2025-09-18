@@ -36,27 +36,7 @@
         }
     }
 
-    # Enhanced cache configuration with micro-caching for GET/HEAD requests
-    cache {
-        # Default micro-caching TTL for successful responses (10s)
-        ttl 10s
-        
-        # Don't cache non-GET/HEAD methods or requests with authorization
-        disable_if {
-            not {method} match GET HEAD
-            header Authorization *
-            header X-Auth-Key *
-        }
-        
-        # Cache key based on request attributes (do not include conditional headers to avoid fragmentation)
-        key {
-            method
-            host
-            path
-            query
-            header Accept
-        }
-    }
+    # Micro-caching is applied within specific handlers below (static, API GET, badges)
 
     # Handle /static/ path with longer cache time
     handle /static/* {
@@ -207,32 +187,18 @@
                 burst 20
             }
         }
-        
-        # Micro-caching for API endpoints - 5 seconds
-        cache {
-            ttl 5s
 
-            # Only cache GET requests for API endpoints
-            disable_if {
-                not {method} match GET
+        # Cache only GET requests for API endpoints (micro-cache 5s)
+        @api_get method GET
+        handle @api_get {
+            cache {
+                ttl 5s
             }
-
-            # Key the cache by auth and method to prevent cross-user leaks; avoid conditional headers
-            key {
-                method
-                host
-                path
-                query
-                header Accept
-                header X-Auth-Key
-                header Authorization
-            }
+            header Cache-Control "public, max-age=5"
+            reverse_proxy localhost:8000
         }
-        
-        # Add cache control header
-        header Cache-Control "public, max-age=5"
-        
-        # Pass to FastAPI backend
+
+        # Non-GET requests bypass cache
         reverse_proxy localhost:8000
     }
 
