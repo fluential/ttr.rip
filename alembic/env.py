@@ -80,8 +80,9 @@ async def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    section = config.get_section(config.config_ini_section) or {}
     connectable = async_engine_from_config(
-        config.get_section(config.main_section, {}),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
