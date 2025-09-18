@@ -349,22 +349,32 @@ async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key
 async def ensure_user_has_slug(db: AsyncSession, user: models.User) -> models.User:
     """
     Ensure the user has a non-empty slug. If missing, generate a unique slug and persist it.
-    This is safe to call on every request; it only writes when slug is None/empty.
+    Works with detached instances by reloading a session-bound user before writing.
     """
-    if user and not user.slug:
-        base_input = user.auth_key or (user.username or str(uuid.uuid4()))
-        slug = generate_user_slug(base_input)
-        salt = 0
-        while True:
-            existing_user = await get_user_by_slug(db, slug)
-            if not existing_user or existing_user.id == user.id:
-                break
-            salt += 1
-            slug = generate_user_slug(base_input, salt=str(salt))
-        user.slug = slug
-        await db.commit()
-        await db.refresh(user)
-    return user
+    if not user or not getattr(user, "id", None):
+        return user
+    if getattr(user, "slug", None):
+        return user
+
+    # Load a session-bound instance to avoid "not persistent within this Session" errors
+    result = await db.execute(select(models.User).filter(models.User.id == user.id))
+    db_user = result.scalars().first()
+    if not db_user:
+        return user  # user vanished; return original reference safely
+
+    base_input = db_user.auth_key or (db_user.username or str(uuid.uuid4()))
+    slug = generate_user_slug(base_input)
+    salt = 0
+    while True:
+        existing_user = await get_user_by_slug(db, slug)
+        if not existing_user or existing_user.id == db_user.id:
+            break
+        salt += 1
+        slug = generate_user_slug(base_input, salt=str(salt))
+    db_user.slug = slug
+    await db.commit()
+    await db.refresh(db_user)
+    return db_user
 
 async def update_user_slug(db: AsyncSession, user: models.User, new_slug: str):
     """Updates a user's slug after checking for uniqueness."""
