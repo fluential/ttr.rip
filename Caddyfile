@@ -73,7 +73,7 @@
                 burst 5
             }
         }
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # Handle sensitive user actions like key rotation and account deletion
@@ -87,7 +87,7 @@
                 burst 2
             }
         }
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # Handle check creation (which also handles new user creation)
@@ -104,7 +104,7 @@
         }
         
         # Pass to FastAPI backend
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # Handle admin login with rate limiting
@@ -118,7 +118,7 @@
                 burst 5
             }
         }
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # Handle admin token refresh with primary cookie-based and fallback IP rate limits
@@ -140,7 +140,7 @@
                 burst 5
             }
         }
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     handle /api/v1/* {
@@ -195,11 +195,11 @@
                 ttl 5s
             }
             header Cache-Control "public, max-age=5"
-            reverse_proxy localhost:8000
+            reverse_proxy web:8000
         }
 
         # Non-GET requests bypass cache
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # Special handling for ping and badge endpoints
@@ -212,7 +212,7 @@
             ttl 30s
         }
         header Cache-Control "public, max-age=30"
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # All other /p/* routes are active pings; do not cache, add limits
@@ -238,12 +238,12 @@
                 burst 100
             }
         }
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # Handle all other requests
     handle {
-        reverse_proxy localhost:8000
+        reverse_proxy web:8000
     }
 
     # Comprehensive security headers for all responses
