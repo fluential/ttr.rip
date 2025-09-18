@@ -52,7 +52,7 @@ services:
     volumes:
       - ./app:/app/app
     expose:
-      - "8000"
+      - "0:0:0.0:8000"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ || exit 1"]
       interval: 5s
