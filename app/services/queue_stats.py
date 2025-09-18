@@ -30,7 +30,31 @@ def get_queue_stats():
             "total_reserved": 0,
         }
 
+    # Try Redis cache first
+    try:
+        r = get_redis_connection()
+        if r:
+            raw = r.get(_REDIS_KEY)
+            if raw:
+                if isinstance(raw, bytes):
+                    raw = raw.decode()
+                return json.loads(raw)
+    except Exception as e:
+        logger.debug(f"Redis queue stats cache read failed: {e}", exc_info=False)
 
+    # Fallback to in-process cache if fresh
+    now = time.time()
+    if _CACHE and (now - _CACHE_TS) < _CACHE_TTL:
+        return _CACHE
+
+    # Last resort: degraded response (non-blocking)
+    return {
+        "broker_status": "Redis (Unknown)",
+        "workers_online": "N/A",
+        "total_queued": "N/A",
+        "total_active": "N/A",
+        "total_reserved": "N/A",
+    }
 
 def _store_cache(data: dict):
     global _CACHE, _CACHE_TS
@@ -134,29 +158,3 @@ if not settings.DEBUG_MODE:
         _t.start()
     except Exception as e:
         logger.error(f"Failed to start queue stats background thread: {e}", exc_info=False)
-
-    # Try Redis cache first
-    try:
-        r = get_redis_connection()
-        if r:
-            raw = r.get(_REDIS_KEY)
-            if raw:
-                if isinstance(raw, bytes):
-                    raw = raw.decode()
-                return json.loads(raw)
-    except Exception as e:
-        logger.debug(f"Redis queue stats cache read failed: {e}", exc_info=False)
-
-    # Fallback to in-process cache if fresh
-    now = time.time()
-    if _CACHE and (now - _CACHE_TS) < _CACHE_TTL:
-        return _CACHE
-
-    # Last resort: degraded response (non-blocking)
-    return {
-        "broker_status": "Redis (Unknown)",
-        "workers_online": "N/A",
-        "total_queued": "N/A",
-        "total_active": "N/A",
-        "total_reserved": "N/A",
-    }
