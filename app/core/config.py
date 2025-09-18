@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # Security headers
     SECURITY_HEADERS_ENABLED: bool = True
-    CSP_USER_DASHBOARD: str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    CSP_USER_DASHBOARD: str = "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' https: data:; img-src 'self' data: https:; frame-src 'self' https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 
     model_config = SettingsConfigDict(env_file=".env")
 
