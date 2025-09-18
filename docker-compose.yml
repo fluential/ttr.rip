@@ -47,7 +47,7 @@ services:
   worker:
     build: .
     container_name: ttl_rip_worker
-    command: celery -A app.worker.celery_app worker --loglevel=info --pool=threads -c 50
+    command: bash -c 'for i in $(seq 1 30); do alembic upgrade head && ok=1 && break || sleep 2; done; if [ -z "$ok" ]; then echo "Migrations failed"; exit 1; fi; celery -A app.worker.celery_app worker --loglevel=info --pool=threads -c 50'
     volumes:
       - ./app:/app/app
     env_file:
@@ -55,11 +55,12 @@ services:
     depends_on:
       - redis
       - db
+      - web
 
   beat:
     build: .
     container_name: ttl_rip_beat
-    command: celery -A app.worker.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule
+    command: bash -c 'for i in $(seq 1 30); do alembic upgrade head && ok=1 && break || sleep 2; done; if [ -z "$ok" ]; then echo "Migrations failed"; exit 1; fi; celery -A app.worker.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule'
     volumes:
       - ./app:/app/app
     env_file:
@@ -67,6 +68,7 @@ services:
     depends_on:
       - redis
       - db
+      - web
 
 volumes:
   postgres_data:

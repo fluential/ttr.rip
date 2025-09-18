@@ -33,6 +33,24 @@ RUN mkdir -p /var/cache/caddy && chown -R nobody:nogroup /var/cache/caddy
 
 # Create a startup script
 RUN echo '#!/bin/bash\n\
+set -euo pipefail\n\
+\n\
+ALEMBIC_MAX_TRIES=${ALEMBIC_MAX_TRIES:-30}\n\
+ALEMBIC_SLEEP_SECONDS=${ALEMBIC_SLEEP_SECONDS:-2}\n\
+\n\
+echo "Running database migrations..."\n\
+attempt=1\n\
+until alembic upgrade head; do\n\
+  if [ $attempt -ge $ALEMBIC_MAX_TRIES ]; then\n\
+    echo "Migrations failed after $attempt attempts"\n\
+    exit 1\n\
+  fi\n\
+  echo "Alembic not ready (attempt $attempt/$ALEMBIC_MAX_TRIES). Retrying in ${ALEMBIC_SLEEP_SECONDS}s..."\n\
+  attempt=$((attempt+1))\n\
+  sleep "$ALEMBIC_SLEEP_SECONDS"\n\
+done\n\
+echo "Migrations complete."\n\
+\n\
 # Start FastAPI in the background\n\
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 &\n\
 FASTAPI_PID=$!\n\
