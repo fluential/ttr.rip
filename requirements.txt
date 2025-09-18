@@ -16,3 +16,4 @@ redis
 prometheus-client
 orjson
 alembic
+psycopg2-binary
