@@ -1,8 +1,7 @@
 # Stage 1: Build a custom Caddy with required plugins
 FROM caddy:2-builder AS caddy-builder
 RUN xcaddy build \
-    --with github.com/mholt/caddy-ratelimit \
-    --with github.com/ueffel/caddy-brotli
+    --with github.com/mholt/caddy-ratelimit
 
 # Stage 2: Runtime image
 FROM python:3.11-slim

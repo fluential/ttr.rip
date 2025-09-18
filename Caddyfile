@@ -11,8 +11,8 @@
 }
 
 :8080 {
-    # Enable Brotli and Zstandard compression
-    encode brotli zstd gzip
+    # Enable Zstandard and gzip compression
+    encode zstd gzip
 
     # Enable response header to show when caching is active
     header /* {
