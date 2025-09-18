@@ -54,7 +54,7 @@ done\n\
 echo "Migrations complete."\n\
 \n\
 # Start FastAPI in the background\n\
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 &\n\
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level "${UVICORN_LOG_LEVEL:-info}" &\n\
 FASTAPI_PID=$!\n\
 \n\
 # Start Caddy in the foreground\n\

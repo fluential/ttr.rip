@@ -7,6 +7,7 @@ import sys
 import os
 import re
 import json
+import uuid
 from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.staticfiles import StaticFiles
@@ -223,6 +224,9 @@ app = FastAPI(lifespan=lifespan, title="ttr.rip")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.perf_counter()
     request.state.start_time = start_time
+    # Per-request correlation ID
+    request_id = uuid.uuid4().hex[:8]
+    request.state.request_id = request_id
     
     # Record API request metrics
     path = request.url.path
@@ -278,6 +282,31 @@ async def add_process_time_header(request: Request, call_next):
     # End tracking of user request
     if user_id:
         metrics.track_user_request_end(user_id)
+
+    # Add correlation id to response
+    response.headers["X-Request-ID"] = request_id
+
+    # Structured access log for every request
+    try:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            client_ip = xff.split(",")[0].strip()
+        else:
+            client_ip = request.headers.get("x-real-ip") or (request.client.host if request.client else "-")
+    except Exception:
+        client_ip = "-"
+    ua = request.headers.get("user-agent", "-")
+    auth_key_header = request.headers.get("x-auth-key")
+    auth_key_cookie = request.cookies.get("auth_key")
+
+    def _mask(k: str | None) -> str:
+        if not k:
+            return "none"
+        return f"...{k[-4:]}" if len(k) >= 4 else "set"
+
+    auth_type = "admin" if request.headers.get("authorization") else ("public" if (auth_key_header or auth_key_cookie) else "anonymous")
+
+    logger.info(f'{client_ip} - "{method} {clean_path}" {response.status_code} {process_time:.3f}s - auth_type={auth_type} - x_auth_key={_mask(auth_key_header)} - cookie_auth_key={_mask(auth_key_cookie)} - ua="{ua}" - rid={request_id}')
     
     return response
 
