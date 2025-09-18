@@ -230,7 +230,9 @@
     }
 
     # Special handling for ping and badge endpoints
-    @badge path_regexp badge ^/p/.+/badge\.svg$
+    @badge {
+        path_regexp badge ^/p/.+/badge\.svg$
+    }
     handle @badge {
         # Cache badges (static-ish) for 30s
         cache {
@@ -241,8 +243,10 @@
     }
 
     # All other /p/* routes are active pings; do not cache, add limits
-    @ping not @badge
-    handle @ping {
+    @pings {
+        path /p/*
+    }
+    handle @pings {
         # Per-check limiter (by path)
         rate_limit {
             zone ping_per_check {
