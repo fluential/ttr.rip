@@ -46,6 +46,10 @@ services:
       start_period: 30s
     env_file:
       - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - UVICORN_LOG_LEVEL=info
     depends_on:
       db:
         condition: service_healthy
@@ -60,6 +64,10 @@ services:
       - ./app:/app/app
     env_file:
       - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - CELERY_WORKER_HIJACK_ROOT_LOGGER=false
     depends_on:
       db:
         condition: service_healthy
@@ -76,6 +84,10 @@ services:
       - ./app:/app/app
     env_file:
       - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - CELERY_WORKER_HIJACK_ROOT_LOGGER=false
     depends_on:
       db:
         condition: service_healthy

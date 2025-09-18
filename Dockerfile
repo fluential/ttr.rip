@@ -7,6 +7,8 @@ RUN xcaddy build \
 # Stage 2: Runtime image
 FROM python:3.11-slim
 
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Install minimal runtime deps
