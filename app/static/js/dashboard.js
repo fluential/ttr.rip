@@ -13,6 +13,8 @@ let autoRefreshCountdown = autoRefreshInterval;
 let autoRefreshTimer = null;
 let checksData = {}; // Global cache for check data
 let currentUser = null;
+let dashboardAggregateEtag = null;
+let metricsEtag = null;
 
 function getMaskedAuthKey(key) {
     if (key.length <= 4) {
@@ -515,14 +517,192 @@ async function deleteStatusPage(pageId) {
     }
 }
 
+async function fetchDashboardAggregate() {
+    try {
+        let url = `/api/v1/checks/aggregate?size=${pageSize}&sort_by=${currentSortBy}&sort_direction=${currentSortDir}`;
+        if (currentTagFilter) {
+            url += `&tag=${encodeURIComponent(currentTagFilter)}`;
+        }
+        const headers = { 'X-Auth-Key': authKey };
+        if (dashboardAggregateEtag) headers['If-None-Match'] = dashboardAggregateEtag;
+
+        const response = await fetch(url, { headers });
+        if (response.status === 304) {
+            return;
+        }
+        if (!response.ok) {
+            if (response.status >= 500) updateConnectionStatus('error');
+            throw new Error('Failed to fetch dashboard aggregate');
+        }
+        if (isConnectionLost) updateConnectionStatus('success');
+
+        dashboardAggregateEtag = response.headers.get('ETag') || dashboardAggregateEtag;
+
+        const agg = await response.json();
+
+        // Render checks table
+        const data = agg.checks;
+        const checks = data.items;
+        checks.forEach(c => checksData[c.id] = c); // Update global cache
+        allChecksForStatusPage = checks; // Cache for status page form
+        populateCheckCheckboxes(); // Populate form now that we have checks
+
+        const tableBody = document.querySelector('#checks-table tbody');
+        const statusSummary = document.getElementById('status-summary');
+        tableBody.innerHTML = '';
+        const statusCounts = { up: 0, down: 0, new: 0, paused: 0 };
+
+        if (checks.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="9">No checks found. Create one above!</td></tr>';
+            if (statusSummary) {
+                statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: 0`;
+                statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: 0`;
+                statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: 0`;
+                statusSummary.querySelector('.status-paused').innerHTML = `<span>⏸️</span> Paused: 0`;
+            }
+            updatePagination(data.next_cursor, data.prev_cursor);
+            return;
+        }
+
+        checks.forEach(check => {
+            const row = document.createElement('tr');
+            const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
+            const pingIdentifier = check.slug || check.uuid;
+            const userSlug = currentUser ? currentUser.slug : '...';
+            const pingUrl = `${window.location.origin}/p/${userSlug}/${pingIdentifier}`;
+
+            const referenceTime = parseUTCDate(check.last_ping) || parseUTCDate(check.created_at);
+            const deadline = new Date(referenceTime.getTime() + (check.interval_seconds + check.grace_seconds) * 1000);
+            const now = new Date();
+            const diffSeconds = (deadline - now) / 1000;
+            const expiresIn = formatTimeDifference(diffSeconds);
+            const lastDuration = formatDuration(check.last_duration_seconds);
+
+            let currentStatus = check.status;
+            if (currentStatus !== 'down' && diffSeconds < 0) {
+                currentStatus = 'down';
+            }
+            const displayStatus = check.paused ? 'paused' : currentStatus;
+
+            if (displayStatus === 'up') statusCounts.up++;
+            else if (displayStatus === 'down') statusCounts.down++;
+            else if (displayStatus === 'new') statusCounts.new++;
+            else if (displayStatus === 'paused') statusCounts.paused++;
+
+            const statusIcon = {
+                'up': '🟢',
+                'down': '🔴',
+                'new': '🟡',
+                'paused': '⏸️'
+            };
+            const statusText = displayStatus.toUpperCase();
+            const badgeUrl = `${window.location.origin}/p/${pingIdentifier}/badge.svg`;
+
+            row.dataset.checkId = check.id;
+            row.dataset.checkName = check.name;
+
+            row.innerHTML = `
+                <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
+                <td>${check.name}</td>
+                <td>${check.tags.map(t => `<span class="tag">${t.name}</span>`).join(' ')}</td>
+                <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;"></td>
+                <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;"></td>
+                <td>${lastPing}</td>
+                <td>${lastDuration}</td>
+                <td>${expiresIn}</td>
+                <td>
+                    <button class="outline action-button" title="Recent Pings" onclick="viewRecentPings(${check.id})" ${!check.last_pings || check.last_pings.length === 0 ? 'disabled' : ''}>📜</button>
+                </td>
+                <td>
+                    <div class="grid" style="margin-bottom: 0; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;">
+                        <button class="outline action-button" title="Edit" onclick="editCheck(event, ${check.id})">✏️</button>
+                        <button class="outline action-button" title="View Last Content" onclick="viewLastContent(${check.id})" ${!check.last_content ? 'disabled' : ''}>📄</button>
+                        <button class="outline action-button" title="${check.paused ? 'Resume' : 'Pause'}" onclick="togglePause(${check.id})">${check.paused ? '▶️' : '⏸️'}</button>
+                        <button class="outline action-button" title="Integrations" onclick="window.location.href='/check/${check.id}/integrations'">⚙️</button>
+                        <button class="secondary outline action-button" title="Delete" onclick="deleteCheck(${check.id})">🗑️</button>
+                    </div>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+
+        if (statusSummary) {
+            statusSummary.querySelector('.status-up').innerHTML = `<span>🟢</span> Up: ${statusCounts.up}`;
+            statusSummary.querySelector('.status-down').innerHTML = `<span>🔴</span> Down: ${statusCounts.down}`;
+            statusSummary.querySelector('.status-new').innerHTML = `<span>🟡</span> New: ${statusCounts.new}`;
+            statusSummary.querySelector('.status-paused').innerHTML = `<span>⏸️</span> Paused: ${statusCounts.paused}`;
+        }
+        updatePagination(data.next_cursor, data.prev_cursor);
+        updateSortIndicators();
+
+        // Render user stats
+        const stats = agg.user_stats;
+        const summaryDiv = document.getElementById('user-stats-summary');
+        if (summaryDiv) {
+            const avgInterval = stats.avg_interval_seconds ? formatTimeDifference(stats.avg_interval_seconds).replace('in ', '') : 'N/A';
+            const avgDuration = stats.avg_duration_seconds ? formatDuration(stats.avg_duration_seconds) : 'N/A';
+            summaryDiv.innerHTML = `
+                <div class="grid">
+                    <div><strong>Total:</strong> ${stats.total_checks}</div>
+                    <div><strong>Up:</strong> ${stats.up_count}</div>
+                    <div><strong>Down:</strong> ${stats.down_count}</div>
+                    <div><strong>Paused:</strong> ${stats.paused_count}</div>
+                </div>
+                <div class="grid">
+                    <div><strong>Avg. Interval:</strong> ${avgInterval}</div>
+                    <div><strong>Avg. Duration:</strong> ${avgDuration}</div>
+                    <div style="grid-column: span 2;"><strong>Notifications Queued:</strong> ${stats.user_queued_notifications}</div>
+                </div>
+            `;
+        }
+
+        // Render metrics summary
+        const metrics = agg.metrics_summary;
+        const metricsDiv = document.getElementById('operational-metrics-summary');
+        if (metricsDiv) {
+            const avgApiLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
+            const avgDbLatency = metrics.average_db_latency_seconds ? (metrics.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
+            const avgRedisLatency = metrics.average_redis_latency_seconds ? (metrics.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
+            metricsDiv.innerHTML = `
+                <div class="grid">
+                    <div class="metric"><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
+                    <div class="metric"><strong>API Requests:</strong> ${metrics.total_api_requests || 0}</div>
+                    <div class="metric"><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
+                </div>
+                <div class="grid">
+                    <div><span class="health-dot ${metrics.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
+                    <div><span class="health-dot ${metrics.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
+                    <div><span class="health-dot ${metrics.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+                </div>
+            `;
+            const footerApiLatency = document.getElementById('footer-api-latency');
+            const footerRedisLatency = document.getElementById('footer-redis-latency');
+            if (footerApiLatency) footerApiLatency.textContent = avgApiLatency;
+            if (footerRedisLatency) footerRedisLatency.textContent = avgRedisLatency;
+        }
+
+        // Render tags
+        renderTagFilter(agg.tags);
+    } catch (error) {
+        console.error("Error fetching dashboard aggregate:", error);
+        updateConnectionStatus('error');
+    }
+}
+
 async function fetchOperationalMetrics() {
     try {
-        const response = await fetch('/api/v1/metrics/summary');
+        const headers = {};
+        if (metricsEtag) headers['If-None-Match'] = metricsEtag;
+        const response = await fetch('/api/v1/metrics/summary', { headers });
+        if (response.status === 304) {
+            return;
+        }
         if (!response.ok) {
             if (response.status >= 500) updateConnectionStatus('error');
             throw new Error('Failed to fetch operational metrics');
         }
         if (isConnectionLost) updateConnectionStatus('success');
+        metricsEtag = response.headers.get('ETag') || metricsEtag;
 
         const metrics = await response.json();
         const summaryDiv = document.getElementById('operational-metrics-summary');
@@ -805,9 +985,7 @@ function startAutoRefreshTimer() {
         if (autoRefreshCountdown <= 0) {
             autoRefreshCountdown = autoRefreshInterval;
             countdownEl.textContent = autoRefreshInterval;
-            fetchChecks();
-            fetchUserStats();
-            fetchOperationalMetrics();
+            fetchDashboardAggregate();
         }
     }, 1000);
 }
@@ -1414,9 +1592,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const manualRefreshBtn = document.getElementById('manual-refresh-btn');
     if (manualRefreshBtn) {
         manualRefreshBtn.addEventListener('click', () => {
-            fetchChecks();
-            fetchUserStats();
-            fetchOperationalMetrics();
+            fetchDashboardAggregate();
             
             // Reset the countdown if auto-refresh is enabled
             if (autoRefreshEnabled) {
@@ -1430,7 +1606,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await updateTelegramSection(); // Fetch user data first
-    await Promise.all([fetchChecks(), fetchUserStats(), fetchOperationalMetrics(), fetchStatusPages(), fetchAllTags()]);
+    await Promise.all([fetchDashboardAggregate(), fetchStatusPages()]);
     
     const loadTime = performance.now() - window.pageLoadStartTime;
     const clientTimeElem = document.getElementById('client-load-time');

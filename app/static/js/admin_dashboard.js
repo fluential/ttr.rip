@@ -44,6 +44,8 @@ let autoRefreshEnabled = true;
 let autoRefreshInterval = 5; // seconds
 let autoRefreshCountdown = autoRefreshInterval;
 let autoRefreshTimer = null;
+let adminChecksEtag = null;
+let metricsEtag = null;
 
 function getCsrfToken() {
     const cookies = document.cookie.split(';').map(c => c.trim());
@@ -217,10 +219,16 @@ async function fetchSystemStats() {
 
 async function fetchOperationalMetrics() {
     try {
-        const response = await fetch('/api/v1/metrics/summary');
+        const headers = {};
+        if (metricsEtag) headers['If-None-Match'] = metricsEtag;
+        const response = await fetch('/api/v1/metrics/summary', { headers });
+        if (response.status === 304) {
+            return;
+        }
         if (!response.ok) {
             throw new Error('Failed to fetch operational metrics');
         }
+        metricsEtag = response.headers.get('ETag') || metricsEtag;
         const metrics = await response.json();
         const summaryDiv = document.getElementById('operational-metrics-summary');
 
@@ -266,7 +274,13 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     if (cursor) {
         url += `&cursor=${cursor}`;
     }
-    const response = await fetchWithAuth(url);
+    const headers = {};
+    if (adminChecksEtag) headers['If-None-Match'] = adminChecksEtag;
+    const response = await fetchWithAuth(url, { headers });
+    if (response.status === 304) {
+        return;
+    }
+    adminChecksEtag = response.headers.get('ETag') || adminChecksEtag;
     const data = await response.json();
     const checks = data.items;
     const tableBody = document.querySelector('#checks-table tbody');

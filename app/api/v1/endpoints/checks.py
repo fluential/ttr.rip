@@ -1,14 +1,16 @@
 from typing import List, Union, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response, Request
+from fastapi.responses import ORJSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 import json
+import hashlib
 
 from app import crud, schemas, security
 from app.services import notifications
 from app.core.config import settings
 from app.core.redis_pool import get_redis_connection
+from app.api.v1.endpoints.metrics import parse_prometheus_metric, get_latency_health
 from app.db import base as db_base
 from app.db import models as db_models
 
@@ -32,6 +34,7 @@ async def read_checks(
     sort_direction: str = Query('desc', pattern="^(asc|desc|asc_prev|desc_prev)$"),
     cursor: Optional[str] = None,
     tag: Optional[str] = None,
+    request: Request = None,
 ):
     allowed_sort_fields = ['id', 'name', 'created_at', 'uuid', 'deadline']
     if sort_by not in allowed_sort_fields:
@@ -50,14 +53,105 @@ async def read_checks(
     # Enrich checks with runtime data from Redis
     await crud.enrich_checks_with_runtime_data(items)
 
-    return schemas.CheckPage(
+    # Build an ETag over the list contents
+    try:
+        base = "|".join(f"{c.id}:{c.status}:{(c.last_ping.isoformat() if c.last_ping else '')}:{int(bool(c.paused))}" for c in items)
+    except Exception:
+        base = "|".join(str(c.id) for c in items)
+    etag = f'W/"{hashlib.sha256(base.encode()).hexdigest()}"'
+    if request and request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+
+    page = schemas.CheckPage(
         items=items,
         next_cursor=next_cursor,
         prev_cursor=prev_cursor,
         size=size
     )
+    return ORJSONResponse(content=page.model_dump(), headers={"ETag": etag})
 
-@router.get("/slug-check", response_class=JSONResponse)
+@router.get("/aggregate", response_class=ORJSONResponse)
+async def read_dashboard_aggregate(
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+    size: int = Query(25, ge=1, le=100),
+    sort_by: str = Query('id'),
+    sort_direction: str = Query('desc', pattern="^(asc|desc|asc_prev|desc_prev)$"),
+    cursor: Optional[str] = None,
+    tag: Optional[str] = None,
+    request: Request = None,
+):
+    allowed_sort_fields = ['id', 'name', 'created_at', 'uuid', 'deadline']
+    if sort_by not in allowed_sort_fields:
+        raise HTTPException(status_code=400, detail=f"Invalid sort field: {sort_by}")
+
+    items, next_cursor, prev_cursor = await crud.get_checks_by_owner(
+        db=db, 
+        principal=principal, 
+        size=size, 
+        sort_by=sort_by, 
+        sort_direction=sort_direction,
+        cursor=cursor,
+        tag=tag
+    )
+    await crud.enrich_checks_with_runtime_data(items)
+
+    # ETag for checks
+    try:
+        base_checks = "|".join(f"{c.id}:{c.status}:{(c.last_ping.isoformat() if c.last_ping else '')}:{int(bool(c.paused))}" for c in items)
+    except Exception:
+        base_checks = "|".join(str(c.id) for c in items)
+    checks_etag = hashlib.sha256(base_checks.encode()).hexdigest()
+
+    # User stats
+    user_stats = await crud.get_check_stats_by_owner(db=db, principal=principal)
+    user_stats_payload = user_stats.model_dump() if hasattr(user_stats, "model_dump") else user_stats
+
+    # Tags
+    tags_list = await crud.get_all_tags_by_owner(db=db, principal=principal)
+    tags_payload = [t.model_dump() if hasattr(t, "model_dump") else {"id": t.id, "name": t.name} for t in tags_list]
+
+    # Metrics summary (inline, mirrored from metrics endpoint)
+    avg_api_latency = parse_prometheus_metric("ttl_api_request_duration_seconds")
+    avg_db_latency = parse_prometheus_metric("ttl_db_query_duration_seconds")
+    avg_redis_latency = parse_prometheus_metric("ttl_redis_command_duration_seconds")
+    metrics_summary = {
+        "total_checks": int(parse_prometheus_metric("ttl_checks_total") or 0),
+        "total_notifications_sent": int(parse_prometheus_metric("ttl_notifications_sent_total") or 0),
+        "average_api_latency_seconds": avg_api_latency,
+        "average_db_latency_seconds": avg_db_latency,
+        "average_redis_latency_seconds": avg_redis_latency,
+        "total_api_requests": int(parse_prometheus_metric("ttl_api_requests_total") or 0),
+        "health": {
+            "api_latency": get_latency_health(avg_api_latency, yellow_threshold=0.5, red_threshold=1.0),
+            "db_latency": get_latency_health(avg_db_latency, yellow_threshold=0.1, red_threshold=0.5),
+            "redis_latency": get_latency_health(avg_redis_latency, yellow_threshold=0.01, red_threshold=0.1),
+        }
+    }
+
+    checks_page = schemas.CheckPage(
+        items=items,
+        next_cursor=next_cursor,
+        prev_cursor=prev_cursor,
+        size=size
+    ).model_dump()
+
+    payload = {
+        "checks": checks_page,
+        "user_stats": user_stats_payload,
+        "metrics_summary": metrics_summary,
+        "tags": tags_payload,
+    }
+
+    # Aggregate ETag
+    etag_base = f"{checks_etag}|{user_stats_payload.get('total_checks', 0)}|{metrics_summary['total_api_requests']}|{metrics_summary['total_notifications_sent']}"
+    agg_etag = f'W/"{hashlib.sha256(etag_base.encode()).hexdigest()}"'
+    if request and request.headers.get("if-none-match") == agg_etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+
+    return ORJSONResponse(content=payload, headers={"ETag": agg_etag, "Cache-Control": "public, max-age=5"})
+
+@router.get("/slug-check", response_class=ORJSONResponse)
 async def check_slug_availability(
     slug: str,
     check_id: Optional[int] = None,
@@ -68,7 +162,7 @@ async def check_slug_availability(
         raise HTTPException(status_code=403, detail="User not found")
     
     is_taken = await crud.is_slug_taken(db, slug=slug, owner_id=principal.id, check_id=check_id)
-    return JSONResponse(content={"is_taken": is_taken})
+    return ORJSONResponse(content={"is_taken": is_taken})
 
 @router.get("/tags", response_model=List[schemas.Tag])
 async def read_tags(
@@ -173,7 +267,7 @@ async def get_check_last_content(
             logger.error(f"Failed to retrieve content from Redis for check {check_id}: {e}")
             content = "Error retrieving content from storage."
     
-    return JSONResponse(content={"content": content})
+    return ORJSONResponse(content={"content": content})
 
 @router.post("/{check_id}/telegram/test", response_model=schemas.Check, status_code=status.HTTP_200_OK)
 async def test_telegram_notification(
@@ -350,7 +444,7 @@ async def export_checks(
     headers = {
         'Content-Disposition': 'attachment; filename="ttr_rip_checks_export.json"'
     }
-    return JSONResponse(content=export_data, headers=headers)
+    return ORJSONResponse(content=export_data, headers=headers)
 
 
 @router.post("/import", response_model=schemas.CheckImportResponse)

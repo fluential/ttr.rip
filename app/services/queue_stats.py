@@ -1,9 +1,14 @@
 import logging
+import time
 from app.worker import celery_app
 from app.core.config import settings
 from app.core.redis_pool import get_redis_connection
 
 logger = logging.getLogger(__name__)
+
+_CACHE = None
+_CACHE_TS = 0.0
+_CACHE_TTL = 5.0
 
 def get_queue_stats():
     """
@@ -18,6 +23,11 @@ def get_queue_stats():
             "total_active": 0,
             "total_reserved": 0,
         }
+
+    now = time.time()
+    global _CACHE, _CACHE_TS
+    if _CACHE and (now - _CACHE_TS) < _CACHE_TTL:
+        return _CACHE
 
     try:
         # Use redis pool to check connection and queue length
@@ -38,13 +48,15 @@ def get_queue_stats():
         inspector = celery_app.control.inspect(timeout=1)
         stats = inspector.stats()
         if not stats:
-            return {
+            _CACHE = {
                 "broker_status": "Redis (Connected, no workers)",
                 "workers_online": 0,
                 "total_queued": total_queued,
                 "total_active": "N/A",
                 "total_reserved": "N/A",
             }
+            _CACHE_TS = time.time()
+            return _CACHE
 
         active = inspector.active()
         reserved = inspector.reserved()
@@ -53,13 +65,15 @@ def get_queue_stats():
         total_active = sum(len(tasks) for tasks in active.values()) if active else 0
         total_reserved = sum(len(tasks) for tasks in reserved.values()) if reserved else 0
 
-        return {
+        _CACHE = {
             "broker_status": "Redis (Connected)",
             "workers_online": workers_online,
             "total_queued": total_queued,
             "total_active": total_active,
             "total_reserved": total_reserved,
         }
+        _CACHE_TS = time.time()
+        return _CACHE
     except Exception as e:
         logger.error(f"Could not get queue stats: {e}", exc_info=False)
         return {

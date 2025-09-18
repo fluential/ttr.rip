@@ -1,7 +1,18 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Response, status
+from fastapi.responses import ORJSONResponse
 from prometheus_client.registry import REGISTRY
+import time
+import hashlib
 
 router = APIRouter()
+
+# Simple in-process cache for summary
+_SUMMARY_CACHE = {
+    "ts": 0.0,
+    "etag": None,
+    "data": None,
+}
+_CACHE_TTL = 5.0
 
 def parse_prometheus_metric(metric_name: str):
     """Helper to parse a metric from the registry by name."""
@@ -38,11 +49,19 @@ def get_latency_health(latency_seconds: float, yellow_threshold: float, red_thre
     return "green"
 
 @router.get("/summary")
-async def get_metrics_summary():
+async def get_metrics_summary(request: Request):
     """
     Returns a JSON summary of key operational metrics.
     These metrics are global and reflect the state of the service since the last restart.
     """
+    now = time.time()
+    etag_header = request.headers.get("if-none-match")
+
+    if _SUMMARY_CACHE["data"] is not None and (now - _SUMMARY_CACHE["ts"] < _CACHE_TTL):
+        if etag_header and etag_header == _SUMMARY_CACHE["etag"]:
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+        return ORJSONResponse(content=_SUMMARY_CACHE["data"], headers={"ETag": _SUMMARY_CACHE["etag"], "Cache-Control": f"public, max-age={int(_CACHE_TTL)}"})
+
     avg_api_latency = parse_prometheus_metric("ttl_api_request_duration_seconds")
     avg_db_latency = parse_prometheus_metric("ttl_db_query_duration_seconds")
     avg_redis_latency = parse_prometheus_metric("ttl_redis_command_duration_seconds")
@@ -60,5 +79,13 @@ async def get_metrics_summary():
             "redis_latency": get_latency_health(avg_redis_latency, yellow_threshold=0.01, red_threshold=0.1),
         }
     }
-            
-    return summary
+
+    etag = f'W/"{hashlib.sha256(str(summary).encode()).hexdigest()}"'
+    _SUMMARY_CACHE["ts"] = now
+    _SUMMARY_CACHE["etag"] = etag
+    _SUMMARY_CACHE["data"] = summary
+
+    if etag_header and etag_header == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+
+    return ORJSONResponse(content=summary, headers={"ETag": etag, "Cache-Control": f"public, max-age={int(_CACHE_TTL)}"})
