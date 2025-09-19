@@ -8,6 +8,7 @@ let currentSortDir = 'desc';
 let currentTagFilter = '';
 let selectedTags = new Set();
 let allTagNames = [];
+let checksSearchTerm = '';
 let pageSize = 25;
 let nextCursor = null;
 let prevCursor = null;
@@ -657,9 +658,12 @@ async function fetchDashboardAggregate() {
         // Render checks table
         const data = agg.checks;
         const selected2 = Array.from(selectedTags);
-        const checks = selected2.length
+        let checks = selected2.length
             ? data.items.filter(c => selected2.every(t => (c.tags || []).some(tag => tag.name === t)))
             : data.items;
+        if (checksSearchTerm) {
+            checks = checks.filter(c => (c.name || '').toLowerCase().includes(checksSearchTerm));
+        }
         checks.forEach(c => checksData[c.id] = c); // Update global cache
         allChecksForStatusPage = checks; // Cache for status page form
         populateCheckCheckboxes(); // Populate form now that we have checks
@@ -1208,9 +1212,12 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
 
         const data = await response.json();
     const selected2 = Array.from(selectedTags);
-    const checks = selected2.length
+    let checks = selected2.length
         ? data.items.filter(c => selected2.every(t => (c.tags || []).some(tag => tag.name === t)))
         : data.items;
+    if (checksSearchTerm) {
+        checks = checks.filter(c => (c.name || '').toLowerCase().includes(checksSearchTerm));
+    }
     checks.forEach(c => checksData[c.id] = c); // Update global cache
     allChecksForStatusPage = checks; // Cache for status page form
     populateCheckCheckboxes(); // Populate form now that we have checks
@@ -1822,6 +1829,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             fetchChecks(nextCursor, currentSortDir);
         }
     });
+
+    // Checks search by name
+    const checksSearchInput = document.getElementById('checks-search');
+    if (checksSearchInput) {
+        checksSearchInput.addEventListener('input', debounce((e) => {
+            checksSearchTerm = (e.target.value || '').toLowerCase().trim();
+            fetchChecks();
+        }, 250));
+    }
 
     // Tag filter listeners (multi-select + search)
     const tagSearch = document.getElementById('tag-search');
