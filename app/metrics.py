@@ -1,5 +1,6 @@
 import time
 import logging
+import asyncio
 from typing import Dict, Optional, Set
 from prometheus_client import Counter, Gauge, Histogram, Info
 import prometheus_client
@@ -98,6 +99,12 @@ class DBQueryTimer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = time.time() - self.start_time
         DB_QUERY_DURATION.observe(duration)
+        # Also aggregate globally across workers via Redis (best-effort, non-blocking)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_add_latency_to_redis("db", duration))
+        except Exception:
+            pass
 
 class PingProcessTimer:
     """Context manager for timing ping endpoint processing."""
@@ -108,12 +115,36 @@ class PingProcessTimer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = time.perf_counter() - self._start
         PING_PROCESS_TIME.observe(duration)
+        # Also aggregate globally across workers via Redis (best-effort, non-blocking)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_add_latency_to_redis("ping", duration))
+        except Exception:
+            pass
 
 def record_ping_process_time(seconds: float):
     """Manually record ping processing time in seconds."""
     try:
         PING_PROCESS_TIME.observe(float(seconds))
+        # Best-effort Redis aggregation
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_add_latency_to_redis("ping", float(seconds)))
+        except Exception:
+            pass
     except Exception:
+        pass
+
+async def _add_latency_to_redis(kind: str, seconds: float):
+    """Increment global latency sum/count in Redis for cross-worker aggregation."""
+    try:
+        async with ephemeral_redis() as r:
+            if not r:
+                return
+            await r.incrbyfloat(f"metrics:latency:{kind}:sum", float(seconds))
+            await r.incr(f"metrics:latency:{kind}:count")
+    except Exception:
+        # Never raise from metrics path
         pass
 
 def get_metrics():
