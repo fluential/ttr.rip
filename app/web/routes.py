@@ -364,6 +364,17 @@ async def public_status_page_data(
             "schedule": getattr(c, "schedule", None),
             "created_at": c.created_at.isoformat() if getattr(c, "created_at", None) else None,
             "tags": [t.name for t in getattr(c, "tags", [])] if getattr(c, "tags", None) else [],
+            # Public-safe recent activity (last 3), no IP or User-Agent
+            "last_pings": [
+                {
+                    "timestamp": lp.get("timestamp"),
+                    "country_code": lp.get("country_code"),
+                    "country_name": lp.get("country_name"),
+                    "connection_type": lp.get("connection_type"),
+                }
+                for lp in (getattr(c, "last_pings", []) or [])[:3]
+                if isinstance(lp, dict)
+            ],
         })
 
     payload = {
