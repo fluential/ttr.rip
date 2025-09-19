@@ -237,6 +237,9 @@ class CheckStats(BaseModel):
     down_count: int
     new_count: int
     paused_count: int = 0
+    overdue_count: int = 0
+    active_count: int = 0
+    tags_count: int = 0
     avg_interval_seconds: Optional[float] = None
     avg_duration_seconds: Optional[float] = None
     user_queued_notifications: Union[int, str] = 0

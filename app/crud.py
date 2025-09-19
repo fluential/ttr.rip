@@ -542,14 +542,70 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
                         result = await db.execute(avg_query)
                         averages = result.first()
 
+                        # Compute overdue_count (DB), tags_count (DB), avg_duration_seconds (Redis), and active_count (derived)
+                        now_utc = datetime.now(timezone.utc)
+                        overdue_q = select(func.count(models.Check.id)).filter(
+                            models.Check.owner_id == principal.id,
+                            models.Check.paused == False,
+                            models.Check.deadline.isnot(None),
+                            models.Check.deadline < now_utc,
+                        )
+                        res_overdue = await db.execute(overdue_q)
+                        overdue_count = int(res_overdue.scalar_one() or 0)
+
+                        tags_q = select(func.count(func.distinct(models.Tag.id))).filter(models.Tag.owner_id == principal.id)
+                        res_tags = await db.execute(tags_q)
+                        tags_count = int(res_tags.scalar_one() or 0)
+
+                        # Average last_duration_seconds from Redis runtime keys
+                        avg_duration_seconds = None
+                        try:
+                            ids_res = await db.execute(select(models.Check.id).filter(models.Check.owner_id == principal.id))
+                            check_ids = ids_res.scalars().all()
+                            if check_ids:
+                                async with ephemeral_redis() as r2:
+                                    if r2:
+                                        pipe = r2.pipeline()
+                                        for cid in check_ids:
+                                            pipe.hget(get_check_runtime_redis_key(cid), "last_duration_seconds")
+                                        vals = await pipe.execute()
+                                        total = 0.0
+                                        cnt = 0
+                                        for v in vals:
+                                            if v is None or v == "":
+                                                continue
+                                            if isinstance(v, bytes):
+                                                try:
+                                                    v = v.decode()
+                                                except Exception:
+                                                    continue
+                                            try:
+                                                f = float(v)
+                                                if f >= 0:
+                                                    total += f
+                                                    cnt += 1
+                                            except Exception:
+                                                continue
+                                        if cnt > 0:
+                                            avg_duration_seconds = total / cnt
+                        except Exception as e:
+                            logger.debug(f"Avg duration computation failed: {e}", exc_info=False)
+
+                        total_checks = int(cached_counters.get("total", 0))
+                        paused_count = int(cached_counters.get("paused", 0))
+                        active_count = max(total_checks - paused_count, 0)
+
                         return schemas.CheckStats(
-                            total_checks=int(cached_counters.get("total", 0)),
+                            total_checks=total_checks,
                             up_count=int(cached_counters.get("up", 0)),
                             down_count=int(cached_counters.get("down", 0)),
                             new_count=int(cached_counters.get("new", 0)),
-                            paused_count=int(cached_counters.get("paused", 0)),
+                            paused_count=paused_count,
+                            overdue_count=overdue_count,
+                            active_count=active_count,
+                            tags_count=tags_count,
                             avg_interval_seconds=averages.avg_interval_seconds if averages else None,
-                            avg_duration_seconds=None, # This can't be calculated from DB anymore
+                            avg_duration_seconds=avg_duration_seconds,
                             user_queued_notifications=await get_user_queued_notification_count(db, principal)
                         )
         except Exception as e:
@@ -570,14 +626,67 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     stats = result.first()
     
     if stats and stats.total_checks > 0:
+        # Compute overdue_count, tags_count (DB), avg_duration_seconds (Redis), and active_count (derived)
+        now_utc = datetime.now(timezone.utc)
+        overdue_q = select(func.count(models.Check.id)).filter(
+            models.Check.owner_id == principal.id,
+            models.Check.paused == False,
+            models.Check.deadline.isnot(None),
+            models.Check.deadline < now_utc,
+        )
+        res_overdue = await db.execute(overdue_q)
+        overdue_count = int(res_overdue.scalar_one() or 0)
+
+        tags_q = select(func.count(func.distinct(models.Tag.id))).filter(models.Tag.owner_id == principal.id)
+        res_tags = await db.execute(tags_q)
+        tags_count = int(res_tags.scalar_one() or 0)
+
+        avg_duration_seconds = None
+        try:
+            ids_res = await db.execute(select(models.Check.id).filter(models.Check.owner_id == principal.id))
+            check_ids = ids_res.scalars().all()
+            if check_ids:
+                async with ephemeral_redis() as r:
+                    if r:
+                        pipe = r.pipeline()
+                        for cid in check_ids:
+                            pipe.hget(get_check_runtime_redis_key(cid), "last_duration_seconds")
+                        vals = await pipe.execute()
+                        total = 0.0
+                        cnt = 0
+                        for v in vals:
+                            if v is None or v == "":
+                                continue
+                            if isinstance(v, bytes):
+                                try:
+                                    v = v.decode()
+                                except Exception:
+                                    continue
+                            try:
+                                f = float(v)
+                                if f >= 0:
+                                    total += f
+                                    cnt += 1
+                            except Exception:
+                                continue
+                        if cnt > 0:
+                            avg_duration_seconds = total / cnt
+        except Exception as e:
+            logger.debug(f"Avg duration computation failed: {e}", exc_info=False)
+
+        active_count = max((stats.total_checks or 0) - (stats.paused_count or 0), 0)
+
         stats_obj = schemas.CheckStats(
             total_checks=stats.total_checks,
             up_count=0, # Not available from DB
             down_count=0, # Not available from DB
             new_count=0, # Not available from DB
             paused_count=stats.paused_count or 0,
+            overdue_count=overdue_count,
+            active_count=active_count,
+            tags_count=tags_count,
             avg_interval_seconds=stats.avg_interval_seconds,
-            avg_duration_seconds=None, # Not available from DB
+            avg_duration_seconds=avg_duration_seconds,
             user_queued_notifications=await get_user_queued_notification_count(db, principal)
         )
     else:
