@@ -180,6 +180,14 @@ class PingLog(BaseModel):
     country_code: str
     country_name: str
     connection_type: str
+    region: Optional[str] = None
+    region_code: Optional[str] = None
+    city: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timezone: Optional[str] = None
+    asn: Optional[int] = None
+    asn_org: Optional[str] = None
 
 class Check(CheckBase):
     id: int

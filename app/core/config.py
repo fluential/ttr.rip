@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # GeoIP and Ping Logging
     SAVE_CHECK_LAST_LOGS: bool = True
     GEOIP_DATABASE_PATH: Optional[str] = None
+    GEOIP_ASN_DATABASE_PATH: Optional[str] = None
 
     # User-specific slugs for URLs
     USER_SLUG_ENABLED: bool = True
