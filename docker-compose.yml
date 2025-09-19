@@ -102,14 +102,16 @@ services:
     environment:
       - CLOUDFLARED_URL=http://caddy:8080
       - CLOUDFLARED_OPTS=
+    entrypoint: ["/bin/sh", "-lc"]
     command: >
-      sh -lc 'token="${CLOUDFLARED_TOKEN:-${CLOUDFLARE_TUNNEL_TOKEN:-}}"; if [ -n "$token" ]; then
+      token="${CLOUDFLARED_TOKEN:-${CLOUDFLARE_TUNNEL_TOKEN:-}}";
+      if [ -n "$token" ]; then
         echo "Starting Cloudflare Tunnel with named token";
-        tunnel run --no-autoupdate --token "$token" ${CLOUDFLARED_OPTS:-};
+        exec cloudflared tunnel run --no-autoupdate --token "$token" ${CLOUDFLARED_OPTS:-};
       else
         echo "No tunnel token provided. Starting Quick Tunnel to ${CLOUDFLARED_URL:-http://caddy:8080}";
-        tunnel --no-autoupdate --url "${CLOUDFLARED_URL:-http://caddy:8080}" ${CLOUDFLARED_OPTS:-};
-      fi'
+        exec cloudflared tunnel --no-autoupdate --url "${CLOUDFLARED_URL:-http://caddy:8080}" ${CLOUDFLARED_OPTS:-};
+      fi
 
   worker:
     build: .
