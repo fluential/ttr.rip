@@ -127,6 +127,7 @@ details.recent[open] summary {
 }
 .recent-list { font-size: .85rem; color: #9ca3af; }
 .recent-list li { margin: .15rem 0; }
+.flag { font-size: 1rem; vertical-align: -2px; margin-right: .15rem; }
 
 /* Timeline layout */
 .timeline {
@@ -231,7 +232,7 @@ details.recent[open] summary {
               {% for lp in check.last_pings_public[:3] %}
                 <li>
                   {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
-                  {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
+                  {% if lp.country_code %} <span class="flag" data-cc="{{ lp.country_code }}"></span>{% endif %}{% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
                   {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
                 </li>
               {% endfor %}
@@ -278,7 +279,7 @@ details.recent[open] summary {
               {% for lp in check.last_pings_public[:3] %}
                 <li>
                   {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
-                  {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
+                  {% if lp.country_code %} <span class="flag" data-cc="{{ lp.country_code }}"></span>{% endif %}{% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
                   {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
                 </li>
               {% endfor %}
@@ -350,7 +351,7 @@ details.recent[open] summary {
               {% for lp in check.last_pings_public[:3] %}
                 <li>
                   {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
-                  {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
+                  {% if lp.country_code %} <span class="flag" data-cc="{{ lp.country_code }}"></span>{% endif %}{% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
                   {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
                 </li>
               {% endfor %}
@@ -412,6 +413,19 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch {}
   }
 
+  // Convert country code spans to emoji flags (initial render)
+  function ccToFlag(cc) {
+    try {
+      if (!cc) return '';
+      return cc.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
+    } catch { return ''; }
+  }
+  document.querySelectorAll('.flag[data-cc]').forEach(n => {
+    const cc = n.getAttribute('data-cc') || '';
+    const flag = ccToFlag(cc);
+    if (flag) n.textContent = flag;
+  });
+
   // Copy Ping URL buttons
   document.querySelectorAll('.copy-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -470,6 +484,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch {
       el.textContent = iso;
     }
+  }
+ 
+  function countryCodeToFlag(cc) {
+    try {
+      if (!cc) return '';
+      return cc.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
+    } catch { return ''; }
   }
 
   function updateCheck(el, check) {
@@ -543,9 +564,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (rp && Array.isArray(recent)) {
       const items = (recent || []).slice(0, 3).map(lp => {
         const ts = lp.timestamp ? `data-timestamp="${lp.timestamp}"` : '';
-        const country = lp.country_name || lp.country_code || '';
+        const code = lp.country_code || '';
+        const name = lp.country_name || lp.country_code || '';
+        const flag = code ? countryCodeToFlag(code) : '';
         const conn = lp.connection_type ? ` • ${lp.connection_type}` : '';
-        return `<li><span class="last-ping-time" ${ts}>recently</span>${country ? ` • ${country}` : ''}${conn}</li>`;
+        const flagPart = flag ? ` ${flag}` : '';
+        const countryPart = name ? ` • ${name}` : '';
+        return `<li><span class="last-ping-time" ${ts}>recently</span>${flagPart}${countryPart}${conn}</li>`;
       }).join('');
       rp.innerHTML = items || '<li>No recent pings.</li>';
       rp.querySelectorAll('.last-ping-time').forEach(n => {
