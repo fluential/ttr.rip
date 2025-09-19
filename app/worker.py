@@ -7,6 +7,9 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 import httpx
 from datetime import datetime, timezone
+import time
+import math
+from app.services.rate_control import RateLimitedError, TransientSendError
 
 from app.core.config import settings
 from app.db.base import AsyncSessionLocal
@@ -19,6 +22,7 @@ from app.services.notifications import (
     _execute_telegram_send, _execute_slack_send, 
     _execute_discord_send, _execute_webhook_send
 )
+from app.services import alerting
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -103,6 +107,31 @@ def run_coro(coro):
     """Run an async coroutine in the worker's dedicated event loop."""
     return asyncio.run_coroutine_threadsafe(coro, _event_loop).result()
 
+def _should_drop(enqueued_at: float | None, owner_id: int | None) -> bool:
+    """
+    Drop retry if older than 30 minutes or if user's queued notifications exceed 30.
+    """
+    try:
+        if enqueued_at and (time.time() - enqueued_at) > 1800:
+            return True
+    except Exception:
+        pass
+    try:
+        if owner_id:
+            r = get_redis_connection()
+            if r:
+                owner_identifier = f"user_id_{owner_id}"
+                val = run_coro(r.get(f"user_stats:queued_notifications:{owner_identifier}"))
+                if val is not None:
+                    try:
+                        if int(val) > 30:
+                            return True
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return False
+
 @atexit.register
 def _shutdown_event_loop():
     try:
@@ -168,21 +197,97 @@ async def _send_discord_notification(check_id: int, message: str):
 async def _send_webhook_notification(check_id: int, message: str):
     await _send_notification(check_id, message, _execute_webhook_send)
 
-@celery_app.task(name="send_telegram_notification_task")
-def send_telegram_notification_task(check_id: int, message: str):
-    run_coro(_send_telegram_notification(check_id, message))
+@celery_app.task(
+    bind=True,
+    name="send_telegram_notification_task",
+    autoretry_for=(TransientSendError,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=12,
+)
+def send_telegram_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
+    try:
+        run_coro(_send_telegram_notification(check_id, message))
+    except RateLimitedError as e:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        if e.retry_after:
+            raise self.retry(countdown=int(math.ceil(e.retry_after)))
+        raise self.retry()
+    except TransientSendError:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        raise self.retry()
 
-@celery_app.task(name="send_slack_notification_task")
-def send_slack_notification_task(check_id: int, message: str):
-    run_coro(_send_slack_notification(check_id, message))
+@celery_app.task(
+    bind=True,
+    name="send_slack_notification_task",
+    autoretry_for=(TransientSendError,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=12,
+)
+def send_slack_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
+    try:
+        run_coro(_send_slack_notification(check_id, message))
+    except RateLimitedError as e:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        if e.retry_after:
+            raise self.retry(countdown=int(math.ceil(e.retry_after)))
+        raise self.retry()
+    except TransientSendError:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        raise self.retry()
 
-@celery_app.task(name="send_discord_notification_task")
-def send_discord_notification_task(check_id: int, message: str):
-    run_coro(_send_discord_notification(check_id, message))
+@celery_app.task(
+    bind=True,
+    name="send_discord_notification_task",
+    autoretry_for=(TransientSendError,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=12,
+)
+def send_discord_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
+    try:
+        run_coro(_send_discord_notification(check_id, message))
+    except RateLimitedError as e:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        if e.retry_after:
+            raise self.retry(countdown=int(math.ceil(e.retry_after)))
+        raise self.retry()
+    except TransientSendError:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        raise self.retry()
 
-@celery_app.task(name="send_webhook_notification_task")
-def send_webhook_notification_task(check_id: int, message: str):
-    run_coro(_send_webhook_notification(check_id, message))
+@celery_app.task(
+    bind=True,
+    name="send_webhook_notification_task",
+    autoretry_for=(TransientSendError,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=12,
+)
+def send_webhook_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
+    try:
+        run_coro(_send_webhook_notification(check_id, message))
+    except RateLimitedError as e:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        if e.retry_after:
+            raise self.retry(countdown=int(math.ceil(e.retry_after)))
+        raise self.retry()
+    except TransientSendError:
+        if _should_drop(enqueued_at, owner_id):
+            return
+        raise self.retry()
 
 
 async def _check_overdue_jobs():
@@ -246,6 +351,7 @@ return prev
 
                     if previous_status != "down":
                         logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN (overdue).")
+                        await alerting.record_check_transition(check.id, "down")
                         message = f"🔴 Check Down: [{check.name}] is overdue."
                         notifications.schedule_all_notifications(check, message)
             else:
@@ -334,6 +440,7 @@ return prev
 
                     if previous_status != "down":
                         logger.info(f"Check '{check.name}' (ID: {check.id}) is DOWN (exceeded max runtime).")
+                        await alerting.record_check_transition(check.id, "down")
                         message = f"🔴 Check Down: [{check.name}] exceeded its max runtime of {check.max_runtime_seconds}s."
                         notifications.schedule_all_notifications(check, message)
             else:

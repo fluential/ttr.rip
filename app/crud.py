@@ -18,7 +18,7 @@ import time
 import asyncio
 from app.db import models
 from app import schemas, security, metrics
-from app.services import notifications
+from app.services import notifications, alerting
 from app.core import encryption
 from app.worker import celery_app
 from app.core.config import settings
@@ -814,6 +814,11 @@ return prev
         user_key = f"user_stats:counters:{check.owner_id}"
         global_key = "metrics:checks_status_counts"
         _ = await r.eval(lua, 3, key, user_key, global_key, "up", "1" if check.paused else "0", now.isoformat(), str(duration_seconds or ""), "1")
+        # Record transition for flapping detection
+        try:
+            await alerting.record_check_transition(check.id, "up")
+        except Exception:
+            pass
         
         # Update deadline in the database for the scheduler
         check.deadline = _calculate_next_deadline(check, now)
@@ -955,6 +960,11 @@ return {prev, tostring(failure_count)}
 
         previous_status = result[0].decode() if isinstance(result[0], bytes) else result[0]
         failure_count = int(result[1].decode() if isinstance(result[1], bytes) else result[1])
+        # Record transition for flapping detection
+        try:
+            await alerting.record_check_transition(check.id, "down")
+        except Exception:
+            pass
 
         # --- Conditional Notification Logic ---
         should_notify = True

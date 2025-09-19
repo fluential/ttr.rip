@@ -8,6 +8,10 @@ from app.core.config import settings
 from app.core import encryption
 from app import metrics
 from app.core.redis_pool import get_redis_connection
+import time
+import hashlib
+from urllib.parse import urlparse
+from app.services import rate_control
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +29,7 @@ def format_duration(seconds: int) -> str:
 
 async def _execute_telegram_send(check: Check, message: str):
     """
-    Core logic to send a Telegram notification.
-    This function handles token decryption, API request, and updates the check object in-memory.
-    The caller is responsible for database session management (commit).
+    Core logic to send a Telegram notification with adaptive rate control.
     """
     if not all([check.telegram_enabled, check.telegram_bot_token, check.telegram_chat_id]):
         return
@@ -46,6 +48,15 @@ async def _execute_telegram_send(check: Check, message: str):
         metrics.record_notification_sent("telegram", "error")
         return
 
+    # Derive per-bot identity (sha256 token truncated)
+    identity = hashlib.sha256(decrypted_token.encode("utf-8")).hexdigest()[:10]
+
+    # Global adaptive reserve
+    ok, retry_after, _ = await rate_control.reserve("telegram", identity)
+    if not ok:
+        await rate_control.report("telegram", identity, "rate_limited", retry_after=retry_after)
+        raise rate_control.RateLimitedError(retry_after)
+
     url = f"https://api.telegram.org/bot{decrypted_token}/sendMessage"
     payload = {
         "chat_id": check.telegram_chat_id,
@@ -58,22 +69,51 @@ async def _execute_telegram_send(check: Check, message: str):
             response = await client.post(url, json=payload)
             response_text = response.text
             response.raise_for_status()
+            await rate_control.report("telegram", identity, "success")
             logger.info(f"Successfully sent Telegram notification for check '{check.name}' (ID: {check.id}). Response: {response_text}")
             check.telegram_last_notification_status = "ok"
             check.telegram_last_notification_message = "Successfully sent."
             metrics.record_notification_sent("telegram", "success")
         except httpx.HTTPStatusError as e:
-            error_message = f"Error: {e.response.status_code} {e.response.text}"
-            logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
+            status = e.response.status_code
+            retry_after = None
+            if status == 429:
+                try:
+                    data = e.response.json()
+                    retry_after = (
+                        (data.get("parameters") or {}).get("retry_after")
+                        or data.get("retry_after")
+                    )
+                    if retry_after is not None:
+                        retry_after = float(retry_after)
+                except Exception:
+                    retry_after = None
+                await rate_control.report("telegram", identity, "rate_limited", retry_after=retry_after)
+                check.telegram_last_notification_status = "error"
+                check.telegram_last_notification_message = f"Rate limited by Telegram (429)."
+                metrics.record_notification_sent("telegram", "error")
+                raise rate_control.RateLimitedError(retry_after)
+            elif 500 <= status < 600:
+                await rate_control.report("telegram", identity, "transient_error")
+                check.telegram_last_notification_status = "error"
+                check.telegram_last_notification_message = f"Telegram server error: {status}"
+                metrics.record_notification_sent("telegram", "error")
+                raise rate_control.TransientSendError()
+            else:
+                await rate_control.report("telegram", identity, "permanent_error")
+                error_message = f"Error: {status} {e.response.text}"
+                logger.error(f"Error sending Telegram notification for check '{check.name}' (ID: {check.id}): {error_message}")
+                check.telegram_last_notification_status = "error"
+                check.telegram_last_notification_message = error_message
+                metrics.record_notification_sent("telegram", "error")
+        except httpx.RequestError as e:
+            await rate_control.report("telegram", identity, "transient_error")
+            error_message = f"Network error: {e}"
+            logger.error(f"Network error while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}", exc_info=True)
             check.telegram_last_notification_status = "error"
             check.telegram_last_notification_message = error_message
             metrics.record_notification_sent("telegram", "error")
-        except Exception as e:
-            error_message = f"An unexpected error occurred: {e}"
-            logger.error(f"An unexpected error occurred while sending Telegram notification for check '{check.name}' (ID: {check.id}): {e}", exc_info=True)
-            check.telegram_last_notification_status = "error"
-            check.telegram_last_notification_message = error_message
-            metrics.record_notification_sent("telegram", "error")
+            raise rate_control.TransientSendError()
         finally:
             check.telegram_last_notification_timestamp = datetime.now(timezone.utc)
 
@@ -83,22 +123,57 @@ async def _execute_slack_send(check: Check, message: str):
     if not check.owner or not check.owner.auth_key: return
     try:
         decrypted_url = encryption.decrypt_token(check.slack_webhook_url, check.owner.auth_key)
-        payload = {"text": message}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
+    except Exception:
+        return
+
+    identity = hashlib.sha256(decrypted_url.encode("utf-8")).hexdigest()[:10]
+    ok, retry_after, _ = await rate_control.reserve("slack", identity)
+    if not ok:
+        await rate_control.report("slack", identity, "rate_limited", retry_after=retry_after)
+        raise rate_control.RateLimitedError(retry_after)
+
+    payload = {"text": message}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
+        try:
             response = await client.post(decrypted_url, json=payload)
             response.raise_for_status()
-        check.slack_last_notification_status = "ok"
-        check.slack_last_notification_message = "Successfully sent."
-        metrics.record_notification_sent("slack", "success")
-    except Exception as e:
-        error_message = f"An unexpected error occurred: {e}"
-        if isinstance(e, httpx.HTTPStatusError):
-            error_message = f"Error: {e.response.status_code} {e.response.text}"
-        check.slack_last_notification_status = "error"
-        check.slack_last_notification_message = error_message
-        metrics.record_notification_sent("slack", "error")
-    finally:
-        check.slack_last_notification_timestamp = datetime.now(timezone.utc)
+            await rate_control.report("slack", identity, "success")
+            check.slack_last_notification_status = "ok"
+            check.slack_last_notification_message = "Successfully sent."
+            metrics.record_notification_sent("slack", "success")
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 429:
+                ra = None
+                try:
+                    ra_hdr = e.response.headers.get("Retry-After")
+                    if ra_hdr:
+                        ra = float(ra_hdr)
+                except Exception:
+                    ra = None
+                await rate_control.report("slack", identity, "rate_limited", retry_after=ra)
+                check.slack_last_notification_status = "error"
+                check.slack_last_notification_message = "Rate limited by Slack (429)."
+                metrics.record_notification_sent("slack", "error")
+                raise rate_control.RateLimitedError(ra)
+            elif 500 <= status < 600:
+                await rate_control.report("slack", identity, "transient_error")
+                check.slack_last_notification_status = "error"
+                check.slack_last_notification_message = f"Slack server error: {status}"
+                metrics.record_notification_sent("slack", "error")
+                raise rate_control.TransientSendError()
+            else:
+                await rate_control.report("slack", identity, "permanent_error")
+                check.slack_last_notification_status = "error"
+                check.slack_last_notification_message = f"Error: {status} {e.response.text}"
+                metrics.record_notification_sent("slack", "error")
+        except httpx.RequestError as e:
+            await rate_control.report("slack", identity, "transient_error")
+            check.slack_last_notification_status = "error"
+            check.slack_last_notification_message = f"Network error: {e}"
+            metrics.record_notification_sent("slack", "error")
+            raise rate_control.TransientSendError()
+    check.slack_last_notification_timestamp = datetime.now(timezone.utc)
 
 
 async def _execute_discord_send(check: Check, message: str):
@@ -106,22 +181,57 @@ async def _execute_discord_send(check: Check, message: str):
     if not check.owner or not check.owner.auth_key: return
     try:
         decrypted_url = encryption.decrypt_token(check.discord_webhook_url, check.owner.auth_key)
-        payload = {"content": message}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
+    except Exception:
+        return
+
+    identity = hashlib.sha256(decrypted_url.encode("utf-8")).hexdigest()[:10]
+    ok, retry_after, _ = await rate_control.reserve("discord", identity)
+    if not ok:
+        await rate_control.report("discord", identity, "rate_limited", retry_after=retry_after)
+        raise rate_control.RateLimitedError(retry_after)
+
+    payload = {"content": message}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
+        try:
             response = await client.post(decrypted_url, json=payload)
             response.raise_for_status()
-        check.discord_last_notification_status = "ok"
-        check.discord_last_notification_message = "Successfully sent."
-        metrics.record_notification_sent("discord", "success")
-    except Exception as e:
-        error_message = f"An unexpected error occurred: {e}"
-        if isinstance(e, httpx.HTTPStatusError):
-            error_message = f"Error: {e.response.status_code} {e.response.text}"
-        check.discord_last_notification_status = "error"
-        check.discord_last_notification_message = error_message
-        metrics.record_notification_sent("discord", "error")
-    finally:
-        check.discord_last_notification_timestamp = datetime.now(timezone.utc)
+            await rate_control.report("discord", identity, "success")
+            check.discord_last_notification_status = "ok"
+            check.discord_last_notification_message = "Successfully sent."
+            metrics.record_notification_sent("discord", "success")
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 429:
+                ra = None
+                try:
+                    ra_hdr = e.response.headers.get("Retry-After")
+                    if ra_hdr:
+                        ra = float(ra_hdr)
+                except Exception:
+                    ra = None
+                await rate_control.report("discord", identity, "rate_limited", retry_after=ra)
+                check.discord_last_notification_status = "error"
+                check.discord_last_notification_message = "Rate limited by Discord (429)."
+                metrics.record_notification_sent("discord", "error")
+                raise rate_control.RateLimitedError(ra)
+            elif 500 <= status < 600:
+                await rate_control.report("discord", identity, "transient_error")
+                check.discord_last_notification_status = "error"
+                check.discord_last_notification_message = f"Discord server error: {status}"
+                metrics.record_notification_sent("discord", "error")
+                raise rate_control.TransientSendError()
+            else:
+                await rate_control.report("discord", identity, "permanent_error")
+                check.discord_last_notification_status = "error"
+                check.discord_last_notification_message = f"Error: {status} {e.response.text}"
+                metrics.record_notification_sent("discord", "error")
+        except httpx.RequestError as e:
+            await rate_control.report("discord", identity, "transient_error")
+            check.discord_last_notification_status = "error"
+            check.discord_last_notification_message = f"Network error: {e}"
+            metrics.record_notification_sent("discord", "error")
+            raise rate_control.TransientSendError()
+    check.discord_last_notification_timestamp = datetime.now(timezone.utc)
 
 
 async def _execute_webhook_send(check: Check, message: str):
@@ -129,28 +239,63 @@ async def _execute_webhook_send(check: Check, message: str):
     if not check.owner or not check.owner.auth_key: return
     try:
         decrypted_url = encryption.decrypt_token(check.webhook_url, check.owner.auth_key)
-        payload = {
-            "check_id": check.id,
-            "check_name": check.name,
-            "status": check.status,
-            "message": message,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
+    except Exception:
+        return
+
+    identity = hashlib.sha256(decrypted_url.encode("utf-8")).hexdigest()[:10]
+    ok, retry_after, _ = await rate_control.reserve("webhook", identity)
+    if not ok:
+        await rate_control.report("webhook", identity, "rate_limited", retry_after=retry_after)
+        raise rate_control.RateLimitedError(retry_after)
+
+    payload = {
+        "check_id": check.id,
+        "check_name": check.name,
+        "status": check.status,
+        "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
+        try:
             response = await client.post(decrypted_url, json=payload)
             response.raise_for_status()
-        check.webhook_last_notification_status = "ok"
-        check.webhook_last_notification_message = "Successfully sent."
-        metrics.record_notification_sent("webhook", "success")
-    except Exception as e:
-        error_message = f"An unexpected error occurred: {e}"
-        if isinstance(e, httpx.HTTPStatusError):
-            error_message = f"Error: {e.response.status_code} {e.response.text}"
-        check.webhook_last_notification_status = "error"
-        check.webhook_last_notification_message = error_message
-        metrics.record_notification_sent("webhook", "error")
-    finally:
-        check.webhook_last_notification_timestamp = datetime.now(timezone.utc)
+            await rate_control.report("webhook", identity, "success")
+            check.webhook_last_notification_status = "ok"
+            check.webhook_last_notification_message = "Successfully sent."
+            metrics.record_notification_sent("webhook", "success")
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 429:
+                ra = None
+                try:
+                    ra_hdr = e.response.headers.get("Retry-After")
+                    if ra_hdr:
+                        ra = float(ra_hdr)
+                except Exception:
+                    ra = None
+                await rate_control.report("webhook", identity, "rate_limited", retry_after=ra)
+                check.webhook_last_notification_status = "error"
+                check.webhook_last_notification_message = "Rate limited by webhook endpoint (429)."
+                metrics.record_notification_sent("webhook", "error")
+                raise rate_control.RateLimitedError(ra)
+            elif 500 <= status < 600:
+                await rate_control.report("webhook", identity, "transient_error")
+                check.webhook_last_notification_status = "error"
+                check.webhook_last_notification_message = f"Webhook server error: {status}"
+                metrics.record_notification_sent("webhook", "error")
+                raise rate_control.TransientSendError()
+            else:
+                await rate_control.report("webhook", identity, "permanent_error")
+                check.webhook_last_notification_status = "error"
+                check.webhook_last_notification_message = f"Error: {status} {e.response.text}"
+                metrics.record_notification_sent("webhook", "error")
+        except httpx.RequestError as e:
+            await rate_control.report("webhook", identity, "transient_error")
+            check.webhook_last_notification_status = "error"
+            check.webhook_last_notification_message = f"Network error: {e}"
+            metrics.record_notification_sent("webhook", "error")
+            raise rate_control.TransientSendError()
+    check.webhook_last_notification_timestamp = datetime.now(timezone.utc)
 
 
 async def send_telegram_notification(db: AsyncSession, check: Check, message: str):
@@ -185,7 +330,8 @@ async def _schedule_notification(check: Check, message: str, task_func, async_fu
         except RuntimeError:
             logger.error(f"Failed to schedule direct notification for {async_func.__name__}: no running event loop.")
     else:
-        task_func.delay(check.id, message)
+        enqueued_at = time.time()
+        task_func.delay(check.id, message, enqueued_at, check.owner_id)
 
 
 async def schedule_all_notifications(check: Check, message: str):
