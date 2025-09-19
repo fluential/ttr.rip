@@ -889,31 +889,6 @@ async function handleImport(file) {
 
 
 
-function formatDuration(seconds) {
-    if (seconds === null || seconds === undefined || isNaN(seconds)) return 'N/A';
-    if (seconds < 0) return 'N/A';
-
-    if (seconds < 1) {
-        return `${Math.round(seconds * 1000)} ms`;
-    }
-    if (seconds < 60) {
-        const s = parseFloat(seconds.toFixed(1));
-        return `${s} second${s !== 1 ? 's' : ''}`;
-    }
-
-    const minutes = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-
-    const parts = [];
-    if (minutes > 0) {
-        parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
-    }
-    if (secs > 0) {
-        parts.push(`${secs} second${secs !== 1 ? 's' : ''}`);
-    }
-    
-    return parts.join(' ');
-}
 
 function startAutoRefreshTimer() {
     if (autoRefreshTimer) {
