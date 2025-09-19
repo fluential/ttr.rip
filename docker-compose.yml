@@ -101,8 +101,8 @@ services:
     env_file:
       - .env.example
     environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-    command: ["tunnel", "run"]
+      - CLOUDFLARED_URL=http://caddy:8080
+    command: ["tunnel", "--no-autoupdate", "--url", "http://caddy:8080"]
     volumes:
       - /etc/localtime:/etc/localtime:ro
     healthcheck:
