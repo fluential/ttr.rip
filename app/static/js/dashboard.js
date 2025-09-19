@@ -724,14 +724,13 @@ async function fetchDashboardAggregate() {
                 <td>${check.tags.map(t => `<span class="tag">${t.name}</span>`).join(' ')}</td>
                 <td>
                     <div class="inline-actions">
-                        <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;">
                         <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
+                        <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;">
                     </div>
                 </td>
                 <td>
                     <div class="inline-actions">
                         <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;">
-                        <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
                     </div>
                 </td>
                 <td>${lastPing}</td>
@@ -1274,14 +1273,13 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             <td>${check.tags.map(t => `<span class="tag">${t.name}</span>`).join(' ')}</td>
             <td>
                 <div class="inline-actions">
-                    <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;">
                     <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
+                    <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;">
                 </div>
             </td>
             <td>
                 <div class="inline-actions">
                     <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;">
-                    <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
                 </div>
             </td>
             <td>${lastPing}</td>
