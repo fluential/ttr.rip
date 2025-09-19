@@ -274,10 +274,16 @@ async def public_status_page(
     else:
         overall_status = "up"
 
+    # Selectable public layout for checks: cards | grid | timeline
+    layout = request.query_params.get("layout", "cards")
+    if layout not in ("cards", "grid", "timeline"):
+        layout = "cards"
+
     context = {
         "request": request,
         "status_page": status_page,
         "overall_status": overall_status,
+        "layout": layout,
         "is_public_status_page": True,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,

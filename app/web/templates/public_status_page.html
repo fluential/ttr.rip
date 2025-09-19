@@ -1,107 +1,282 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+/* Eye-candy status page layouts */
+:root {
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+    --new: #9ca3af;
+    --paused: #6b7280;
+    --card-bg: rgba(255,255,255,0.04);
+    --glow: 0 10px 25px rgba(0,0,0,0.25);
+}
+.status-up { color: var(--ok); }
+.status-down { color: var(--err); }
+.status-new { color: var(--new); }
+
+.layout-switcher {
+    display: flex; gap: .5rem; align-items: center; margin: .5rem 0 1rem 0;
+}
+.layout-switcher .pill {
+    display: inline-block;
+    padding: .35rem .7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: var(--card-bg);
+    color: inherit;
+    text-decoration: none;
+    transition: all .15s ease;
+}
+.layout-switcher .pill:hover { transform: translateY(-1px); box-shadow: var(--glow); }
+.layout-switcher .pill.active { border-color: var(--ok); box-shadow: 0 0 0 2px rgba(34,197,94,0.2); }
+
+/* Cards layout */
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+}
+.card {
+    border-radius: .8rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+    padding: 1rem;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--glow);
+}
+.card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.06), transparent 40%);
+    opacity: 0;
+    transition: opacity .2s ease;
+    pointer-events: none;
+}
+.card:hover::before { opacity: 1; }
+.card .title { font-weight: 600; letter-spacing: .2px; }
+.badge {
+    font-size: .75rem;
+    padding: .2rem .5rem;
+    border-radius: .5rem;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--card-bg);
+}
+.badge.ok { color: var(--ok); border-color: rgba(34,197,94,0.35); }
+.badge.err { color: var(--err); border-color: rgba(239,68,68,0.35); }
+.badge.warn { color: var(--warn); border-color: rgba(245,158,11,0.35); }
+.badge.new { color: var(--new); }
+.badge.paused { color: var(--paused); }
+.meta { color: #9ca3af; font-size: .8rem; }
+
+/* Grid layout */
+.grid-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: .75rem;
+}
+.tile {
+    border-radius: .75rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--card-bg);
+    padding: .9rem;
+    text-align: center;
+    box-shadow: var(--glow);
+}
+.dot {
+    display: inline-block;
+    width: .7rem;
+    height: .7rem;
+    border-radius: 50%;
+    margin-right: .3rem;
+    vertical-align: middle;
+}
+.dot.ok { background: var(--ok); box-shadow: 0 0 12px rgba(34,197,94,0.55); }
+.dot.err { background: var(--err); box-shadow: 0 0 12px rgba(239,68,68,0.55); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 12px rgba(245,158,11,0.55); }
+.dot.new { background: var(--new); }
+.dot.paused { background: var(--paused); }
+.tile .name { display:block; font-weight:600; margin:.35rem 0 .15rem 0; }
+.tile small { color:#9ca3af }
+
+/* Timeline layout */
+.timeline {
+    position: relative;
+    margin-left: .5rem;
+}
+.timeline::before {
+    content:"";
+    position:absolute; left: .6rem; top:.2rem; bottom:.2rem;
+    width:2px; background: rgba(255,255,255,0.12);
+}
+.t-item {
+    position:relative;
+    margin: 0 0 1rem 1.6rem;
+    padding: .75rem 1rem;
+    border:1px solid rgba(255,255,255,0.08);
+    background: var(--card-bg);
+    border-radius: .7rem;
+    box-shadow: var(--glow);
+}
+.t-item::before {
+    content:"";
+    position:absolute; left: -1.05rem; top: .95rem;
+    width:.8rem; height:.8rem; border-radius:50%;
+    background:#9ca3af; box-shadow: 0 0 0 4px rgba(255,255,255,0.03);
+}
+.t-item.ok::before { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,0.15); }
+.t-item.err::before { background: var(--err); box-shadow: 0 0 0 4px rgba(239,68,68,0.15); }
+.t-item.warn::before { background: var(--warn); box-shadow: 0 0 0 4px rgba(245,158,11,0.15); }
+.t-item.new::before { background: var(--new); }
+.t-item.paused::before { background: var(--paused); }
+.t-title { display:flex; justify-content:space-between; align-items:center; font-weight:600; }
+.t-meta { color:#9ca3af; font-size:.85rem; margin-top:.2rem; }
+</style>
+
 <hgroup>
-    <h1>{{ status_page.name }}</h1>
-    <h2>
-        {% if overall_status == 'up' %}
-            <span class="status-up">🟢 All systems operational.</span>
-        {% elif overall_status == 'down' %}
-            <span class="status-down">🔴 One or more systems are down.</span>
-        {% else %}
-            <span class="status-new">⚪ No checks configured for this page.</span>
-        {% endif %}
-    </h2>
+  <h1>{{ status_page.name }}</h1>
+  <h2>
+    {% if overall_status == 'up' %}
+        <span class="status-up">🟢 All systems operational.</span>
+    {% elif overall_status == 'down' %}
+        <span class="status-down">🔴 One or more systems are down.</span>
+    {% else %}
+        <span class="status-new">⚪ No checks configured for this page.</span>
+    {% endif %}
+  </h2>
 </hgroup>
 
-<div class="status-grid">
-    {% for check in status_page.checks %}
-    <div class="status-box status-box-{{ 'paused' if check.paused else check.status }}">
-        <div class="status-box-header">
-            <span class="status-box-name">{{ check.name }}</span>
-        </div>
-        <div class="status-box-body">
-            <span class="status-box-indicator">
-                {% if check.paused %}
-                    PAUSED
-                {% else %}
-                    {{ check.status.upper() }}
-                {% endif %}
-            </span>
-        </div>
-        <div class="status-box-footer">
-            <small>
-                Last check: 
-                {% if check.last_ping %}
-                    <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">{{ check.last_ping.strftime('%Y-%m-%d %H:%M:%S %Z') }}</span>
-                {% else %}
-                    Never
-                {% endif %}
-            </small>
-        </div>
-    </div>
-    {% endfor %}
+<div class="layout-switcher">
+  <span style="opacity:.75">View:</span>
+  <a class="pill {% if layout == 'cards' %}active{% endif %}" href="?layout=cards">Cards</a>
+  <a class="pill {% if layout == 'grid' %}active{% endif %}" href="?layout=grid">Grid</a>
+  <a class="pill {% if layout == 'timeline' %}active{% endif %}" href="?layout=timeline">Timeline</a>
 </div>
 
+{% if not status_page.checks %}
+  <p>No checks assigned yet.</p>
+{% elif layout == 'grid' %}
+  <div class="grid-tiles">
+    {% for check in status_page.checks %}
+      {% set st = (check.status or 'new') %}
+      <div class="tile">
+        <div><span class="dot {% if check.paused %}paused{% elif st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}"></span><span class="name">{{ check.name }}</span></div>
+        <div>
+          {% if check.paused %}
+            <span class="badge paused">PAUSED</span>
+          {% else %}
+            <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
+          {% endif %}
+        </div>
+        <small>
+          {% if check.last_ping %}
+            <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">recently</span>
+          {% else %}
+            Never
+          {% endif %}
+        </small>
+      </div>
+    {% endfor %}
+  </div>
+{% elif layout == 'timeline' %}
+  <div class="timeline">
+    {% for check in status_page.checks %}
+      {% set st = (check.status or 'new') %}
+      <div class="t-item {% if check.paused %}paused{% elif st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">
+        <div class="t-title">
+          <span>{{ check.name }}</span>
+          {% if check.paused %}
+            <span class="badge paused">PAUSED</span>
+          {% else %}
+            <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
+          {% endif %}
+        </div>
+        <div class="t-meta">
+          Last check:
+          {% if check.last_ping %}
+            <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">recently</span>
+          {% else %}
+            Never
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <!-- Cards (default) -->
+  <div class="cards" id="cards-container">
+    {% for check in status_page.checks %}
+      {% set st = (check.status or 'new') %}
+      <div class="card">
+        <div class="title">{{ check.name }}</div>
+        <div style="margin:.5rem 0 .8rem 0">
+          {% if check.paused %}
+            <span class="badge paused">PAUSED</span>
+          {% else %}
+            <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
+          {% endif %}
+        </div>
+        <div class="meta">
+          Last check:
+          {% if check.last_ping %}
+            <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">recently</span>
+          {% else %}
+            Never
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
 <script>
-// Simple script to format the last ping time into a relative time string on the client side.
+// Enhance hover glow position on cards
+document.addEventListener('mousemove', (ev) => {
+  document.querySelectorAll('.card').forEach(card => {
+    const rect = card.getBoundingClientRect();
+    card.style.setProperty('--mouse-x', `${ev.clientX - rect.left}px`);
+    card.style.setProperty('--mouse-y', `${ev.clientY - rect.top}px`);
+  });
+});
+
+// Time-ago formatter and footer client time
 document.addEventListener('DOMContentLoaded', () => {
-    function formatTimeAgo(date) {
-        const seconds = Math.floor((new Date() - date) / 1000);
+  function formatTimeAgo(date) {
+      const seconds = Math.floor((new Date() - date) / 1000);
+      if (seconds < 0) return "just now";
+      if (seconds < 5) return "just now";
+      if (seconds < 60) return `${seconds} seconds ago`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+      const days = Math.floor(hours / 24);
+      if (days < 30) return `${days} day${days > 1 ? 's' : ''} ago`;
+      const months = Math.floor(days / 30);
+      if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
+      const years = Math.floor(days / 365);
+      return `${years} year${years > 1 ? 's' : ''} ago`;
+  }
 
-        if (seconds < 0) {
-            // This can happen due to small clock skew. Treat future timestamps as "just now".
-            return "just now";
-        }
-        if (seconds < 5) {
-            return "just now";
-        }
-        if (seconds < 60) {
-            return `${seconds} seconds ago`;
-        }
+  document.querySelectorAll('.last-ping-time').forEach(elem => {
+      const ts = elem.dataset.timestamp;
+      if (ts) {
+          const date = new Date(ts);
+          elem.textContent = formatTimeAgo(date);
+          elem.title = date.toLocaleString();
+      }
+  });
 
-        const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) {
-            return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-        }
-
-        const hours = Math.floor(minutes / 60);
-        if (hours < 24) {
-            return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-        }
-
-        const days = Math.floor(hours / 24);
-        if (days < 30) {
-            return `${days} day${days > 1 ? 's' : ''} ago`;
-        }
-
-        const months = Math.floor(days / 30);
-        if (months < 12) {
-            return `${months} month${months > 1 ? 's' : ''} ago`;
-        }
-
-        const years = Math.floor(days / 365);
-        return `${years} year${years > 1 ? 's' : ''} ago`;
-    }
-
-    document.querySelectorAll('.last-ping-time').forEach(elem => {
-        const timestamp = elem.dataset.timestamp;
-        if (timestamp) {
-            const date = new Date(timestamp);
-            elem.textContent = formatTimeAgo(date);
-            elem.title = date.toLocaleString();
-        }
-    });
-
-    // Add client load time to footer
-    const loadTime = performance.now() - window.pageLoadStartTime;
-    const clientTimeElem = document.getElementById('client-load-time');
-    const clientTimeContainer = document.getElementById('client-load-time-container');
-    if (clientTimeElem && clientTimeContainer) {
-        clientTimeElem.textContent = (loadTime / 1000).toFixed(3);
-        clientTimeContainer.style.display = 'inline';
-    }
+  const loadTime = performance.now() - window.pageLoadStartTime;
+  const clientTimeElem = document.getElementById('client-load-time');
+  const clientTimeContainer = document.getElementById('client-load-time-container');
+  if (clientTimeElem && clientTimeContainer) {
+      clientTimeElem.textContent = (loadTime / 1000).toFixed(3);
+      clientTimeContainer.style.display = 'inline';
+  }
 });
 </script>
-
 {% endblock %}
