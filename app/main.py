@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.tasks import cleanup  # Add this import
 from app import metrics  # Add metrics import
+from app.worker import celery_app
 from app.core.redis_pool import get_redis_connection
 
 setup_logging()
@@ -129,11 +130,13 @@ async def collect_metrics_periodically():
                         queue_size = r.llen(queue_name)
                         metrics.record_queue_size(queue_name, queue_size)
                         
-                        # Update worker count
-                        from app.services.queue_stats import get_queue_stats
-                        stats = get_queue_stats()
-                        if isinstance(stats["workers_online"], int):
-                            metrics.record_workers_count(stats["workers_online"])
+                        # Update worker count by pinging Celery workers directly
+                        try:
+                            replies = celery_app.control.ping(timeout=1.0) or []
+                            metrics.record_workers_count(len(replies))
+                        except Exception as e:
+                            logger.debug(f"Celery ping failed: {e}")
+                            metrics.record_workers_count(0)
                 except Exception as e:
                     logger.error(f"Error collecting queue metrics: {e}")
             
