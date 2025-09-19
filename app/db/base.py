@@ -20,7 +20,7 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
         duration = time.perf_counter() - start_time
         metrics.DB_QUERY_DURATION.observe(duration)
 
-AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
+AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
 
 # Dependency
 async def get_db():
