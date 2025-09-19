@@ -9,13 +9,14 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 import logging
 import json
+import time
 
 from app.db import base as db_base
 from app.db import models as db_models
 from app import crud, security, schemas
 from app.core.config import settings
 from app.core import encryption
-from app.core.redis_pool import get_redis_connection
+from app.core.redis_pool import get_redis_connection, ephemeral_redis
 
 router = APIRouter()
 admin_router = APIRouter(prefix="/admin")
@@ -342,13 +343,20 @@ async def public_status_page_data(
     # Weak ETag pre-check based on per-user checks version + page id
     etag = None
     try:
-        r = get_redis_connection()
-        if r:
-            ver = await r.get(f"checks:ver:{status_page.owner_id}") or "0"
-            etag = f'W/"{ver}:{status_page.id}"'
-            inm = request.headers.get("if-none-match")
-            if inm and inm == etag:
-                return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=2"})
+        ver = "0"
+        async with ephemeral_redis() as r:
+            if r:
+                v = await r.get(f"checks:ver:{status_page.owner_id}")
+                ver = v if isinstance(v, str) else (v.decode() if v else "0")
+        # Time-bucket every 2s to reflect runtime changes in ETag
+        t_bucket = int(time.time() // 2)
+        etag = f'W/"{ver}:{status_page.id}:{t_bucket}"'
+        inm = request.headers.get("if-none-match")
+        if inm and inm == etag:
+            return Response(
+                status_code=status.HTTP_304_NOT_MODIFIED,
+                headers={"ETag": etag, "Cache-Control": "public, max-age=2"}
+            )
     except Exception:
         etag = None
 

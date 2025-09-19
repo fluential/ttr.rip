@@ -3,6 +3,7 @@ from fastapi.responses import ORJSONResponse
 from prometheus_client.registry import REGISTRY
 import time
 import hashlib
+import orjson
 from app.core.redis_pool import ephemeral_redis
 
 router = APIRouter()
@@ -84,8 +85,14 @@ async def get_metrics_summary(request: Request):
 
     if _SUMMARY_CACHE["data"] is not None and (now - _SUMMARY_CACHE["ts"] < _CACHE_TTL):
         if etag_header and etag_header == _SUMMARY_CACHE["etag"]:
-            return Response(status_code=status.HTTP_304_NOT_MODIFIED)
-        return ORJSONResponse(content=_SUMMARY_CACHE["data"], headers={"ETag": _SUMMARY_CACHE["etag"], "Cache-Control": f"public, max-age={int(_CACHE_TTL)}"})
+            return Response(
+                status_code=status.HTTP_304_NOT_MODIFIED,
+                headers={"ETag": _SUMMARY_CACHE["etag"], "Cache-Control": f"public, max-age={int(_CACHE_TTL)}"}
+            )
+        return ORJSONResponse(
+            content=_SUMMARY_CACHE["data"],
+            headers={"ETag": _SUMMARY_CACHE["etag"], "Cache-Control": f"public, max-age={int(_CACHE_TTL)}"}
+        )
 
     avg_api_latency = parse_prometheus_metric("ttl_api_request_duration_seconds")
     avg_db_latency = parse_prometheus_metric("ttl_db_query_duration_seconds")
@@ -197,12 +204,16 @@ async def get_metrics_summary(request: Request):
         }
     }
 
-    etag = f'W/"{hashlib.sha256(str(summary).encode()).hexdigest()}"'
+    payload_bytes = orjson.dumps(summary, option=orjson.OPT_SORT_KEYS)
+    etag = f'W/"{hashlib.sha256(payload_bytes).hexdigest()}"'
     _SUMMARY_CACHE["ts"] = now
     _SUMMARY_CACHE["etag"] = etag
     _SUMMARY_CACHE["data"] = summary
 
     if etag_header and etag_header == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers={"ETag": etag, "Cache-Control": f"public, max-age={int(_CACHE_TTL)}"}
+        )
 
     return ORJSONResponse(content=summary, headers={"ETag": etag, "Cache-Control": f"public, max-age={int(_CACHE_TTL)}"})

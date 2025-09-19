@@ -142,12 +142,22 @@ async def collect_metrics_periodically():
                             queue_name = 'rtt_celery_queue'
                             queue_size = await r.llen(queue_name)
                             metrics.record_queue_size(queue_name, queue_size)
-                    # Update worker count by pinging Celery workers directly
+                    # Update worker count via Redis heartbeats
                     try:
-                        replies = celery_app.control.ping(timeout=1.0) or []
-                        metrics.record_workers_count(len(replies))
+                        async with ephemeral_redis() as r2:
+                            workers_online = 0
+                            if r2:
+                                members = await r2.smembers("metrics:workers_online:set")
+                                if members:
+                                    for m in members:
+                                        mid = m.decode() if isinstance(m, (bytes, bytearray)) else m
+                                        if await r2.exists(f"metrics:worker:{mid}:hb"):
+                                            workers_online += 1
+                                        else:
+                                            await r2.srem("metrics:workers_online:set", mid)
+                            metrics.record_workers_count(workers_online)
                     except Exception as e:
-                        logger.debug(f"Celery ping failed: {e}")
+                        logger.debug(f"Workers count via Redis failed: {e}")
                         metrics.record_workers_count(0)
                 except Exception as e:
                     logger.error(f"Error collecting queue metrics: {e}")
