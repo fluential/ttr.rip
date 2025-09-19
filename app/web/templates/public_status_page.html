@@ -202,20 +202,22 @@
           {% endif %}
           • <strong>Expires:</strong> <span class="js-expires">calculating…</span>
         </small>
-        {% if check.last_pings %}
         <details class="recent" style="margin-top:.3rem">
-          <summary>Recent activity</summary>
+          <summary>📜 Recent activity</summary>
           <ul class="recent-list js-recent-pings" style="margin:.35rem 0 0 .75rem">
-            {% for lp in check.last_pings[:3] if check.last_pings is sequence %}
-              <li>
-                {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
-                {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
-                {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
-              </li>
-            {% endfor %}
+            {% if check.last_pings_public %}
+              {% for lp in check.last_pings_public[:3] %}
+                <li>
+                  {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
+                  {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
+                  {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
+                </li>
+              {% endfor %}
+            {% else %}
+              <li>No recent pings.</li>
+            {% endif %}
           </ul>
         </details>
-        {% endif %}
       </div>
     {% endfor %}
   </div>
@@ -247,20 +249,22 @@
             {% endfor %}
           {% endif %}
         </div>
-        {% if check.last_pings %}
         <details class="recent" style="margin-top:.35rem; margin-left:.2rem">
-          <summary>Recent activity</summary>
+          <summary>📜 Recent activity</summary>
           <ul class="recent-list js-recent-pings" style="margin:.35rem 0 0 .5rem">
-            {% for lp in check.last_pings[:3] if check.last_pings is sequence %}
-              <li>
-                {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
-                {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
-                {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
-              </li>
-            {% endfor %}
+            {% if check.last_pings_public %}
+              {% for lp in check.last_pings_public[:3] %}
+                <li>
+                  {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
+                  {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
+                  {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
+                </li>
+              {% endfor %}
+            {% else %}
+              <li>No recent pings.</li>
+            {% endif %}
           </ul>
         </details>
-        {% endif %}
       </div>
     {% endfor %}
   </div>
@@ -317,20 +321,22 @@
         </div>
         {% endif %}
 
-        {% if check.last_pings is defined and check.last_pings %}
         <details style="margin-top:.5rem">
-          <summary>Recent activity</summary>
+          <summary>📜 Recent activity</summary>
           <ul class="recent-list js-recent-pings" style="margin:.5rem 0 0 1rem">
-            {% for lp in check.last_pings[:3] if check.last_pings is sequence %}
-              <li>
-                {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
-                {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
-                {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
-              </li>
-            {% endfor %}
+            {% if check.last_pings_public %}
+              {% for lp in check.last_pings_public[:3] %}
+                <li>
+                  {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
+                  {% if lp.country_name %} • {{ lp.country_name }}{% elif lp.country_code %} • {{ lp.country_code }}{% endif %}
+                  {% if lp.connection_type %} • {{ lp.connection_type }}{% endif %}
+                </li>
+              {% endfor %}
+            {% else %}
+              <li>No recent pings.</li>
+            {% endif %}
           </ul>
         </details>
-        {% endif %}
       </div>
     {% endfor %}
   </div>
@@ -511,8 +517,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update recent activity list if present (public-safe, last 3)
     const rp = el.querySelector('.js-recent-pings');
-    if (rp && Array.isArray(check.last_pings)) {
-      const items = (check.last_pings || []).slice(0, 3).map(lp => {
+    const recent = check.last_pings || check.last_pings_public;
+    if (rp && Array.isArray(recent)) {
+      const items = (recent || []).slice(0, 3).map(lp => {
         const ts = lp.timestamp ? `data-timestamp="${lp.timestamp}"` : '';
         const country = lp.country_name || lp.country_code || '';
         const conn = lp.connection_type ? ` • ${lp.connection_type}` : '';

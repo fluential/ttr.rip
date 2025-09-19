@@ -267,6 +267,24 @@ async def public_status_page(
         for c in status_page.checks:
             if getattr(c, "status", None) is None:
                 c.status = "new"
+            # Attach public-safe last pings for initial render
+            try:
+                lps = getattr(c, "last_pings", None)
+                if isinstance(lps, str):
+                    lps = json.loads(lps)
+                sanitized = []
+                if isinstance(lps, list):
+                    for lp in lps[:3]:
+                        if isinstance(lp, dict):
+                            sanitized.append({
+                                "timestamp": lp.get("timestamp"),
+                                "country_code": lp.get("country_code"),
+                                "country_name": lp.get("country_name"),
+                                "connection_type": lp.get("connection_type"),
+                            })
+                setattr(c, "last_pings_public", sanitized)
+            except Exception:
+                setattr(c, "last_pings_public", [])
 
     # Calculate overall status
     if not status_page.checks:
