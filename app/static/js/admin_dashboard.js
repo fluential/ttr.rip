@@ -303,7 +303,9 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     checks.forEach(check => {
         const row = document.createElement('tr');
         const lastPing = check.last_ping ? parseUTCDate(check.last_ping).toLocaleString() : 'Never';
-        const pingUrl = `${window.location.origin}/ping/${check.uuid}`;
+        const pingIdentifier = check.slug || check.uuid;
+        const userSlug = (check.owner && check.owner.slug) ? check.owner.slug : '';
+        const pingUrl = userSlug ? `${window.location.origin}/p/${userSlug}/${pingIdentifier}` : '';
         
         let owner = `User ID: ${check.owner_id}`;
         if (check.owner) {

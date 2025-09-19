@@ -168,6 +168,13 @@ async def get_public_user_from_key(
         # The user will be created in the DB when they perform a write action (e.g., create_check).
         return db_models.User(auth_key=auth_key)
     
+    # Expose user_id on the request for middleware metrics
+    try:
+        if request is not None:
+            request.state.user_id = user.id
+    except Exception:
+        pass
+
     return user
 
 

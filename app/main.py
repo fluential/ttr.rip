@@ -282,6 +282,14 @@ async def add_process_time_header(request: Request, call_next):
     ).inc()
     metrics.API_REQUEST_DURATION.observe(process_time)
     
+    # If user_id was not known before processing, try to read it now
+    if user_id is None and hasattr(request.state, "user_id"):
+        try:
+            user_id = request.state.user_id
+            metrics.track_user_request_start(user_id)
+        except Exception:
+            user_id = None
+
     # End tracking of user request
     if user_id:
         metrics.track_user_request_end(user_id)

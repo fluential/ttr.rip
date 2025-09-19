@@ -34,13 +34,13 @@
                 {% if request.path.startswith('/dashboard') or request.path.startswith('/admin/dashboard') %}
                 <li><a href="#new-check-section" id="new-check-link">New Check</a></li>
                 {% endif %}
-                {% if status_pages is defined and status_pages %}
+                {% if status_pages is defined and status_pages and user is defined and user and user.slug %}
                 <li>
                     <details role="list" dir="rtl">
                         <summary aria-haspopup="listbox" role="button">Status Pages</summary>
                         <ul role="listbox">
                             {% for page in status_pages %}
-                            <li><a href="/s/{{ page.slug }}" target="_blank">{{ page.name }}</a></li>
+                            <li><a href="/s/{{ user.slug }}/{{ page.slug }}" target="_blank">{{ page.name }}</a></li>
                             {% endfor %}
                         </ul>
                     </details>

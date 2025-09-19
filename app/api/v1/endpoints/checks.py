@@ -9,6 +9,7 @@ import hashlib
 from app import crud, schemas, security
 from app.services import notifications
 from app.core.config import settings
+from app.core import encryption
 from app.core.redis_pool import get_redis_connection
 from app.api.v1.endpoints.metrics import parse_prometheus_metric, get_latency_health
 from app.db import base as db_base
@@ -520,15 +521,18 @@ async def import_checks(
             new_check = await crud.create_check(db=db, check=check_create, principal=principal)
             
             # Manually set properties and commit
-            # This bypasses the re-encryption logic in the standard update endpoint
-            new_check.telegram_bot_token = check_to_import.telegram_bot_token
+            # Re-encrypt imported secrets with the user's current auth_key
+            new_check.telegram_bot_token = encryption.encrypt_token(check_to_import.telegram_bot_token, principal.auth_key) if check_to_import.telegram_bot_token else None
             new_check.telegram_chat_id = check_to_import.telegram_chat_id
             new_check.telegram_enabled = check_to_import.telegram_enabled
-            new_check.slack_webhook_url = check_to_import.slack_webhook_url
+
+            new_check.slack_webhook_url = encryption.encrypt_token(check_to_import.slack_webhook_url, principal.auth_key) if check_to_import.slack_webhook_url else None
             new_check.slack_enabled = check_to_import.slack_enabled
-            new_check.discord_webhook_url = check_to_import.discord_webhook_url
+
+            new_check.discord_webhook_url = encryption.encrypt_token(check_to_import.discord_webhook_url, principal.auth_key) if check_to_import.discord_webhook_url else None
             new_check.discord_enabled = check_to_import.discord_enabled
-            new_check.webhook_url = check_to_import.webhook_url
+
+            new_check.webhook_url = encryption.encrypt_token(check_to_import.webhook_url, principal.auth_key) if check_to_import.webhook_url else None
             new_check.webhook_enabled = check_to_import.webhook_enabled
             
             await db.commit()
