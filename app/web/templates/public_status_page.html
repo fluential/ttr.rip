@@ -158,6 +158,7 @@
 
 <div class="meta" id="last-updated" style="margin-top:-.5rem; margin-bottom:.75rem;">
   Last updated: <span id="last-updated-time" data-timestamp="{{ last_updated_iso }}">just now</span>
+  • Next update in: <span id="next-update-seconds">30</span>s
 </div>
 
 {% if not status_page.checks %}
@@ -368,6 +369,15 @@ document.addEventListener('DOMContentLoaded', () => {
 <script>
 (function() {
   const dataUrl = `${location.pathname}/data`;
+  const REFRESH_INTERVAL_MS = 30000;
+  let nextDeadline = Date.now() + REFRESH_INTERVAL_MS;
+
+  function renderCountdown() {
+    const el = document.getElementById('next-update-seconds');
+    if (!el) return;
+    const remaining = Math.max(0, Math.ceil((nextDeadline - Date.now()) / 1000));
+    el.textContent = remaining.toString();
+  }
 
   function statusToClass(st, paused) {
     if (paused) return 'paused';
@@ -447,13 +457,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const nowIso = new Date().toISOString();
         updateRelative(lut, nowIso);
       }
+      // Reset countdown to the next scheduled refresh
+      nextDeadline = Date.now() + REFRESH_INTERVAL_MS;
+      renderCountdown();
     } catch (e) {
       // ignore
     }
   }
 
   refresh();
-  setInterval(refresh, 30000);
+  setInterval(refresh, REFRESH_INTERVAL_MS);
+  renderCountdown();
+  setInterval(renderCountdown, 1000);
 })();
 </script>
 {% endblock %}
