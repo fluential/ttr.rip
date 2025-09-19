@@ -6,6 +6,8 @@ let isConnectionLost = false;
 let currentSortBy = 'id';
 let currentSortDir = 'desc';
 let currentTagFilter = '';
+let selectedTags = new Set();
+let allTagNames = [];
 let pageSize = 25;
 let nextCursor = null;
 let prevCursor = null;
@@ -270,20 +272,30 @@ async function fetchAllTags() {
 }
 
 function renderTagFilter(tags) {
-    const select = document.getElementById('tag-filter');
-    if (!select) return;
-    
-    // Preserve the "All Checks" option and the currently selected value
-    const selectedValue = select.value;
-    select.innerHTML = '<option value="">All Checks</option>';
-    
-    tags.forEach(tag => {
-        const option = document.createElement('option');
-        option.value = tag.name;
-        option.textContent = tag.name;
-        select.appendChild(option);
+    const list = document.getElementById('tag-filter-list');
+    const searchInput = document.getElementById('tag-search');
+    if (!list) return;
+
+    // Normalize incoming tags to names and remember full set
+    if (Array.isArray(tags) && tags.length) {
+        allTagNames = tags.map(t => (typeof t === 'string' ? t : t.name)).sort((a, b) => a.localeCompare(b));
+    }
+    const term = (searchInput?.value || '').toLowerCase();
+    const filtered = allTagNames.filter(name => name.toLowerCase().includes(term));
+
+    list.innerHTML = filtered.map(name => {
+        const checked = selectedTags.has(name) ? 'checked' : '';
+        const id = `tag-filter-${name.replace(/[^a-z0-9_-]/gi,'_')}`;
+        return `<label for="${id}"><input type="checkbox" id="${id}" value="${name}" ${checked}> ${name}</label>`;
+    }).join('');
+
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            if (cb.checked) selectedTags.add(cb.value);
+            else selectedTags.delete(cb.value);
+            fetchChecks();
+        });
     });
-    select.value = selectedValue;
 }
 
 async function updateTelegramSection() {
@@ -367,16 +379,37 @@ function renderStatusPages(statusPages) {
 
 function populateCheckCheckboxes(selectedCheckIds = []) {
     const container = document.getElementById('status-page-checks-list');
+    if (!container) return;
+
     if (allChecksForStatusPage.length === 0) {
         container.innerHTML = '<p>No checks available to add to a status page.</p>';
         return;
     }
-    container.innerHTML = allChecksForStatusPage.map(check => `
+
+    // Preserve existing selections and merge with incoming list
+    const existingSelected = new Set(
+        Array.from(document.querySelectorAll('#status-page-checks-list input[type="checkbox"]:checked'))
+            .map(cb => parseInt(cb.value))
+    );
+    (selectedCheckIds || []).forEach(id => existingSelected.add(id));
+
+    const term = (document.getElementById('status-page-checks-search')?.value || '').toLowerCase();
+    const filtered = allChecksForStatusPage.filter(check => {
+        const nameMatch = (check.name || '').toLowerCase().includes(term);
+        const tagNames = (check.tags || []).map(t => (t.name || '').toLowerCase());
+        const tagsMatch = tagNames.some(n => n.includes(term));
+        return !term || nameMatch || tagsMatch;
+    });
+
+    container.classList.add('checks-grid');
+    container.innerHTML = filtered.map(check => {
+        const checked = existingSelected.has(check.id) ? 'checked' : '';
+        return `
         <label for="sp-check-${check.id}">
-            <input type="checkbox" id="sp-check-${check.id}" name="check_ids" value="${check.id}" ${selectedCheckIds.includes(check.id) ? 'checked' : ''}>
+            <input type="checkbox" id="sp-check-${check.id}" name="check_ids" value="${check.id}" ${checked}>
             ${check.name}
-        </label>
-    `).join('');
+        </label>`;
+    }).join('');
 }
 
 function editStatusPage(event, id, name, slug, checkIds) {
@@ -521,8 +554,11 @@ async function deleteStatusPage(pageId) {
 async function fetchDashboardAggregate() {
     try {
         let url = `/api/v1/checks/aggregate?size=${pageSize}&sort_by=${currentSortBy}&sort_direction=${currentSortDir}`;
-        if (currentTagFilter) {
-            url += `&tag=${encodeURIComponent(currentTagFilter)}`;
+        const selected = Array.from(selectedTags);
+        if (selected.length === 1) {
+            url += `&tag=${encodeURIComponent(selected[0])}`;
+        } else if (selected.length > 1) {
+            url += `&tag=${encodeURIComponent(selected.join(','))}`;
         }
         const headers = { 'X-Auth-Key': authKey };
         if (dashboardAggregateEtag) headers['If-None-Match'] = dashboardAggregateEtag;
@@ -574,7 +610,10 @@ async function fetchDashboardAggregate() {
 
         // Render checks table
         const data = agg.checks;
-        const checks = data.items;
+        const selected = Array.from(selectedTags);
+        const checks = selected.length
+            ? data.items.filter(c => selected.every(t => (c.tags || []).some(tag => tag.name === t)))
+            : data.items;
         checks.forEach(c => checksData[c.id] = c); // Update global cache
         allChecksForStatusPage = checks; // Cache for status page form
         populateCheckCheckboxes(); // Populate form now that we have checks
@@ -1050,8 +1089,11 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     if (cursor) {
         url += `&cursor=${cursor}`;
     }
-    if (currentTagFilter) {
-        url += `&tag=${encodeURIComponent(currentTagFilter)}`;
+    const selected = Array.from(selectedTags);
+    if (selected.length === 1) {
+        url += `&tag=${encodeURIComponent(selected[0])}`;
+    } else if (selected.length > 1) {
+        url += `&tag=${encodeURIComponent(selected.join(','))}`;
     }
     
     try {
@@ -1074,7 +1116,10 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         }
 
         const data = await response.json();
-    const checks = data.items;
+    const selected = Array.from(selectedTags);
+    const checks = selected.length
+        ? data.items.filter(c => selected.every(t => (c.tags || []).some(tag => tag.name === t)))
+        : data.items;
     checks.forEach(c => checksData[c.id] = c); // Update global cache
     allChecksForStatusPage = checks; // Cache for status page form
     populateCheckCheckboxes(); // Populate form now that we have checks
@@ -1618,6 +1663,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('new-check-form').addEventListener('submit', handleFormSubmit);
     document.getElementById('new-status-page-form').addEventListener('submit', handleStatusPageFormSubmit);
+    document.getElementById('status-page-checks-search')?.addEventListener('input', () => populateCheckCheckboxes());
+    document.getElementById('sp-select-all-btn')?.addEventListener('click', () => {
+        document.querySelectorAll('#status-page-checks-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('sp-clear-all-btn')?.addEventListener('click', () => {
+        document.querySelectorAll('#status-page-checks-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
 
     // Account Management listeners
     const rotateBtn = document.getElementById('rotate-key-btn');
@@ -1656,12 +1708,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Tag filter listener
-    const tagFilter = document.getElementById('tag-filter');
-    if (tagFilter) {
-        tagFilter.addEventListener('change', (e) => {
-            currentTagFilter = e.target.value;
-            fetchChecks(); // Reset to first page on new filter
+    // Tag filter listeners (multi-select + search)
+    const tagSearch = document.getElementById('tag-search');
+    if (tagSearch) {
+        tagSearch.addEventListener('input', () => renderTagFilter());
+    }
+    const tagsSelectAllBtn = document.getElementById('tags-select-all-btn');
+    if (tagsSelectAllBtn) {
+        tagsSelectAllBtn.addEventListener('click', () => {
+            // Select all currently visible tags
+            document.querySelectorAll('#tag-filter-list input[type="checkbox"]').forEach(cb => {
+                cb.checked = true;
+                selectedTags.add(cb.value);
+            });
+            fetchChecks();
+        });
+    }
+    const tagsClearAllBtn = document.getElementById('tags-clear-all-btn');
+    if (tagsClearAllBtn) {
+        tagsClearAllBtn.addEventListener('click', () => {
+            selectedTags.clear();
+            document.querySelectorAll('#tag-filter-list input[type="checkbox"]').forEach(cb => (cb.checked = false));
+            fetchChecks();
         });
     }
 

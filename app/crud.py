@@ -885,7 +885,17 @@ async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: in
         query = query.filter(models.Check.owner_id == principal.id)
 
     if tag:
-        query = query.join(models.Check.tags).filter(models.Tag.name == tag)
+        # Support comma-separated AND filtering of multiple tags
+        tags = [t.strip() for t in tag.split(",") if t.strip()]
+        if len(tags) == 1:
+            query = query.join(models.Check.tags).filter(models.Tag.name == tags[0])
+        elif len(tags) > 1:
+            query = (
+                query.join(models.Check.tags)
+                .filter(models.Tag.name.in_(tags))
+                .group_by(models.Check.id)
+                .having(func.count(func.distinct(models.Tag.name)) == len(tags))
+            )
 
     sort_column = getattr(models.Check, sort_by, models.Check.id)
     is_expires_sort = False # This logic is no longer needed with the deadline column
