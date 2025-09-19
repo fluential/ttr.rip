@@ -1774,3 +1774,14 @@ const validateAndSaveUserSlug = debounce(async function(slug) {
         slugInput.setAttribute('aria-invalid', 'true');
     }
 }, 1000);
+
+// Expose functions for inline handlers (module scripts are scoped)
+window.copyUrl = copyUrl;
+window.copyAuthKey = copyAuthKey;
+window.editCheck = editCheck;
+window.viewLastContent = viewLastContent;
+window.viewRecentPings = viewRecentPings;
+window.togglePause = togglePause;
+window.deleteCheck = deleteCheck;
+window.editStatusPage = editStatusPage;
+window.deleteStatusPage = deleteStatusPage;
