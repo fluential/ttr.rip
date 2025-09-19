@@ -86,6 +86,10 @@ nav {
     margin-bottom: 1.5rem;
 }
 
+nav ul {
+    gap: 0.5rem;
+}
+
 nav ul li a, nav ul li select {
     transition: none;
     border: 2px solid var(--primary);

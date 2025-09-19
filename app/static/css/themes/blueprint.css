@@ -95,6 +95,10 @@ nav {
     padding: 0.5rem 1rem !important;
 }
 
+nav ul {
+    gap: 0.5rem;
+}
+
 [data-theme="dark"] nav {
     background: linear-gradient(90deg, #0D2B45 0%, #0F3A5D 50%, #0D2B45 100%);
 }

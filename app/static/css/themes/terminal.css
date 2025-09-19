@@ -102,6 +102,10 @@ nav {
     margin-bottom: 1.5rem;
 }
 
+nav ul {
+    gap: 0.5rem;
+}
+
 [data-theme="light"] nav {
     background: linear-gradient(90deg, #ffffff 0%, #f4fff4 50%, #ffffff 100%);
 }
