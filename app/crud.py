@@ -475,7 +475,7 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: models
         
         owner_identifier = f"user_id_{principal.id}"
         
-        count = r.get(f"user_stats:queued_notifications:{owner_identifier}")
+        count = await r.get(f"user_stats:queued_notifications:{owner_identifier}")
         return int(count) if count else 0
     except Exception as e:
         logger.error(f"Could not get user queued notification count: {e}", exc_info=False)
