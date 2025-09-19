@@ -1561,6 +1561,20 @@ function viewLastContent(checkId) {
     }
 }
 
+function countryCodeToFlagEmoji(code) {
+    try {
+        if (!code || typeof code !== 'string') return '';
+        const cc = code.trim().toUpperCase();
+        if (cc.length !== 2) return '';
+        const A = 0x41; // 'A'
+        const base = 0x1F1E6; // Regional Indicator Symbol Letter A
+        const cp1 = base + (cc.charCodeAt(0) - A);
+        const cp2 = base + (cc.charCodeAt(1) - A);
+        return String.fromCodePoint(cp1, cp2);
+    } catch (e) {
+        return '';
+    }
+}
 function viewRecentPings(checkId) {
     const modal = document.getElementById('pings-modal');
     const contentDiv = document.getElementById('pings-modal-content');
