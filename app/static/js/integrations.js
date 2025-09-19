@@ -61,20 +61,30 @@ function updateIntegrationStatusUI(integration, check) {
 }
 
 async function fetchIntegrationRate(integration) {
+    const container = document.querySelector(`.integration-status-container[data-integration="${integration}"]`);
+    if (!container) return;
+
+    let rateEl = container.querySelector('.integration-rate-info');
+    if (!rateEl) {
+        rateEl = document.createElement('div');
+        rateEl.className = 'integration-rate-info';
+        rateEl.style.marginTop = '0.25rem';
+        rateEl.style.fontSize = '0.9em';
+        container.appendChild(rateEl);
+    }
+    // Show a placeholder immediately so the user sees the field even if the request fails
+    rateEl.innerHTML = `<strong>Rate:</strong> loading…`;
+
     try {
         const res = await fetchWithAuth(`/api/v1/checks/${checkId}/${integration}/rate`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const container = document.querySelector(`.integration-status-container[data-integration="${integration}"]`);
-        if (!container) return;
-        let rateEl = container.querySelector('.integration-rate-info');
-        if (!rateEl) {
-            rateEl = document.createElement('div');
-            rateEl.className = 'integration-rate-info';
-            rateEl.style.marginTop = '0.25rem';
-            rateEl.style.fontSize = '0.9em';
-            container.appendChild(rateEl);
+        if (!res.ok) {
+            const icon = '⚠️';
+            const msg = res.status === 401 ? 'unauthorized' : 'unavailable';
+            rateEl.innerHTML = `<strong>Rate:</strong> ${icon} ${msg}`;
+            return;
         }
+
+        const data = await res.json();
 
         if (data && data.enabled === false) {
             rateEl.innerHTML = `<strong>Rate:</strong> disabled`;
@@ -105,8 +115,8 @@ async function fetchIntegrationRate(integration) {
 
         rateEl.innerHTML = `<strong>Rate:</strong> ${perMin}/min (limit ${limitPerMin}/min, min ${minPerMin}/min, burst ${burst}) — ${statusIcon} ${statusText}`;
     } catch (e) {
-        // Best-effort; don't break the page
         console.error("Failed to load rate snapshot:", e);
+        rateEl.innerHTML = `<strong>Rate:</strong> ⚠️ unavailable`;
     }
 }
 
