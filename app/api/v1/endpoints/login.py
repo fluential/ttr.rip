@@ -2,6 +2,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 import secrets
 import logging
 
