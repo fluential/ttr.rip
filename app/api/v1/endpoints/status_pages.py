@@ -26,6 +26,10 @@ async def read_status_pages(
     )
     result = await db.execute(stmt)
     pages = result.scalars().unique().all()
+    # Enrich checks with runtime data so response models have status/last_ping fields
+    for p in pages:
+        if getattr(p, "checks", None):
+            await crud.enrich_checks_with_runtime_data(p.checks)
     return pages
 
 @router.post("", response_model=schemas.StatusPage, status_code=status.HTTP_201_CREATED)
@@ -49,6 +53,8 @@ async def create_status_page(
         )
         result = await db.execute(stmt)
         page = result.scalars().first()
+        if page and getattr(page, "checks", None):
+            await crud.enrich_checks_with_runtime_data(page.checks)
         return page
     except IntegrityError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -77,6 +83,8 @@ async def update_status_page(
         )
         result = await db.execute(stmt)
         page = result.scalars().first()
+        if page and getattr(page, "checks", None):
+            await crud.enrich_checks_with_runtime_data(page.checks)
         return page
     except IntegrityError as e:
         raise HTTPException(status_code=409, detail=str(e))
