@@ -1302,7 +1302,7 @@ function cancelEdit() {
     const details = document.getElementById('new-check-section');
     if (details) {
         const summary = details.querySelector('summary');
-        summary.textContent = 'New Check';
+        summary.textContent = '➕ New Check';
         if (details.open) {
             // Move focus to the summary before clicking it to prevent scroll jump.
             summary.focus({ preventScroll: true });
