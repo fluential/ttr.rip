@@ -441,35 +441,41 @@ async def get_integration_rate_snapshot(
     if not check:
         raise HTTPException(status_code=404, detail="Check not found")
 
-    # Derive identity for the given integration
-    try:
-        if integration == "telegram":
-            if not (check.telegram_enabled and check.telegram_bot_token):
-                return ORJSONResponse(content={"enabled": False})
-            decrypted = encryption.decrypt_token(check.telegram_bot_token, check.owner.auth_key)
+    # Determine channel and fast-path resolve cached identity to avoid decrypt on each call
+    if integration == "telegram":
+        if not (check.telegram_enabled and check.telegram_bot_token):
+            return ORJSONResponse(content={"enabled": False})
+        channel = "telegram"
+    elif integration == "slack":
+        if not (check.slack_enabled and check.slack_webhook_url):
+            return ORJSONResponse(content={"enabled": False})
+        channel = "slack"
+    elif integration == "discord":
+        if not (check.discord_enabled and check.discord_webhook_url):
+            return ORJSONResponse(content={"enabled": False})
+        channel = "discord"
+    else:  # webhook
+        if not (check.webhook_enabled and check.webhook_url):
+            return ORJSONResponse(content={"enabled": False})
+        channel = "webhook"
+
+    identity = await rate_control.get_cached_identity(channel, check.id)  # type: ignore[arg-type]
+    if not identity:
+        # Cache miss: decrypt once, derive identity, then cache for future lookups
+        try:
+            if channel == "telegram":
+                decrypted = encryption.decrypt_token(check.telegram_bot_token, check.owner.auth_key)  # type: ignore[arg-type]
+            elif channel == "slack":
+                decrypted = encryption.decrypt_token(check.slack_webhook_url, check.owner.auth_key)  # type: ignore[arg-type]
+            elif channel == "discord":
+                decrypted = encryption.decrypt_token(check.discord_webhook_url, check.owner.auth_key)  # type: ignore[arg-type]
+            else:
+                decrypted = encryption.decrypt_token(check.webhook_url, check.owner.auth_key)  # type: ignore[arg-type]
             identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
-            channel = "telegram"
-        elif integration == "slack":
-            if not (check.slack_enabled and check.slack_webhook_url):
-                return ORJSONResponse(content={"enabled": False})
-            decrypted = encryption.decrypt_token(check.slack_webhook_url, check.owner.auth_key)
-            identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
-            channel = "slack"
-        elif integration == "discord":
-            if not (check.discord_enabled and check.discord_webhook_url):
-                return ORJSONResponse(content={"enabled": False})
-            decrypted = encryption.decrypt_token(check.discord_webhook_url, check.owner.auth_key)
-            identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
-            channel = "discord"
-        else:  # webhook
-            if not (check.webhook_enabled and check.webhook_url):
-                return ORJSONResponse(content={"enabled": False})
-            decrypted = encryption.decrypt_token(check.webhook_url, check.owner.auth_key)
-            identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
-            channel = "webhook"
-    except Exception:
-        # If decryption fails, consider it disabled for safety
-        return ORJSONResponse(content={"enabled": False})
+            await rate_control.cache_identity(channel, check.id, identity)  # type: ignore[arg-type]
+        except Exception:
+            # If decryption fails, consider it disabled for safety
+            return ORJSONResponse(content={"enabled": False})
 
     snap = await rate_control.snapshot(channel, identity)
     return ORJSONResponse(content=snap)

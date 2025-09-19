@@ -58,6 +58,38 @@ def _state_key(channel: str, identity: str) -> str:
 def _sent_key(channel: str, identity: str) -> str:
     return f"rc:{channel}:{identity}:sent"
 
+def _ident_key(channel: str, check_id: int) -> str:
+    return f"rc:ident:{channel}:{int(check_id)}"
+
+async def get_cached_identity(channel: str, check_id: int) -> Optional[str]:
+    """
+    Fast path: return cached identity for (channel, check_id) if present.
+    Avoids decrypting user secrets on hot paths.
+    """
+    r = get_redis_connection()
+    if r is None:
+        return None
+    try:
+        return await r.get(_ident_key(channel, check_id))
+    except Exception:
+        return None
+
+async def cache_identity(channel: str, check_id: int, identity: str, ttl_seconds: Optional[int] = None) -> None:
+    """
+    Store identity for (channel, check_id). If ttl_seconds is provided, set an expiry; otherwise persist.
+    """
+    r = get_redis_connection()
+    if r is None:
+        return
+    try:
+        key = _ident_key(channel, check_id)
+        if ttl_seconds and ttl_seconds > 0:
+            await r.set(key, identity, ex=int(ttl_seconds))
+        else:
+            await r.set(key, identity)
+    except Exception:
+        return
+
 
 # Atomic reserve via Lua (refill, honor backoff, grant or compute wait)
 _RESERVE_LUA = """
@@ -274,9 +306,11 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
         sent_per_minute = 0
         try:
             skey = _sent_key(channel, identity)
-            # Trim old entries and count last 60s
-            await r.zremrangebyscore(skey, 0, now_ms - 600_000)
-            cnt = await r.zcount(skey, now_ms - 60_000, now_ms)
+            # Trim old entries and count last 60s in a single round-trip
+            pipe = r.pipeline()
+            pipe.zremrangebyscore(skey, 0, now_ms - 600_000)
+            pipe.zcount(skey, now_ms - 60_000, now_ms)
+            _, cnt = await pipe.execute()
             sent_per_minute = int(cnt or 0)
         except Exception:
             sent_per_minute = 0
