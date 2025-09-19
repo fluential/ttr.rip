@@ -259,12 +259,20 @@ async def public_status_page(
     if not status_page or not status_page.is_public:
         raise HTTPException(status_code=404, detail="Status page not found")
 
+    # Enrich checks with runtime data and ensure status defaults to 'new'
+    if status_page.checks:
+        await crud.enrich_checks_with_runtime_data(status_page.checks)
+        for c in status_page.checks:
+            if getattr(c, "status", None) is None:
+                c.status = "new"
+
     # Calculate overall status
-    overall_status = "up"
-    if any(c.status == "down" and not c.paused for c in status_page.checks):
-        overall_status = "down"
-    elif not status_page.checks:
+    if not status_page.checks:
         overall_status = "empty"
+    elif any((c.status == "down") and not getattr(c, "paused", False) for c in status_page.checks):
+        overall_status = "down"
+    else:
+        overall_status = "up"
 
     context = {
         "request": request,
