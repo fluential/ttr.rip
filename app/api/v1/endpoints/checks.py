@@ -4,6 +4,7 @@ from fastapi.responses import ORJSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 import json
+import time
 import hashlib
 
 from app import crud, schemas, security
@@ -43,13 +44,14 @@ async def read_checks(
 
     principal = await crud.ensure_user_has_slug(db, principal)
 
-    # Lightweight ETag pre-check: use DB-backed checks_version
+    # Lightweight ETag pre-check: use DB-backed checks_version + time bucket for runtime freshness
     etag = None
     if request and principal.id:
         ver = str(getattr(principal, "checks_version", 0) or 0)
-        etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
+        t_bucket = int(time.time() // 2)
+        etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}:{t_bucket}"'
         if request.headers.get("if-none-match") == etag:
-            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=5"})
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=2"})
 
     items, next_cursor, prev_cursor = await crud.get_checks_by_owner(
         db=db, 
@@ -67,7 +69,8 @@ async def read_checks(
     # Build lightweight ETag from per-user version (recompute if needed)
     if not etag and principal.id:
         ver = str(getattr(principal, "checks_version", 0) or 0)
-        etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
+        t_bucket = int(time.time() // 2)
+        etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}:{t_bucket}"'
 
     page = schemas.CheckPage(
         items=items,
@@ -94,13 +97,14 @@ async def read_dashboard_aggregate(
 
     principal = await crud.ensure_user_has_slug(db, principal)
 
-    # Lightweight ETag pre-check for aggregate (DB-backed checks_version)
+    # Lightweight ETag pre-check for aggregate (DB-backed checks_version + 2s bucket for runtime)
     etag = None
     if request and principal.id:
         ver = str(getattr(principal, "checks_version", 0) or 0)
-        etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
+        t_bucket = int(time.time() // 2)
+        etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}:{t_bucket}"'
         if request.headers.get("if-none-match") == etag:
-            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=5"})
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=2"})
 
     items, next_cursor, prev_cursor = await crud.get_checks_by_owner(
         db=db, 
@@ -156,9 +160,10 @@ async def read_dashboard_aggregate(
         "ping_base": f"/p/{principal.slug}" if principal.slug else None,
     }
 
-    # Lightweight ETag from per-user version
+    # Lightweight ETag from per-user version + 2s time bucket
     ver = str(getattr(principal, "checks_version", 0) or 0)
-    etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
+    t_bucket = int(time.time() // 2)
+    etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}:{t_bucket}"'
 
     if request and request.headers.get("if-none-match") == etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)
