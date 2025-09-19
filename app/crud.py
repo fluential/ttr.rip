@@ -1159,35 +1159,20 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         for key, value in update_data.items():
             setattr(db_check, key, value)
 
-        # After updating config, re-evaluate status and deadline from Redis data
-        new_status = "new"
-        old_status = "new"
-        if not settings.DEBUG_MODE:
-            try:
-                async with ephemeral_redis() as r:
-                    if r:
-                        key = get_check_runtime_redis_key(db_check.id)
-                        runtime_data = await r.hgetall(key)
-                        old_status = runtime_data.get("status", "new")
-                        last_ping_str = runtime_data.get("last_ping")
-                        
-                        now = datetime.now(timezone.utc)
-                        reference_time = datetime.fromisoformat(last_ping_str) if last_ping_str else db_check.created_at
-                        
-                        # Recalculate deadline with new settings
-                        db_check.deadline = _calculate_next_deadline(db_check, reference_time)
+        # After updating config, re-evaluate status and deadline from DB fields
+        old_status = db_check.status or "new"
+        now = datetime.now(timezone.utc)
+        reference_time = db_check.last_ping or db_check.created_at
+        db_check.deadline = _calculate_next_deadline(db_check, reference_time)
 
-                        if db_check.deadline and now > db_check.deadline:
-                            new_status = "down"
-                        else:
-                            new_status = "up" if last_ping_str else "new"
-                        
-                        if new_status != old_status:
-                            await r.hset(key, "status", new_status)
+        if db_check.deadline and now > db_check.deadline:
+            new_status = "down"
+        else:
+            new_status = "up" if db_check.last_ping else "new"
 
-            except Exception as e:
-                logger.error(f"Failed to re-evaluate status for check {db_check.id} during update: {e}")
-        
+        if new_status != old_status:
+            db_check.status = new_status
+
         try:
             await db.commit()
             await db.refresh(db_check)
@@ -1198,7 +1183,6 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
                 raise IntegrityError("A check with this slug already exists.", params=None, orig=e)
             raise
 
-        _update_redis_stats_counters(principal.id, old_status, new_status, is_paused=db_check.paused)
         metrics.record_check_update(new_status, old_status, is_paused=db_check.paused)
     
     if db_check:
