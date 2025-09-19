@@ -145,6 +145,8 @@ async def read_dashboard_aggregate(
         "user_stats": user_stats_payload,
         "metrics_summary": metrics_summary,
         "tags": tags_payload,
+        "user_slug": principal.slug or "",
+        "ping_base": f"/p/{principal.slug}" if principal.slug else None,
     }
 
     # Aggregate ETag

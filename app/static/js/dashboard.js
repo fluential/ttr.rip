@@ -544,6 +544,8 @@ async function fetchDashboardAggregate() {
         dashboardAggregateEtag = response.headers.get('ETag') || dashboardAggregateEtag;
 
         const agg = await response.json();
+        if (!window.USER_SLUG && agg.user_slug) { window.USER_SLUG = agg.user_slug; }
+        if (!window.PING_BASE && agg.user_slug) { window.PING_BASE = `/p/${agg.user_slug}`; }
 
         // Render checks table
         const data = agg.checks;
