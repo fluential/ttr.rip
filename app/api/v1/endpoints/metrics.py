@@ -37,6 +37,30 @@ def parse_prometheus_metric(metric_name: str):
                     return total_sum / total_count
     return None
 
+def parse_histogram_avg(metric_name: str, label_filter=None):
+    """Compute average (sum/count) for a histogram, optionally filtering by labels.
+    label_filter can be a callable that receives sample.labels and returns True/False.
+    """
+    total_sum = 0.0
+    total_count = 0.0
+    for metric in REGISTRY.collect():
+        if metric.name != metric_name or metric.type != 'histogram':
+            continue
+        for s in metric.samples:
+            # Histogram exports include multiple series; we only care about _sum and _count
+            if not (s.name.endswith('_sum') or s.name.endswith('_count')):
+                continue
+            labels = getattr(s, 'labels', {}) or {}
+            if callable(label_filter) and not label_filter(labels):
+                continue
+            if s.name.endswith('_sum'):
+                total_sum += s.value
+            elif s.name.endswith('_count'):
+                total_count += s.value
+    if total_count > 0:
+        return total_sum / total_count
+    return None
+
 
 def get_latency_health(latency_seconds: float, yellow_threshold: float, red_threshold: float) -> str:
     """Determines health status based on latency and thresholds."""
@@ -65,6 +89,11 @@ async def get_metrics_summary(request: Request):
     avg_api_latency = parse_prometheus_metric("ttl_api_request_duration_seconds")
     avg_db_latency = parse_prometheus_metric("ttl_db_query_duration_seconds")
     avg_redis_latency = parse_prometheus_metric("ttl_redis_command_duration_seconds")
+    # Estimate ping processing latency by filtering API request duration histogram to /p/* endpoints
+    avg_ping_latency = parse_histogram_avg(
+        "ttl_api_request_duration_seconds",
+        label_filter=lambda labels: (labels.get("endpoint", "").startswith("/p/"))
+    )
 
     summary = {
         "total_checks": int(parse_prometheus_metric("ttl_checks_total") or 0),
@@ -72,12 +101,14 @@ async def get_metrics_summary(request: Request):
         "average_api_latency_seconds": avg_api_latency,
         "average_db_latency_seconds": avg_db_latency,
         "average_redis_latency_seconds": avg_redis_latency,
+        "average_ping_process_time_seconds": avg_ping_latency,
         "workers_online": int(parse_prometheus_metric("ttl_workers_online") or 0),
         "queue_depth": int(parse_prometheus_metric("ttl_queue_size") or 0),
         "health": {
             "api_latency": get_latency_health(avg_api_latency, yellow_threshold=0.5, red_threshold=1.0),
             "db_latency": get_latency_health(avg_db_latency, yellow_threshold=0.1, red_threshold=0.5),
             "redis_latency": get_latency_health(avg_redis_latency, yellow_threshold=0.01, red_threshold=0.1),
+            "ping_latency": get_latency_health(avg_ping_latency, yellow_threshold=0.15, red_threshold=0.5),
         }
     }
 
