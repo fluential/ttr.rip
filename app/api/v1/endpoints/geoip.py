@@ -5,7 +5,7 @@ from app.services import geoip
 router = APIRouter()
 
 @router.get("", response_class=ORJSONResponse)
-async def lookup(ip: str | None = Query(None), request: Request | None = None):
+async def lookup(request: Request, ip: str | None = Query(None)):
     """
     Anonymous GeoIP lookup.
     - If 'ip' is provided, look it up.
