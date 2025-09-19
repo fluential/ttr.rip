@@ -1,7 +1,6 @@
 import logging
 import time
 import json
-import threading
 import asyncio
 from app.worker import celery_app
 from app.core.config import settings
@@ -46,7 +45,15 @@ async def get_queue_stats():
     if _CACHE and (now - _CACHE_TS) < _CACHE_TTL:
         return _CACHE
 
-    # Last resort: degraded response (non-blocking)
+    # Last resort: degraded response (non-blocking). Kick off a refresh on the current loop.
+    try:
+        loop = asyncio.get_running_loop()
+        # Fire-and-forget refresh (avoid multiple concurrent refreshes)
+        loop.create_task(refresh_queue_stats_cache())
+    except RuntimeError:
+        # No running loop; skip
+        pass
+
     return {
         "broker_status": "Redis (Unknown)",
         "workers_online": "N/A",
@@ -140,20 +147,6 @@ async def refresh_queue_stats_cache():
         await _store_cache(snapshot)
         return snapshot
 
-def _bg_loop():
-    # Refresh once per minute
-    interval = 60.0
-    while True:
-        try:
-            asyncio.run(refresh_queue_stats_cache())
-        except Exception as e:
-            logger.error(f"Queue stats background refresh failed: {e}", exc_info=False)
-        time.sleep(interval)
-
-# Start the background refresher in the web process (no-op in DEBUG)
-if not settings.DEBUG_MODE:
-    try:
-        _t = threading.Thread(target=_bg_loop, name="queue-stats-refresher", daemon=True)
-        _t.start()
-    except Exception as e:
-        logger.error(f"Failed to start queue stats background thread: {e}", exc_info=False)
+# Background refresh via a cross-thread event loop caused cross-loop errors with the async Redis pool.
+# We no longer start a background thread here. Instead, get_queue_stats() will opportunistically
+# schedule a refresh on the current event loop when the cache is stale.
