@@ -102,6 +102,10 @@
 .tile .name { display:block; font-weight:600; margin:.35rem 0 .15rem 0; }
 .tile small { color:#9ca3af }
 
+/* Compact key-value inline rows */
+.kv-line { color:#9ca3af; }
+.kv-line strong { color: inherit; opacity: .9; font-weight: 600; }
+
 /* Timeline layout */
 .timeline {
     position: relative;
@@ -184,12 +188,19 @@
           {% endif %}
           {% if check.tags %}<span class="badge">#{{ check.tags|length }}</span>{% endif %}
         </div>
-        <small>
+        <small class="kv-line">
+          <strong>Last:</strong>
           {% if check.last_ping %}
             <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">recently</span>
           {% else %}
             Never
           {% endif %}
+          {% if check.last_duration_seconds %}
+            • <strong>Dur:</strong> <span class="js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>
+          {% else %}
+            • <strong>Dur:</strong> <span class="js-duration" style="display:none;"></span>
+          {% endif %}
+          • <strong>Expires:</strong> <span class="js-expires">calculating…</span>
         </small>
       </div>
     {% endfor %}
@@ -214,6 +225,7 @@
             Never pinged
           {% endif %}
           {% if check.last_duration_seconds %} • <span class="badge js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>{% endif %}
+          • <span class="badge js-expires">calculating…</span>
           {% if check.tags %}
             •
             {% for tag in check.tags %}
@@ -265,6 +277,7 @@
           {% else %}
             Never
           {% endif %}
+          • <strong>Expires:</strong> <span class="badge js-expires">calculating…</span>
         </div>
 
         {% set ping_id = check.slug or check.uuid %}
@@ -413,6 +426,9 @@ document.addEventListener('DOMContentLoaded', () => {
       badge.textContent = paused ? 'PAUSED' : st.toUpperCase();
       badge.classList.remove('ok','err','warn','new','paused');
       badge.classList.add(cls);
+      // subtle activity glow
+      badge.style.boxShadow = '0 0 12px rgba(255,255,255,0.12)';
+      setTimeout(() => { badge.style.boxShadow = ''; }, 350);
     }
 
     const dot = el.querySelector('.js-dot');
@@ -435,6 +451,31 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         dur.style.display = 'none';
       }
+    }
+
+    // Expires in calculation (interval + grace from last ping or created_at)
+    const expNodes = el.querySelectorAll('.js-expires');
+    if (expNodes && check.interval_seconds != null && check.grace_seconds != null) {
+      try {
+        const baseIso = check.last_ping || check.created_at;
+        if (baseIso) {
+          const base = new Date(baseIso).getTime();
+          const deadline = base + (Number(check.interval_seconds) + Number(check.grace_seconds)) * 1000;
+          const remaining = Math.round((deadline - Date.now()) / 1000);
+          let label;
+          const abs = Math.abs(remaining);
+          const mins = Math.floor(abs / 60);
+          const secs = abs % 60;
+          if (remaining >= 0) {
+            if (mins > 0) label = `in ${mins}m ${secs}s`;
+            else label = `in ${secs}s`;
+          } else {
+            if (mins > 0) label = `overdue by ${mins}m ${secs}s`;
+            else label = `overdue by ${secs}s`;
+          }
+          expNodes.forEach(n => n.textContent = label);
+        }
+      } catch {}
     }
 
     const last = el.querySelector('.last-ping-time');

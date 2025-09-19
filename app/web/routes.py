@@ -358,6 +358,11 @@ async def public_status_page_data(
             "status": getattr(c, "status", "new"),
             "last_ping": c.last_ping.isoformat() if getattr(c, "last_ping", None) else None,
             "last_duration_seconds": getattr(c, "last_duration_seconds", None),
+            "interval_seconds": getattr(c, "interval_seconds", None),
+            "grace_seconds": getattr(c, "grace_seconds", None),
+            "schedule_type": getattr(c, "schedule_type", None),
+            "schedule": getattr(c, "schedule", None),
+            "created_at": c.created_at.isoformat() if getattr(c, "created_at", None) else None,
             "tags": [t.name for t in getattr(c, "tags", [])] if getattr(c, "tags", None) else [],
         })
 
