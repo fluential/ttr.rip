@@ -17,6 +17,8 @@ let checksData = {}; // Global cache for check data
 let currentUser = null;
 let dashboardAggregateEtag = null;
 let metricsEtag = null;
+let lastUserStats = null;
+let lastOperationalMetrics = null;
 
 function getUserSlug() {
     return (currentUser && currentUser.slug) || (window.USER_SLUG || '');
@@ -527,6 +529,33 @@ async function fetchDashboardAggregate() {
 
         const response = await fetch(url, { headers });
         if (response.status === 304) {
+            if (lastOperationalMetrics) {
+                const summaryDiv = document.getElementById('operational-metrics-summary');
+                const m = lastOperationalMetrics;
+
+                const avgApiLatency = m.average_api_latency_seconds ? (m.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
+                const avgDbLatency = m.average_db_latency_seconds ? (m.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
+                const avgRedisLatency = m.average_redis_latency_seconds ? (m.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
+
+                summaryDiv.innerHTML = `
+                    <div class="grid">
+                        <div><strong>Total Checks:</strong> ${m.total_checks || 0}</div>
+                        <div><strong>Workers Online:</strong> ${m.workers_online || 0}</div>
+                        <div><strong>Queue Depth:</strong> ${m.queue_depth || 0}</div>
+                        <div><strong>Notifications Sent:</strong> ${m.total_notifications_sent || 0}</div>
+                    </div>
+                    <div class="grid">
+                        <div><span class="health-dot ${m.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
+                        <div><span class="health-dot ${m.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
+                        <div><span class="health-dot ${m.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+                    </div>
+                `;
+
+                const footerApiLatency = document.getElementById('footer-api-latency');
+                const footerRedisLatency = document.getElementById('footer-redis-latency');
+                if (footerApiLatency) footerApiLatency.textContent = avgApiLatency;
+                if (footerRedisLatency) footerRedisLatency.textContent = avgRedisLatency;
+            }
             return;
         }
         if (!response.ok) {
@@ -638,6 +667,7 @@ async function fetchDashboardAggregate() {
 
         // Render user stats
         const stats = agg.user_stats;
+        lastUserStats = stats;
         const summaryDiv = document.getElementById('user-stats-summary');
         if (summaryDiv) {
             const avgInterval = stats.avg_interval_seconds ? formatTimeDifference(stats.avg_interval_seconds).replace('in ', '') : 'N/A';
@@ -659,6 +689,7 @@ async function fetchDashboardAggregate() {
 
         // Render metrics summary
         const metrics = agg.metrics_summary;
+        lastOperationalMetrics = metrics;
         const metricsDiv = document.getElementById('operational-metrics-summary');
         if (metricsDiv) {
             const avgApiLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
@@ -707,6 +738,7 @@ async function fetchOperationalMetrics() {
         metricsEtag = response.headers.get('ETag') || metricsEtag;
 
         const metrics = await response.json();
+        lastOperationalMetrics = metrics;
         const summaryDiv = document.getElementById('operational-metrics-summary');
 
         const avgApiLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
@@ -951,6 +983,7 @@ async function fetchUserStats() {
         if (isConnectionLost) updateConnectionStatus('success');
 
         const stats = await response.json();
+        lastUserStats = stats;
         const summaryDiv = document.getElementById('user-stats-summary');
 
         const avgInterval = stats.avg_interval_seconds ? formatTimeDifference(stats.avg_interval_seconds).replace('in ', '') : 'N/A';
