@@ -31,14 +31,36 @@ logger = logging.getLogger(__name__)
 _INCR_BUFFER: dict[tuple[str, str], int] = {}
 _INCR_EXPIRE_KEYS: set[str] = set()
 _LAST_FLUSH_TS: float = 0.0
-_FLUSH_INTERVAL: float = 0.5  # seconds
+_BUFFER_OPS_SINCE_FLUSH: int = 0
+_FLUSH_INTERVAL: float = settings.INCR_BUFFER_FLUSH_INTERVAL_MS / 1000.0  # seconds
 
 def _buffer_hincrby(key: str, field: str, delta: int):
-    global _LAST_FLUSH_TS
+    global _LAST_FLUSH_TS, _BUFFER_OPS_SINCE_FLUSH, _FLUSH_INTERVAL
+    # If buffering is disabled, perform the increment immediately (best durability).
+    if not settings.INCR_BUFFER_ENABLED:
+        async def _direct():
+            try:
+                r = get_redis_connection()
+                if r:
+                    await r.hincrby(key, field, delta)
+                    ttl_seconds = int(timedelta(days=30).total_seconds())
+                    await r.expire(key, ttl_seconds)
+            except Exception as e:
+                logger.error(f"Direct HINCRBY failed for {key}:{field}: {e}")
+        try:
+            asyncio.get_running_loop().create_task(_direct())
+        except RuntimeError:
+            asyncio.run(_direct())
+        return
+
+    # Buffer the change
     _INCR_BUFFER[(key, field)] = _INCR_BUFFER.get((key, field), 0) + delta
     _INCR_EXPIRE_KEYS.add(key)
+    _BUFFER_OPS_SINCE_FLUSH += 1
+
+    # Flush based on time or size thresholds
     now = time.time()
-    if now - _LAST_FLUSH_TS >= _FLUSH_INTERVAL:
+    if (now - _LAST_FLUSH_TS) >= _FLUSH_INTERVAL or _BUFFER_OPS_SINCE_FLUSH >= settings.INCR_BUFFER_MAX_OPS:
         try:
             asyncio.get_running_loop().create_task(_flush_incr_buffer_async())
         except RuntimeError:
@@ -68,6 +90,7 @@ async def _flush_incr_buffer_async():
     finally:
         _INCR_BUFFER.clear()
         _INCR_EXPIRE_KEYS.clear()
+        _BUFFER_OPS_SINCE_FLUSH = 0
         _LAST_FLUSH_TS = time.time()
 
 def get_check_runtime_redis_key(check_id: int) -> str:

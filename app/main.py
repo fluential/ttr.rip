@@ -114,6 +114,12 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             logger.info("Cleanup task cancelled")
     
+    # Final flush of buffered Redis counters
+    try:
+        await crud._flush_incr_buffer_async()
+    except Exception as e:
+        logger.error(f"Final metrics buffer flush failed: {e}")
+    
     logger.info("Shutting down...")
 
 

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     DEBUG_MODE: bool = False
     SCHEDULER_INTERVAL_SECONDS: int = 5
     STATS_CACHE_TTL_SECONDS: int = 10
+    INCR_BUFFER_ENABLED: bool = True
+    INCR_BUFFER_FLUSH_INTERVAL_MS: int = 500
+    INCR_BUFFER_MAX_OPS: int = 200
 
     # For "Login with Telegram" feature
     TELEGRAM_BOT_NAME: str = ""

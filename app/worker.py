@@ -53,6 +53,12 @@ def run_coro(coro):
 @atexit.register
 def _shutdown_event_loop():
     try:
+        # Attempt a final flush of buffered Redis counters before stopping the loop
+        try:
+            from app import crud
+            run_coro(crud._flush_incr_buffer_async())
+        except Exception:
+            pass
         _event_loop.call_soon_threadsafe(_event_loop.stop)
     except Exception:
         pass
