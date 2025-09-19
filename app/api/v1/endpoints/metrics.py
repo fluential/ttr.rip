@@ -89,11 +89,8 @@ async def get_metrics_summary(request: Request):
     avg_api_latency = parse_prometheus_metric("ttl_api_request_duration_seconds")
     avg_db_latency = parse_prometheus_metric("ttl_db_query_duration_seconds")
     avg_redis_latency = parse_prometheus_metric("ttl_redis_command_duration_seconds")
-    # Estimate ping processing latency by filtering API request duration histogram to /p/* endpoints
-    avg_ping_latency = parse_histogram_avg(
-        "ttl_api_request_duration_seconds",
-        label_filter=lambda labels: (labels.get("endpoint", "").startswith("/p/"))
-    )
+    # Average ping processing latency from dedicated histogram
+    avg_ping_latency = parse_prometheus_metric("ttl_ping_process_time_seconds")
 
     summary = {
         "total_checks": int(parse_prometheus_metric("ttl_checks_total") or 0),

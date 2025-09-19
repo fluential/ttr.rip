@@ -15,6 +15,7 @@ API_REQUESTS = Counter("ttl_api_requests_total", "Total number of API requests",
 API_REQUEST_DURATION = Histogram("ttl_api_request_duration_seconds", "Duration of API requests in seconds", buckets=(0.01, 0.05, 0.1, 0.5, 1, 5))
 DB_QUERY_DURATION = Histogram("ttl_db_query_duration_seconds", "Duration of database queries in seconds", buckets=(0.01, 0.05, 0.1, 0.5, 1, 5))
 REDIS_COMMAND_DURATION = Histogram("ttl_redis_command_duration_seconds", "Duration of Redis commands in seconds", buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5))
+PING_PROCESS_TIME = Histogram("ttl_ping_process_time_seconds", "Processing time for ping endpoint in seconds", buckets=(0.005, 0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 2))
 ACTIVE_USERS = Gauge("ttl_active_users", "Number of active users")
 QUEUE_SIZE = Gauge("ttl_queue_size", "Size of the message queue", ["queue_name"])
 WORKERS_ONLINE = Gauge("ttl_workers_online", "Number of workers online")
@@ -97,6 +98,23 @@ class DBQueryTimer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = time.time() - self.start_time
         DB_QUERY_DURATION.observe(duration)
+
+class PingProcessTimer:
+    """Context manager for timing ping endpoint processing."""
+    def __enter__(self):
+        self._start = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        duration = time.perf_counter() - self._start
+        PING_PROCESS_TIME.observe(duration)
+
+def record_ping_process_time(seconds: float):
+    """Manually record ping processing time in seconds."""
+    try:
+        PING_PROCESS_TIME.observe(float(seconds))
+    except Exception:
+        pass
 
 def get_metrics():
     """Get metrics in Prometheus format"""
