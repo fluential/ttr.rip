@@ -53,7 +53,7 @@ async def _execute_telegram_send(check: Check, message: str):
         "disable_web_page_preview": True,
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
         try:
             response = await client.post(url, json=payload)
             response_text = response.text
@@ -84,7 +84,7 @@ async def _execute_slack_send(check: Check, message: str):
     try:
         decrypted_url = encryption.decrypt_token(check.slack_webhook_url, check.owner.auth_key)
         payload = {"text": message}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
             response = await client.post(decrypted_url, json=payload)
             response.raise_for_status()
         check.slack_last_notification_status = "ok"
@@ -107,7 +107,7 @@ async def _execute_discord_send(check: Check, message: str):
     try:
         decrypted_url = encryption.decrypt_token(check.discord_webhook_url, check.owner.auth_key)
         payload = {"content": message}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
             response = await client.post(decrypted_url, json=payload)
             response.raise_for_status()
         check.discord_last_notification_status = "ok"
@@ -136,7 +136,7 @@ async def _execute_webhook_send(check: Check, message: str):
             "message": message,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0)) as client:
             response = await client.post(decrypted_url, json=payload)
             response.raise_for_status()
         check.webhook_last_notification_status = "ok"
