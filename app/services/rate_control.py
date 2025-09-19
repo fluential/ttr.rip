@@ -37,6 +37,8 @@ BACKOFF_LEVEL_MAX = int(os.getenv("RC_BACKOFF_LEVEL_MAX", "6"))
 STATE_TTL_SECONDS = int(os.getenv("RC_STATE_TTL_SECONDS", "86400"))  # 24h
 # Ensure we always have a small drip rate (>= 1/min), even under errors
 DRIP_RPS = max(float(os.getenv("RC_DRIP_RPS", str(1.0 / 60.0))), RPS_MIN)
+# Assumed external rate limit per identity (per minute) for display purposes
+ASSUMED_LIMIT_PER_MIN = int(os.getenv("RC_ASSUMED_LIMIT_PER_MIN", "30"))
 
 # Exceptions for Celery integration
 class RateLimitedError(Exception):
@@ -218,6 +220,7 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
             "min_rps": DRIP_RPS,
             "current_rps_per_minute": START_RPS * 60.0,
             "min_rps_per_minute": DRIP_RPS * 60.0,
+            "assumed_limit_per_minute": ASSUMED_LIMIT_PER_MIN,
             "tokens": BURST_MAX,
             "max_tokens": BURST_MAX,
             "backoff_seconds_remaining": 0.0,
@@ -260,6 +263,7 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
             "min_rps": DRIP_RPS,
             "current_rps_per_minute": eff_rps * 60.0,
             "min_rps_per_minute": DRIP_RPS * 60.0,
+            "assumed_limit_per_minute": ASSUMED_LIMIT_PER_MIN,
             "tokens": refilled_tokens,
             "max_tokens": max_tokens,
             "backoff_seconds_remaining": backoff_seconds,
@@ -274,6 +278,7 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
             "min_rps": DRIP_RPS,
             "current_rps_per_minute": START_RPS * 60.0,
             "min_rps_per_minute": DRIP_RPS * 60.0,
+            "assumed_limit_per_minute": ASSUMED_LIMIT_PER_MIN,
             "tokens": BURST_MAX,
             "max_tokens": BURST_MAX,
             "backoff_seconds_remaining": 0.0,
