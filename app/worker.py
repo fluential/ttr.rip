@@ -183,7 +183,22 @@ async def _send_notification(check_id: int, message: str, send_function):
                 except Exception as e:
                     logger.error(f"Could not decrement queued notification count for check {check_id}: {e}")
 
-            await send_function(check, message)
+            try:
+                await send_function(check, message)
+                try:
+                    await session.commit()
+                    await session.refresh(check)
+                except Exception as ce:
+                    logger.error(f"Failed to commit notification status for check {check_id}: {ce}")
+                    await session.rollback()
+            except Exception:
+                # Persist error status/message/timestamp even on failure before retrying
+                try:
+                    await session.commit()
+                except Exception as ce:
+                    logger.error(f"Failed to commit error notification status for check {check_id}: {ce}")
+                    await session.rollback()
+                raise
 
 async def _send_telegram_notification(check_id: int, message: str):
     await _send_notification(check_id, message, _execute_telegram_send)

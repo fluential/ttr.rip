@@ -173,7 +173,8 @@ async def _execute_slack_send(check: Check, message: str):
             check.slack_last_notification_message = f"Network error: {e}"
             metrics.record_notification_sent("slack", "error")
             raise rate_control.TransientSendError()
-    check.slack_last_notification_timestamp = datetime.now(timezone.utc)
+        finally:
+            check.slack_last_notification_timestamp = datetime.now(timezone.utc)
 
 
 async def _execute_discord_send(check: Check, message: str):
@@ -231,7 +232,8 @@ async def _execute_discord_send(check: Check, message: str):
             check.discord_last_notification_message = f"Network error: {e}"
             metrics.record_notification_sent("discord", "error")
             raise rate_control.TransientSendError()
-    check.discord_last_notification_timestamp = datetime.now(timezone.utc)
+        finally:
+            check.discord_last_notification_timestamp = datetime.now(timezone.utc)
 
 
 async def _execute_webhook_send(check: Check, message: str):
@@ -295,7 +297,8 @@ async def _execute_webhook_send(check: Check, message: str):
             check.webhook_last_notification_message = f"Network error: {e}"
             metrics.record_notification_sent("webhook", "error")
             raise rate_control.TransientSendError()
-    check.webhook_last_notification_timestamp = datetime.now(timezone.utc)
+        finally:
+            check.webhook_last_notification_timestamp = datetime.now(timezone.utc)
 
 
 async def send_telegram_notification(db: AsyncSession, check: Check, message: str):
