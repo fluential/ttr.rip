@@ -156,6 +156,10 @@
   <a class="pill {% if layout == 'timeline' %}active{% endif %}" href="?layout=timeline">Timeline</a>
 </div>
 
+<div class="meta" id="last-updated" style="margin-top:-.5rem; margin-bottom:.75rem;">
+  Last updated: <span id="last-updated-time" data-timestamp="{{ last_updated_iso }}">just now</span>
+</div>
+
 {% if not status_page.checks %}
   <p>No checks assigned yet.</p>
 {% elif layout == 'grid' %}
@@ -328,6 +332,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
   });
 
+  // Initialize "Last updated" from server timestamp
+  const lastUpdated = document.getElementById('last-updated-time');
+  if (lastUpdated && lastUpdated.dataset.timestamp) {
+      try {
+          const d = new Date(lastUpdated.dataset.timestamp);
+          lastUpdated.textContent = formatTimeAgo(d);
+          lastUpdated.title = d.toLocaleString();
+      } catch {}
+  }
+
   // Copy Ping URL buttons
   document.querySelectorAll('.copy-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -426,6 +440,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const el = document.querySelector(`[data-check-id="${ch.id}"]`);
         if (el) updateCheck(el, ch);
       });
+
+      // Update "Last updated" to now
+      const lut = document.getElementById('last-updated-time');
+      if (lut) {
+        const nowIso = new Date().toISOString();
+        updateRelative(lut, nowIso);
+      }
     } catch (e) {
       // ignore
     }

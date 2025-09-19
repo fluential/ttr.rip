@@ -1,5 +1,5 @@
 import secrets
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from fastapi import APIRouter, Request, Depends, Form, status, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -285,6 +285,7 @@ async def public_status_page(
         "overall_status": overall_status,
         "layout": layout,
         "user_slug": user_slug,
+        "last_updated_iso": datetime.now(timezone.utc).isoformat(),
         "is_public_status_page": True,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
