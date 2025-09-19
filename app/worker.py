@@ -2,7 +2,7 @@ import asyncio
 import logging
 import threading
 import atexit
-from celery import Celery
+from celery import Celery, signals
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 import httpx
@@ -14,7 +14,7 @@ from app.db.models import Check
 from app.core.logging_config import setup_logging
 from app.core import encryption
 from app import metrics
-from app.core.redis_pool import get_redis_connection
+from app.core.redis_pool import get_redis_connection, ephemeral_redis
 from app.services.notifications import (
     _execute_telegram_send, _execute_slack_send, 
     _execute_discord_send, _execute_webhook_send
@@ -45,6 +45,59 @@ celery_app.conf.update(
 _event_loop = asyncio.new_event_loop()
 _loop_thread = threading.Thread(target=_event_loop.run_forever, daemon=True)
 _loop_thread.start()
+
+# Redis-based worker heartbeat for cross-worker "workers online" metric
+import os, socket, uuid
+
+WORKER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+_HEARTBEAT_TTL = 30  # seconds
+_HEARTBEAT_INTERVAL = 10  # seconds
+
+async def _worker_register():
+    try:
+        async with ephemeral_redis() as r:
+            if r:
+                await r.sadd("metrics:workers_online:set", WORKER_ID)
+                await r.setex(f"metrics:worker:{WORKER_ID}:hb", _HEARTBEAT_TTL, "1")
+    except Exception as e:
+        logger.error(f"Worker register heartbeat failed: {e}")
+
+async def _worker_heartbeat():
+    while True:
+        try:
+            async with ephemeral_redis() as r:
+                if r:
+                    await r.setex(f"metrics:worker:{WORKER_ID}:hb", _HEARTBEAT_TTL, "1")
+        except Exception:
+            # Never raise from heartbeat loop
+            pass
+        await asyncio.sleep(_HEARTBEAT_INTERVAL)
+
+async def _worker_unregister():
+    try:
+        async with ephemeral_redis() as r:
+            if r:
+                await r.delete(f"metrics:worker:{WORKER_ID}:hb")
+                await r.srem("metrics:workers_online:set", WORKER_ID)
+    except Exception as e:
+        logger.error(f"Worker unregister heartbeat failed: {e}")
+
+@signals.worker_ready.connect
+def _on_worker_ready(sender, **kwargs):
+    try:
+        _event_loop.call_soon_threadsafe(lambda: _event_loop.create_task(_worker_register()))
+        _event_loop.call_soon_threadsafe(lambda: _event_loop.create_task(_worker_heartbeat()))
+        logger.info(f"Worker heartbeat started for {WORKER_ID}")
+    except Exception as e:
+        logger.error(f"Failed to start worker heartbeat: {e}")
+
+@signals.worker_shutdown.connect
+def _on_worker_shutdown(sender, **kwargs):
+    try:
+        _event_loop.call_soon_threadsafe(lambda: _event_loop.create_task(_worker_unregister()))
+        logger.info(f"Worker heartbeat stopped for {WORKER_ID}")
+    except Exception as e:
+        logger.error(f"Failed to stop worker heartbeat: {e}")
 
 def run_coro(coro):
     """Run an async coroutine in the worker's dedicated event loop."""
