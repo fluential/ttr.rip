@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, ClassVar
 import uuid
 from sqlalchemy import (
     Column,
@@ -152,9 +152,9 @@ class Check(Base):
 
     # Runtime-only fields (not persisted). These are populated from Redis at read time.
     # Providing defaults avoids AttributeError when templates or APIs access them before enrichment.
-    status: Optional[str] = None
-    last_ping: Optional[datetime] = None
-    last_duration_seconds: Optional[float] = None
+    status: ClassVar[Optional[str]] = None
+    last_ping: ClassVar[Optional[datetime]] = None
+    last_duration_seconds: ClassVar[Optional[float]] = None
 
     owner = relationship("User", back_populates="checks", lazy="selectin")
     status_pages = relationship("StatusPage", secondary=status_page_checks, back_populates="checks")
