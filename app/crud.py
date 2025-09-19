@@ -306,6 +306,20 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
     await db.refresh(db_user)
     return db_user
 
+async def bump_checks_version(user_id: int):
+    """
+    Bump the per-user checks version used for lightweight ETag generation.
+    Safe to call frequently; uses Redis INCR.
+    """
+    if not user_id or settings.DEBUG_MODE:
+        return
+    try:
+        r = get_redis_connection()
+        if r:
+            await r.incr(f"checks:ver:{user_id}")
+    except Exception as e:
+        logger.debug(f"Failed to bump checks version for user {user_id}: {e}", exc_info=False)
+
 async def update_user_auth_key(db: AsyncSession, user: models.User, new_auth_key: str):
     """
     Update a user's auth key. This requires re-encrypting all of the user's secrets
@@ -688,6 +702,12 @@ return prev
         check.last_ping = now
         check.last_duration_seconds = duration_seconds
 
+        # Bump ETag version for this user's checks
+        try:
+            await bump_checks_version(check.owner_id)
+        except Exception:
+            pass
+
         return check, None
     except Exception as e:
         logger.error(f"Failed to update check ping status in Redis for check {check.id}: {e}")
@@ -759,6 +779,7 @@ return status
 
     await db.commit()
     await db.refresh(check)
+    await bump_checks_version(check.owner_id)
     
     # Enrich the check object for the response model
     await enrich_checks_with_runtime_data([check])
@@ -817,6 +838,13 @@ return {prev, tostring(failure_count)}
             await notifications.schedule_all_notifications(check, message)
         
         check.status = "down" # Enrich for response
+
+        # Bump ETag version for this user's checks
+        try:
+            await bump_checks_version(check.owner_id)
+        except Exception:
+            pass
+
         return check, reason
     except Exception as e:
         logger.error(f"Failed to update check fail status in Redis for check {check.id}: {e}")
@@ -972,6 +1000,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         except Exception:
             pass
         metrics.record_check_creation()
+        await bump_checks_version(principal.id)
         
         result = await db.execute(
             select(models.Check)
@@ -1063,6 +1092,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         try:
             await db.commit()
             await db.refresh(db_check)
+            await bump_checks_version(principal.id)
         except IntegrityError as e:
             await db.rollback()
             if "UNIQUE constraint failed: checks.slug" in str(e).lower():
@@ -1273,6 +1303,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         except Exception:
             pass
         metrics.record_check_deletion(status_to_decrement)
+        await bump_checks_version(owner_id)
 
         # Clean up associated Redis keys
         if not settings.DEBUG_MODE:

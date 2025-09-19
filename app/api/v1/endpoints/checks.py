@@ -42,6 +42,19 @@ async def read_checks(
 
     principal = await crud.ensure_user_has_slug(db, principal)
 
+    # Lightweight ETag pre-check: avoid heavy work if no changes since last version
+    etag = None
+    if request:
+        try:
+            r = get_redis_connection()
+            if r and principal.id:
+                ver = await r.get(f"checks:ver:{principal.id}") or "0"
+                etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
+                if request.headers.get("if-none-match") == etag:
+                    return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=5"})
+        except Exception as e:
+            logger.debug(f"ETag precheck failed: {e}", exc_info=False)
+
     items, next_cursor, prev_cursor = await crud.get_checks_by_owner(
         db=db, 
         principal=principal, 
@@ -55,14 +68,17 @@ async def read_checks(
     # Enrich checks with runtime data from Redis
     await crud.enrich_checks_with_runtime_data(items)
 
-    # Build an ETag over the list contents
-    try:
-        base = "|".join(f"{c.id}:{c.status}:{(c.last_ping.isoformat() if c.last_ping else '')}:{int(bool(c.paused))}" for c in items)
-    except Exception:
-        base = "|".join(str(c.id) for c in items)
-    etag = f'W/"{hashlib.sha256(base.encode()).hexdigest()}"'
-    if request and request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+    # Build lightweight ETag from per-user version (recompute if needed)
+    if not etag:
+        try:
+            r = get_redis_connection()
+            if r and principal.id:
+                ver = await r.get(f"checks:ver:{principal.id}") or "0"
+            else:
+                ver = "0"
+        except Exception:
+            ver = "0"
+        etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
 
     page = schemas.CheckPage(
         items=items,
@@ -70,7 +86,7 @@ async def read_checks(
         prev_cursor=prev_cursor,
         size=size
     )
-    return ORJSONResponse(content=page.model_dump(), headers={"ETag": etag})
+    return ORJSONResponse(content=page.model_dump(), headers={"ETag": etag, "Cache-Control": "public, max-age=5"})
 
 @router.get("/aggregate", response_class=ORJSONResponse)
 async def read_dashboard_aggregate(
@@ -89,6 +105,19 @@ async def read_dashboard_aggregate(
 
     principal = await crud.ensure_user_has_slug(db, principal)
 
+    # Lightweight ETag pre-check for aggregate
+    etag = None
+    if request:
+        try:
+            r = get_redis_connection()
+            if r and principal.id:
+                ver = await r.get(f"checks:ver:{principal.id}") or "0"
+                etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
+                if request.headers.get("if-none-match") == etag:
+                    return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=5"})
+        except Exception as e:
+            logger.debug(f"ETag precheck failed: {e}", exc_info=False)
+
     items, next_cursor, prev_cursor = await crud.get_checks_by_owner(
         db=db, 
         principal=principal, 
@@ -99,13 +128,6 @@ async def read_dashboard_aggregate(
         tag=tag
     )
     await crud.enrich_checks_with_runtime_data(items)
-
-    # ETag for checks
-    try:
-        base_checks = "|".join(f"{c.id}:{c.status}:{(c.last_ping.isoformat() if c.last_ping else '')}:{int(bool(c.paused))}" for c in items)
-    except Exception:
-        base_checks = "|".join(str(c.id) for c in items)
-    checks_etag = hashlib.sha256(base_checks.encode()).hexdigest()
 
     # User stats
     user_stats = await crud.get_check_stats_by_owner(db=db, principal=principal)
@@ -150,13 +172,21 @@ async def read_dashboard_aggregate(
         "ping_base": f"/p/{principal.slug}" if principal.slug else None,
     }
 
-    # Aggregate ETag
-    etag_base = f"{checks_etag}|{user_stats_payload.get('total_checks', 0)}|{metrics_summary['workers_online']}|{metrics_summary['queue_depth']}|{metrics_summary['total_notifications_sent']}"
-    agg_etag = f'W/"{hashlib.sha256(etag_base.encode()).hexdigest()}"'
-    if request and request.headers.get("if-none-match") == agg_etag:
+    # Lightweight ETag from per-user version
+    try:
+        r = get_redis_connection()
+        if r and principal.id:
+            ver = await r.get(f"checks:ver:{principal.id}") or "0"
+        else:
+            ver = "0"
+    except Exception:
+        ver = "0"
+    etag = f'W/"{ver}:{sort_by}:{sort_direction}:{tag or ""}:{size}"'
+
+    if request and request.headers.get("if-none-match") == etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)
 
-    return ORJSONResponse(content=payload, headers={"ETag": agg_etag, "Cache-Control": "public, max-age=5"})
+    return ORJSONResponse(content=payload, headers={"ETag": etag, "Cache-Control": "public, max-age=5"})
 
 @router.get("/slug-check", response_class=ORJSONResponse)
 async def check_slug_availability(
