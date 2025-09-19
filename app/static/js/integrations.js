@@ -44,6 +44,68 @@ function updateIntegrationStatusUI(integration, check) {
     } else {
         detailsContainer.style.display = 'none';
     }
+
+    // Pre-create a holder for rate info to be updated asynchronously
+    try {
+        const rateInfoElClass = 'integration-rate-info';
+        let rateEl = container.querySelector(`.${rateInfoElClass}`);
+        if (!rateEl) {
+            rateEl = document.createElement('div');
+            rateEl.className = rateInfoElClass;
+            rateEl.style.marginTop = '0.25rem';
+            rateEl.style.fontSize = '0.9em';
+            container.appendChild(rateEl);
+        }
+        // Leave content update to fetchIntegrationRate()
+    } catch {}
+}
+
+async function fetchIntegrationRate(integration) {
+    try {
+        const res = await fetchWithAuth(`/api/v1/checks/${checkId}/${integration}/rate`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const container = document.querySelector(`.integration-status-container[data-integration="${integration}"]`);
+        if (!container) return;
+        let rateEl = container.querySelector('.integration-rate-info');
+        if (!rateEl) {
+            rateEl = document.createElement('div');
+            rateEl.className = 'integration-rate-info';
+            rateEl.style.marginTop = '0.25rem';
+            rateEl.style.fontSize = '0.9em';
+            container.appendChild(rateEl);
+        }
+
+        if (data && data.enabled === false) {
+            rateEl.innerHTML = `<strong>Rate:</strong> disabled`;
+            return;
+        }
+
+        const perMin = data && typeof data.current_rps_per_minute === 'number'
+            ? data.current_rps_per_minute.toFixed(2) : 'N/A';
+        const minPerMin = data && typeof data.min_rps_per_minute === 'number'
+            ? data.min_rps_per_minute.toFixed(2) : 'N/A';
+        const burst = data && typeof data.max_tokens === 'number'
+            ? data.max_tokens : 'N/A';
+
+        let statusIcon = '✅';
+        let statusText = 'normal';
+        if (data && data.limited) {
+            statusIcon = '⚠️';
+            if (data.limited_reason === 'backoff') {
+                const secs = Math.max(0, Math.ceil(data.backoff_seconds_remaining || 0));
+                statusText = `backoff ${secs}s`;
+            } else {
+                const ra = data.retry_after_seconds ? Math.ceil(data.retry_after_seconds) : null;
+                statusText = `limited${ra ? `, retry ~${ra}s` : ''}`;
+            }
+        }
+
+        rateEl.innerHTML = `<strong>Rate:</strong> ${perMin}/min (min ${minPerMin}/min, burst ${burst}) — ${statusIcon} ${statusText}`;
+    } catch (e) {
+        // Best-effort; don't break the page
+        console.error("Failed to load rate snapshot:", e);
+    }
 }
 
 async function handleFormSubmit(event) {
@@ -78,6 +140,8 @@ async function handleFormSubmit(event) {
         formMessage.style.color = 'var(--pico-color-green-500)';
         // Clear password fields after successful save
         form.querySelectorAll('input[type="password"]').forEach(input => input.value = '');
+        // Refresh rate info after saving settings
+        fetchIntegrationRate(integration);
     } else {
         const error = await response.json();
         formMessage.textContent = `Failed to save settings: ${error.detail || 'Unknown error'}`;
@@ -114,6 +178,8 @@ async function handleTestClick(event, useQueue = false) {
             formMessage.textContent = 'Test message sent successfully!';
             formMessage.style.color = 'var(--pico-color-green-500)';
         }
+        // Refresh rate info after a send attempt
+        fetchIntegrationRate(integration);
     } else {
         const error = await response.json();
         formMessage.textContent = `Failed to send test: ${error.detail || 'Unknown error'}`;
@@ -143,5 +209,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Could not parse date:", elem.textContent);
             }
         }
+    });
+
+    // Fetch rate info for all integrations on page load
+    document.querySelectorAll('form[data-integration]').forEach(form => {
+        const integ = form.dataset.integration;
+        if (integ) fetchIntegrationRate(integ);
     });
 });

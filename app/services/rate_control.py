@@ -35,6 +35,8 @@ BACKOFF_MAX = float(os.getenv("RC_BACKOFF_MAX", "300"))      # seconds
 BACKOFF_LEVEL_MAX = int(os.getenv("RC_BACKOFF_LEVEL_MAX", "6"))
 
 STATE_TTL_SECONDS = int(os.getenv("RC_STATE_TTL_SECONDS", "86400"))  # 24h
+# Ensure we always have a small drip rate (>= 1/min), even under errors
+DRIP_RPS = max(float(os.getenv("RC_DRIP_RPS", str(1.0 / 60.0))), RPS_MIN)
 
 # Exceptions for Celery integration
 class RateLimitedError(Exception):
@@ -57,12 +59,16 @@ local weight = tonumber(ARGV[2])
 local start_rps = tonumber(ARGV[3])
 local burst = tonumber(ARGV[4])
 local ttl_ms = tonumber(ARGV[5])
+local min_rps = tonumber(ARGV[6]) or 0
 
 local tokens = tonumber(redis.call('HGET', KEYS[1], 'tokens')) or burst
 local refill_rps = tonumber(redis.call('HGET', KEYS[1], 'refill_rps')) or start_rps
 local max_tokens = tonumber(redis.call('HGET', KEYS[1], 'max_tokens')) or burst
 local last_refill_ms = tonumber(redis.call('HGET', KEYS[1], 'last_refill_ms')) or now_ms
 local backoff_until_ms = tonumber(redis.call('HGET', KEYS[1], 'backoff_until_ms')) or 0
+
+-- Effective rps honors a minimum drip to avoid complete stall
+local eff_rps = math.max(refill_rps, min_rps)
 
 if now_ms < backoff_until_ms then
   local retry_ms = backoff_until_ms - now_ms
@@ -72,7 +78,7 @@ end
 
 local delta_ms = now_ms - last_refill_ms
 if delta_ms < 0 then delta_ms = 0 end
-tokens = math.min(max_tokens, tokens + delta_ms * (refill_rps / 1000.0))
+tokens = math.min(max_tokens, tokens + delta_ms * (eff_rps / 1000.0))
 last_refill_ms = now_ms
 
 local allowed = 0
@@ -82,8 +88,8 @@ if tokens >= weight then
   tokens = tokens - weight
   allowed = 1
 else
-  if refill_rps > 0 then
-    retry_ms = math.ceil((weight - tokens) / refill_rps * 1000.0)
+  if eff_rps > 0 then
+    retry_ms = math.ceil((weight - tokens) / eff_rps * 1000.0)
   else
     retry_ms = ttl_ms
   end
@@ -110,7 +116,7 @@ async def reserve(channel: str, identity: str, weight: float = 1.0) -> Tuple[boo
         now_ms = int(time.time() * 1000)
         ttl_ms = STATE_TTL_SECONDS * 1000
         key = _state_key(channel, identity)
-        res = await r.eval(_RESERVE_LUA, 1, key, now_ms, weight, START_RPS, BURST_MAX, ttl_ms)
+        res = await r.eval(_RESERVE_LUA, 1, key, now_ms, weight, START_RPS, BURST_MAX, ttl_ms, DRIP_RPS)
         # res = [allowed, retry_ms, tokens, refill_rps, max_tokens, backoff_until_ms]
         allowed = bool(int(res[0]))
         retry_ms = float(res[1]) if res[1] is not None else 0.0
@@ -178,6 +184,9 @@ async def report(
             # Leave rates mostly unchanged
             pass
 
+        # Ensure a non-zero drip so the system can recover
+        refill_rps = max(refill_rps, DRIP_RPS)
+
         await r.hset(
             key,
             mapping={
@@ -191,3 +200,81 @@ async def report(
     except Exception:
         # Ignore update errors
         return
+
+
+async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
+    """
+    Read-only snapshot of current rate control state for (channel, identity).
+    Computes effective drip and whether it's limited now (backoff or tokens < 1).
+    """
+    r = get_redis_connection()
+    if r is None:
+        # Fail-open: unknown state
+        return {
+            "enabled": True,
+            "limited": False,
+            "limited_reason": None,
+            "current_rps": START_RPS,
+            "min_rps": DRIP_RPS,
+            "current_rps_per_minute": START_RPS * 60.0,
+            "min_rps_per_minute": DRIP_RPS * 60.0,
+            "tokens": BURST_MAX,
+            "max_tokens": BURST_MAX,
+            "backoff_seconds_remaining": 0.0,
+        }
+
+    key = _state_key(channel, identity)
+    now_ms = int(time.time() * 1000)
+    try:
+        state = await r.hgetall(key) or {}
+        tokens = float(state.get("tokens", BURST_MAX) or BURST_MAX)
+        refill_rps = float(state.get("refill_rps", START_RPS) or START_RPS)
+        max_tokens = float(state.get("max_tokens", BURST_MAX) or BURST_MAX)
+        last_refill_ms = int(float(state.get("last_refill_ms", now_ms) or now_ms))
+        backoff_until_ms = int(float(state.get("backoff_until_ms", "0") or 0))
+
+        eff_rps = max(refill_rps, DRIP_RPS)
+        # Refill prediction
+        delta_ms = max(0, now_ms - last_refill_ms)
+        refilled_tokens = min(max_tokens, tokens + (delta_ms * (eff_rps / 1000.0)))
+        backoff_seconds = max(0.0, (backoff_until_ms - now_ms) / 1000.0)
+
+        limited = False
+        limited_reason = None
+        retry_after = 0.0
+        if backoff_seconds > 0:
+            limited = True
+            limited_reason = "backoff"
+            retry_after = backoff_seconds
+        elif refilled_tokens < 1.0:
+            limited = True
+            limited_reason = "rate_limited"
+            retry_after = (1.0 - refilled_tokens) / eff_rps if eff_rps > 0 else None
+
+        return {
+            "enabled": True,
+            "limited": limited,
+            "limited_reason": limited_reason,
+            "retry_after_seconds": retry_after,
+            "current_rps": eff_rps,
+            "min_rps": DRIP_RPS,
+            "current_rps_per_minute": eff_rps * 60.0,
+            "min_rps_per_minute": DRIP_RPS * 60.0,
+            "tokens": refilled_tokens,
+            "max_tokens": max_tokens,
+            "backoff_seconds_remaining": backoff_seconds,
+        }
+    except Exception:
+        # On failure, provide minimal info rather than failing the UI
+        return {
+            "enabled": True,
+            "limited": False,
+            "limited_reason": None,
+            "current_rps": START_RPS,
+            "min_rps": DRIP_RPS,
+            "current_rps_per_minute": START_RPS * 60.0,
+            "min_rps_per_minute": DRIP_RPS * 60.0,
+            "tokens": BURST_MAX,
+            "max_tokens": BURST_MAX,
+            "backoff_seconds_remaining": 0.0,
+        }

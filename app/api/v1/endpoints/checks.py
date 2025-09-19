@@ -7,7 +7,7 @@ import json
 import hashlib
 
 from app import crud, schemas, security
-from app.services import notifications
+from app.services import notifications, rate_control
 from app.core.config import settings
 from app.core import encryption
 from app.core.redis_pool import get_redis_connection
@@ -416,6 +416,58 @@ async def test_webhook_notification_queue(
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
     await notifications.schedule_webhook_notification(check, message)
     return {"message": "Test notification queued."}
+
+@router.get("/{check_id}/{integration}/rate", response_class=ORJSONResponse)
+async def get_integration_rate_snapshot(
+    check_id: int,
+    integration: str,
+    db: AsyncSession = Depends(db_base.get_db),
+    principal: db_models.User = Depends(security.get_public_user_from_key),
+):
+    """
+    Returns current adaptive rate state for the given integration on this check.
+    Shows effective RPS, minimum drip, burst, and whether it's limited (backoff or drained).
+    """
+    integration = integration.lower()
+    if integration not in ("telegram", "slack", "discord", "webhook"):
+        raise HTTPException(status_code=400, detail="Unsupported integration")
+
+    check = await crud.get_check_by_id_and_owner(db=db, check_id=check_id, principal=principal)
+    if not check:
+        raise HTTPException(status_code=404, detail="Check not found")
+
+    # Derive identity for the given integration
+    try:
+        if integration == "telegram":
+            if not (check.telegram_enabled and check.telegram_bot_token):
+                return ORJSONResponse(content={"enabled": False})
+            decrypted = encryption.decrypt_token(check.telegram_bot_token, check.owner.auth_key)
+            identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
+            channel = "telegram"
+        elif integration == "slack":
+            if not (check.slack_enabled and check.slack_webhook_url):
+                return ORJSONResponse(content={"enabled": False})
+            decrypted = encryption.decrypt_token(check.slack_webhook_url, check.owner.auth_key)
+            identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
+            channel = "slack"
+        elif integration == "discord":
+            if not (check.discord_enabled and check.discord_webhook_url):
+                return ORJSONResponse(content={"enabled": False})
+            decrypted = encryption.decrypt_token(check.discord_webhook_url, check.owner.auth_key)
+            identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
+            channel = "discord"
+        else:  # webhook
+            if not (check.webhook_enabled and check.webhook_url):
+                return ORJSONResponse(content={"enabled": False})
+            decrypted = encryption.decrypt_token(check.webhook_url, check.owner.auth_key)
+            identity = hashlib.sha256(decrypted.encode("utf-8")).hexdigest()[:10]
+            channel = "webhook"
+    except Exception:
+        # If decryption fails, consider it disabled for safety
+        return ORJSONResponse(content={"enabled": False})
+
+    snap = await rate_control.snapshot(channel, identity)
+    return ORJSONResponse(content=snap)
 
 
 @router.post("/{check_id}/toggle-pause", response_model=schemas.Check)
