@@ -1596,7 +1596,7 @@ function viewRecentPings(checkId) {
             const timeAgo = formatTimeDifference(diffSeconds);
             return `
             <div class="ping-log-entry">
-                <p><strong><span class="fi fi-${ping.country_code.toLowerCase()}"></span> ${ping.country_name}</strong> - <code>${ping.connection_type}</code></p>
+                <p><strong>${countryCodeToFlagEmoji(ping.country_code)} ${ping.country_name}</strong> - <code>${ping.connection_type}</code></p>
                 <p><small><code>${pingDate.toLocaleString()} (${timeAgo})</code></small></p>
                 <p><small><strong>IP:</strong> <code>${ping.ip_address}</code></small></p>
                 <p><small><strong>Agent:</strong> <code>${ping.user_agent}</code></small></p>
