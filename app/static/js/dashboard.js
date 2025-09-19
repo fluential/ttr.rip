@@ -417,7 +417,7 @@ function cancelStatusPageEdit() {
     
     const details = document.getElementById('new-status-page-section');
     const summary = details.querySelector('summary');
-    summary.textContent = 'New Status Page';
+    summary.textContent = '➕ New Status Page';
     if (details.open) {
         // Move focus to the summary before clicking it to prevent scroll jump.
         summary.focus({ preventScroll: true });
