@@ -536,6 +536,7 @@ async function fetchDashboardAggregate() {
                 const avgApiLatency = m.average_api_latency_seconds ? (m.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
                 const avgDbLatency = m.average_db_latency_seconds ? (m.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
                 const avgRedisLatency = m.average_redis_latency_seconds ? (m.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
+                const avgCheckDuration = m.average_check_duration_seconds ? (m.average_check_duration_seconds * 1000).toFixed(2) : 'N/A';
 
                 summaryDiv.innerHTML = `
                     <div class="grid">
@@ -548,6 +549,7 @@ async function fetchDashboardAggregate() {
                         <div><span class="health-dot ${m.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
                         <div><span class="health-dot ${m.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
                         <div><span class="health-dot ${m.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+                        <div><span class="health-dot ${m.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
                     </div>
                 `;
 
@@ -695,6 +697,7 @@ async function fetchDashboardAggregate() {
             const avgApiLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
             const avgDbLatency = metrics.average_db_latency_seconds ? (metrics.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
             const avgRedisLatency = metrics.average_redis_latency_seconds ? (metrics.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
+            const avgCheckDuration = metrics.average_check_duration_seconds ? (metrics.average_check_duration_seconds * 1000).toFixed(2) : 'N/A';
             metricsDiv.innerHTML = `
                 <div class="grid">
                     <div class="metric"><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
@@ -706,6 +709,7 @@ async function fetchDashboardAggregate() {
                     <div><span class="health-dot ${metrics.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
                     <div><span class="health-dot ${metrics.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
                     <div><span class="health-dot ${metrics.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+                    <div><span class="health-dot ${metrics.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
                 </div>
             `;
             const footerApiLatency = document.getElementById('footer-api-latency');
@@ -728,6 +732,35 @@ async function fetchOperationalMetrics() {
         if (metricsEtag) headers['If-None-Match'] = metricsEtag;
         const response = await fetch('/api/v1/metrics/summary', { headers });
         if (response.status === 304) {
+            if (lastOperationalMetrics) {
+                const summaryDiv = document.getElementById('operational-metrics-summary');
+                const m = lastOperationalMetrics;
+
+                const avgApiLatency = m.average_api_latency_seconds ? (m.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
+                const avgDbLatency = m.average_db_latency_seconds ? (m.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
+                const avgRedisLatency = m.average_redis_latency_seconds ? (m.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
+                const avgCheckDuration = m.average_check_duration_seconds ? (m.average_check_duration_seconds * 1000).toFixed(2) : 'N/A';
+
+                summaryDiv.innerHTML = `
+                    <div class="grid">
+                        <div><strong>Total Checks:</strong> ${m.total_checks || 0}</div>
+                        <div><strong>Workers Online:</strong> ${m.workers_online || 0}</div>
+                        <div><strong>Queue Depth:</strong> ${m.queue_depth || 0}</div>
+                        <div><strong>Notifications Sent:</strong> ${m.total_notifications_sent || 0}</div>
+                    </div>
+                    <div class="grid">
+                        <div><span class="health-dot ${m.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
+                        <div><span class="health-dot ${m.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
+                        <div><span class="health-dot ${m.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+                        <div><span class="health-dot ${m.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
+                    </div>
+                `;
+
+                const footerApiLatency = document.getElementById('footer-api-latency');
+                const footerRedisLatency = document.getElementById('footer-redis-latency');
+                if (footerApiLatency) footerApiLatency.textContent = avgApiLatency;
+                if (footerRedisLatency) footerRedisLatency.textContent = avgRedisLatency;
+            }
             return;
         }
         if (!response.ok) {
@@ -744,6 +777,7 @@ async function fetchOperationalMetrics() {
         const avgApiLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
         const avgDbLatency = metrics.average_db_latency_seconds ? (metrics.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
         const avgRedisLatency = metrics.average_redis_latency_seconds ? (metrics.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
+        const avgCheckDuration = metrics.average_check_duration_seconds ? (metrics.average_check_duration_seconds * 1000).toFixed(2) : 'N/A';
 
         summaryDiv.innerHTML = `
             <div class="grid">
@@ -756,6 +790,7 @@ async function fetchOperationalMetrics() {
                 <div><span class="health-dot ${metrics.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
                 <div><span class="health-dot ${metrics.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
                 <div><span class="health-dot ${metrics.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
+                <div><span class="health-dot ${metrics.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
             </div>
         `;
 
