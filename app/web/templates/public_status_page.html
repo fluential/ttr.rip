@@ -106,6 +106,28 @@
 .kv-line { color:#9ca3af; }
 .kv-line strong { color: inherit; opacity: .9; font-weight: 600; }
 
+/* Tidy Recent activity toggle and list */
+details.recent summary {
+    font-size: .85rem;
+    color: inherit;
+    opacity: .9;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    cursor: pointer;
+    padding: .1rem .4rem;
+    border-radius: .4rem;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--card-bg);
+}
+details.recent summary::-webkit-details-marker { display: none; }
+details.recent[open] summary {
+    border-color: rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.06);
+}
+.recent-list { font-size: .85rem; color: #9ca3af; }
+.recent-list li { margin: .15rem 0; }
+
 /* Timeline layout */
 .timeline {
     position: relative;
