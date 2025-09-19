@@ -18,7 +18,7 @@
 
 <article>
     <header>Current Checks</header>
-    <div class="grid" style="margin-bottom: 1rem; align-items: flex-end;">
+    <div class="grid" style="margin-bottom: 1rem; align-items: center;">
         <div id="tag-filter-container">
             <label for="tag-search">Filter by Tags</label>
             <input type="search" id="tag-search" placeholder="Search tags">
@@ -31,7 +31,6 @@
         <div class="refresh-controls" style="text-align: right;">
             <div class="refresh-buttons-container">
                 <span id="last-updated">Last updated: —</span>
-                <span class="sep">•</span>
                 <span id="refresh-status"><span id="refresh-countdown">5</span>s to refresh</span>
                 <button id="manual-refresh-btn" class="outline" title="Refresh now">🔄</button>
                 <button id="refresh-toggle-btn" class="outline" title="Pause automatic refresh">⏸️</button>
@@ -389,6 +388,15 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    /* Align refresh info with spacing between text and icons */
+    .refresh-controls .refresh-buttons-container {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        flex-wrap: wrap;
     }
 </style>
 
