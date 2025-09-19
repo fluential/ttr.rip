@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.db import base as db_base
 from app.db import models as db_models
 from app import crud, schemas
-from app.core.redis_pool import get_redis_connection
+from app.core.redis_pool import get_redis_connection, ephemeral_redis
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/token", auto_error=False)
@@ -104,45 +104,45 @@ async def get_public_user_from_key(
         origin = None
 
     try:
-        r = get_redis_connection()
-        if r:
-            ak_hash = hashlib.sha256(auth_key.encode()).hexdigest()
-            # Record last-used info
-            usage_key = f"authkey:usage:{ak_hash}"
-            await r.hset(
-                usage_key,
-                mapping={
-                    "last_used": datetime.now(timezone.utc).isoformat(),
-                    "ip": client_ip or "",
-                    "origin": origin or "",
-                    "ua": (request.headers.get("user-agent") if request else "") or "",
-                },
-            )
-            await r.expire(usage_key, 30 * 24 * 3600)  # keep 30 days
-            await r.incr(f"authkey:usage_count:{ak_hash}")
+        async with ephemeral_redis() as r:
+            if r:
+                ak_hash = hashlib.sha256(auth_key.encode()).hexdigest()
+                # Record last-used info
+                usage_key = f"authkey:usage:{ak_hash}"
+                await r.hset(
+                    usage_key,
+                    mapping={
+                        "last_used": datetime.now(timezone.utc).isoformat(),
+                        "ip": client_ip or "",
+                        "origin": origin or "",
+                        "ua": (request.headers.get("user-agent") if request else "") or "",
+                    },
+                )
+                await r.expire(usage_key, 30 * 24 * 3600)  # keep 30 days
+                await r.incr(f"authkey:usage_count:{ak_hash}")
 
-            # Per-key IP restriction
-            allowed_ip_set = f"authkey:allowed_ips:{ak_hash}"
-            try:
-                if await r.scard(allowed_ip_set) > 0:
-                    if not client_ip or not await r.sismember(allowed_ip_set, client_ip):
-                        logger.warning(f"Auth key usage from disallowed IP {client_ip}")
+                # Per-key IP restriction
+                allowed_ip_set = f"authkey:allowed_ips:{ak_hash}"
+                try:
+                    if await r.scard(allowed_ip_set) > 0:
+                        if not client_ip or not await r.sismember(allowed_ip_set, client_ip):
+                            logger.warning(f"Auth key usage from disallowed IP {client_ip}")
+                            raise credentials_exception
+                except Exception:
+                    # If Redis fails evaluating the set, fail closed only if global enforcement is enabled
+                    if settings.XAUTH_ENFORCE_IP:
                         raise credentials_exception
-            except Exception:
-                # If Redis fails evaluating the set, fail closed only if global enforcement is enabled
-                if settings.XAUTH_ENFORCE_IP:
-                    raise credentials_exception
 
-            # Per-key Origin restriction
-            allowed_origin_set = f"authkey:allowed_origins:{ak_hash}"
-            try:
-                if await r.scard(allowed_origin_set) > 0:
-                    if not origin or not await r.sismember(allowed_origin_set, origin):
-                        logger.warning(f"Auth key usage from disallowed Origin/Referer {origin}")
+                # Per-key Origin restriction
+                allowed_origin_set = f"authkey:allowed_origins:{ak_hash}"
+                try:
+                    if await r.scard(allowed_origin_set) > 0:
+                        if not origin or not await r.sismember(allowed_origin_set, origin):
+                            logger.warning(f"Auth key usage from disallowed Origin/Referer {origin}")
+                            raise credentials_exception
+                except Exception:
+                    if settings.XAUTH_ENFORCE_ORIGIN:
                         raise credentials_exception
-            except Exception:
-                if settings.XAUTH_ENFORCE_ORIGIN:
-                    raise credentials_exception
     except Exception as e:
         # Do not block on tracking errors; only enforce if explicit settings require it
         logger.error(f"Error during X-Auth usage tracking/enforcement: {e}")
@@ -151,10 +151,10 @@ async def get_public_user_from_key(
     # --- Blacklist Check ---
     if not settings.DEBUG_MODE:
         try:
-            r = get_redis_connection()
-            if r and await r.exists(f"blacklist:auth_key:{auth_key}"):
-                logger.warning(f"Authentication attempt with blacklisted key: ...{auth_key[-4:]}")
-                raise credentials_exception
+            async with ephemeral_redis() as r:
+                if r and await r.exists(f"blacklist:auth_key:{auth_key}"):
+                    logger.warning(f"Authentication attempt with blacklisted key: ...{auth_key[-4:]}")
+                    raise credentials_exception
         except Exception as e:
             logger.error(f"Redis check failed during auth: {e}")
             # Fail closed: if we can't check the blacklist, deny access.
