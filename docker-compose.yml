@@ -94,9 +94,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: ttl_rip_cloudflared
     restart: unless-stopped
-    depends_on:
-      caddy:
-        condition: service_healthy
+    #depends_on:
+    #  caddy:
+    #    condition: service_healthy
     env_file:
       - .env.example
     environment:
@@ -105,10 +105,10 @@ services:
     command: >
       sh -lc 'token="${CLOUDFLARED_TOKEN:-${CLOUDFLARE_TUNNEL_TOKEN:-}}"; if [ -n "$token" ]; then
         echo "Starting Cloudflare Tunnel with named token";
-        cloudflared tunnel run --no-autoupdate --token "$token" ${CLOUDFLARED_OPTS:-};
+        tunnel run --no-autoupdate --token "$token" ${CLOUDFLARED_OPTS:-};
       else
         echo "No tunnel token provided. Starting Quick Tunnel to ${CLOUDFLARED_URL:-http://caddy:8080}";
-        cloudflared tunnel --no-autoupdate --url "${CLOUDFLARED_URL:-http://caddy:8080}" ${CLOUDFLARED_OPTS:-};
+        tunnel --no-autoupdate --url "${CLOUDFLARED_URL:-http://caddy:8080}" ${CLOUDFLARED_OPTS:-};
       fi'
 
   worker:
