@@ -1634,6 +1634,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('new-status-page-form').addEventListener('submit', handleStatusPageFormSubmit);
 
     // Account Management listeners
+    const rotateBtn = document.getElementById('rotate-key-btn');
     const importBtn = document.getElementById('import-btn');
     const importFileInput = document.getElementById('import-file-input');
     const exportBtn = document.getElementById('export-btn');
@@ -1643,6 +1644,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (importBtn && importFileInput) {
         importBtn.addEventListener('click', () => importFileInput.click());
         importFileInput.addEventListener('change', (event) => handleImport(event.target.files[0]));
+    }
+    if (rotateBtn) {
+        rotateBtn.addEventListener('click', confirmRotateKey);
     }
     if (exportBtn) {
         exportBtn.addEventListener('click', handleExport);
