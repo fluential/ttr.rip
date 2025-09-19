@@ -77,7 +77,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
     ports:
-      - "8080:8080"
+      - "8000:8000"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ || exit 1"]
       interval: 5s
