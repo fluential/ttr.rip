@@ -25,7 +25,7 @@ from app.core.logging_config import setup_logging
 from app.tasks import cleanup  # Add this import
 from app import metrics  # Add metrics import
 from app.worker import celery_app
-from app.core.redis_pool import get_redis_connection
+from app.core.redis_pool import get_redis_connection, init_redis_for_app, close_redis_for_app
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -39,6 +39,13 @@ async def lifespan(app: FastAPI):
     app.state.redis_connected = False
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Initialize Redis client/pool early for startup tasks
+    if not settings.DEBUG_MODE:
+        try:
+            await init_redis_for_app(app)
+        except Exception as e:
+            logger.error(f"Failed initializing Redis client: {e}")
     
     # Initialize metrics with app version
     metrics.initialize_metrics(app_version="1.0.0")
@@ -119,6 +126,12 @@ async def lifespan(app: FastAPI):
         await crud._flush_incr_buffer_async()
     except Exception as e:
         logger.error(f"Final metrics buffer flush failed: {e}")
+    
+    # Close Redis client/pool
+    try:
+        await close_redis_for_app(app)
+    except Exception as e:
+        logger.error(f"Error closing Redis client: {e}")
     
     logger.info("Shutting down...")
 

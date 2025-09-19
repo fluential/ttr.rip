@@ -13,43 +13,9 @@ except Exception as e:
     logger.critical(f"Failed to import redis.asyncio: {e}")
     aioredis = None
 
-# Maintain a per-event-loop async Redis connection pool
-_pools: dict[int, "aioredis.ConnectionPool"] = {} if aioredis else {}
-
-def _get_or_create_pool():
-    """
-    Returns a ConnectionPool bound to the current running event loop.
-    Prevents 'Future attached to a different loop' errors by avoiding
-    cross-loop reuse of a single global pool.
-    """
-    if aioredis is None:
-        return None
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # Fallback for contexts without a running loop
-        loop = asyncio.get_event_loop()
-    loop_id = id(loop)
-
-    pool = _pools.get(loop_id)
-    if pool is not None:
-        return pool
-
-    try:
-        pool = aioredis.ConnectionPool.from_url(  # type: ignore[attr-defined]
-            str(settings.REDIS_URL),
-            decode_responses=True,
-            max_connections=50,
-            socket_timeout=5.0,
-            socket_connect_timeout=5.0,
-            health_check_interval=30,
-        )
-        _pools[loop_id] = pool
-        logger.info("Async Redis connection pool initialized for loop %s", loop)
-        return pool
-    except Exception as e:
-        logger.error(f"Error initializing async Redis connection pool: {e}")
-        return None
+# Single, process-wide async Redis pool/client initialized at app startup
+_redis_pool: "aioredis.ConnectionPool | None" = None if aioredis else None
+_redis_client: "TimedAsyncRedis | None" = None
 
 if aioredis:
     class TimedAsyncRedis(aioredis.Redis):  # type: ignore[misc]
@@ -67,16 +33,83 @@ else:
 
 def get_redis_connection():
     """
-    Returns an async Redis client bound to a pool tied to the current event loop.
+    Returns the process-wide async Redis client initialized at app startup.
     Operations on the returned client must be awaited.
     """
     if aioredis is None:
         logger.error("Async Redis library (redis.asyncio) is not available")
         return None
-
-    pool = _get_or_create_pool()
-    if pool is None:
-        logger.error("Async Redis connection pool is not initialized for this event loop")
+    if _redis_client is None:
+        logger.error("Async Redis client is not initialized. Ensure init_redis_for_app() is called at startup.")
         return None
+    return _redis_client
 
-    return TimedAsyncRedis(connection_pool=pool)
+async def init_redis_for_app(app):
+    """
+    Create and attach a single Redis pool/client to the FastAPI app state.
+    Should be called during application startup on the serving event loop.
+    """
+    global _redis_pool, _redis_client
+    if aioredis is None:
+        logger.error("Async Redis library (redis.asyncio) is not available")
+        return False
+    if _redis_client is not None:
+        # Already initialized; ensure app.state is populated
+        try:
+            app.state.redis = _redis_client
+            app.state.redis_pool = _redis_pool
+        except Exception:
+            pass
+        return True
+    try:
+        _redis_pool = aioredis.ConnectionPool.from_url(
+            str(settings.REDIS_URL),
+            decode_responses=True,
+            max_connections=50,
+            socket_timeout=5.0,
+            socket_connect_timeout=5.0,
+            health_check_interval=30,
+        )
+        _redis_client = TimedAsyncRedis(connection_pool=_redis_pool)
+        try:
+            app.state.redis = _redis_client
+            app.state.redis_pool = _redis_pool
+        except Exception:
+            pass
+        logger.info("Async Redis connection pool initialized")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing async Redis connection pool: {e}")
+        _redis_client = None
+        _redis_pool = None
+        return False
+
+async def close_redis_for_app(app):
+    """
+    Close the Redis client and disconnect the pool, and clear from app.state.
+    Safe to call multiple times.
+    """
+    global _redis_pool, _redis_client
+    try:
+        if _redis_client is not None:
+            res = _redis_client.close()
+            if asyncio.iscoroutine(res):
+                await res
+    except Exception as e:
+        logger.debug(f"Error closing Redis client: {e}")
+    try:
+        if _redis_pool is not None:
+            res = _redis_pool.disconnect()
+            if asyncio.iscoroutine(res):
+                await res
+    except Exception as e:
+        logger.debug(f"Error disconnecting Redis pool: {e}")
+    try:
+        if hasattr(app.state, "redis"):
+            delattr(app.state, "redis")
+        if hasattr(app.state, "redis_pool"):
+            delattr(app.state, "redis_pool")
+    except Exception:
+        pass
+    _redis_client = None
+    _redis_pool = None
