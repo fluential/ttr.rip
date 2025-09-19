@@ -22,7 +22,7 @@ from app.services import notifications
 from app.core import encryption
 from app.worker import celery_app
 from app.core.config import settings
-from app.core.redis_pool import get_redis_connection
+from app.core.redis_pool import get_redis_connection, ephemeral_redis
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,11 @@ def _buffer_hincrby(key: str, field: str, delta: int):
     if not settings.INCR_BUFFER_ENABLED:
         async def _direct():
             try:
-                r = get_redis_connection()
-                if r:
-                    await r.hincrby(key, field, delta)
-                    ttl_seconds = int(timedelta(days=30).total_seconds())
-                    await r.expire(key, ttl_seconds)
+                async with ephemeral_redis() as r:
+                    if r:
+                        await r.hincrby(key, field, delta)
+                        ttl_seconds = int(timedelta(days=30).total_seconds())
+                        await r.expire(key, ttl_seconds)
             except Exception as e:
                 logger.error(f"Direct HINCRBY failed for {key}:{field}: {e}")
         try:
@@ -73,18 +73,18 @@ async def _flush_incr_buffer_async():
         _LAST_FLUSH_TS = time.time()
         return
     try:
-        r = get_redis_connection()
-        if not r:
-            return
-        pipe = r.pipeline()
-        for (key, field), delta in list(_INCR_BUFFER.items()):
-            if delta != 0:
-                pipe.hincrby(key, field, delta)
-        # Apply expirations (30 days) for any touched keys
-        ttl_seconds = int(timedelta(days=30).total_seconds())
-        for key in list(_INCR_EXPIRE_KEYS):
-            pipe.expire(key, ttl_seconds)
-        await pipe.execute()
+        async with ephemeral_redis() as r:
+            if not r:
+                return
+            pipe = r.pipeline()
+            for (key, field), delta in list(_INCR_BUFFER.items()):
+                if delta != 0:
+                    pipe.hincrby(key, field, delta)
+            # Apply expirations (30 days) for any touched keys
+            ttl_seconds = int(timedelta(days=30).total_seconds())
+            for key in list(_INCR_EXPIRE_KEYS):
+                pipe.expire(key, ttl_seconds)
+            await pipe.execute()
     except Exception as e:
         logger.error(f"Failed to flush Redis increment buffer: {e}")
     finally:
@@ -118,16 +118,16 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
         return
 
     try:
-        r = get_redis_connection()
-        if not r:
-            raise ConnectionError("Redis connection not available")
+        async with ephemeral_redis() as r:
+            if not r:
+                raise ConnectionError("Redis connection not available")
 
-        pipe = r.pipeline()
-        for check in checks:
-            key = get_check_runtime_redis_key(check.id)
-            pipe.hmget(key, "status", "last_ping", "last_start", "last_duration_seconds", "last_pings", "last_content")
-        
-        results = await pipe.execute()
+            pipe = r.pipeline()
+            for check in checks:
+                key = get_check_runtime_redis_key(check.id)
+                pipe.hmget(key, "status", "last_ping", "last_start", "last_duration_seconds", "last_pings", "last_content")
+            
+            results = await pipe.execute()
 
         for i, check in enumerate(checks):
             status_val, last_ping_str, last_start_str, last_duration_str, last_pings_json, last_content = results[i]
@@ -492,14 +492,14 @@ async def get_user_queued_notification_count(db: AsyncSession, principal: models
         return 0
 
     try:
-        r = get_redis_connection()
-        if not r:
-            return "N/A"
-        
-        owner_identifier = f"user_id_{principal.id}"
-        
-        count = await r.get(f"user_stats:queued_notifications:{owner_identifier}")
-        return int(count) if count else 0
+        async with ephemeral_redis() as r:
+            if not r:
+                return "N/A"
+            
+            owner_identifier = f"user_id_{principal.id}"
+            
+            count = await r.get(f"user_stats:queued_notifications:{owner_identifier}")
+            return int(count) if count else 0
     except Exception as e:
         logger.error(f"Could not get user queued notification count: {e}", exc_info=False)
         return "N/A"
@@ -526,32 +526,32 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # --- Redis Counter Strategy ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
-            r = get_redis_connection()
-            if r:
-                key = f"user_stats:counters:{principal.id}"
-                # HGETALL returns strings, so we need to convert them
-                cached_counters = await r.hgetall(key)
-                if cached_counters:
-                    logger.debug(f"Redis counter hit for user stats: {principal.id}")
-                    # Averages are not stored in counters, so we still need a DB query for them.
-                    # This is a compromise to keep counter logic simple.
-                    avg_query = select(
-                        func.avg(models.Check.interval_seconds).label("avg_interval_seconds")
-                    ).filter(models.Check.owner_id == principal.id)
-                    
-                    result = await db.execute(avg_query)
-                    averages = result.first()
+            async with ephemeral_redis() as r:
+                if r:
+                    key = f"user_stats:counters:{principal.id}"
+                    # HGETALL returns strings, so we need to convert them
+                    cached_counters = await r.hgetall(key)
+                    if cached_counters:
+                        logger.debug(f"Redis counter hit for user stats: {principal.id}")
+                        # Averages are not stored in counters, so we still need a DB query for them.
+                        # This is a compromise to keep counter logic simple.
+                        avg_query = select(
+                            func.avg(models.Check.interval_seconds).label("avg_interval_seconds")
+                        ).filter(models.Check.owner_id == principal.id)
+                        
+                        result = await db.execute(avg_query)
+                        averages = result.first()
 
-                    return schemas.CheckStats(
-                        total_checks=int(cached_counters.get("total", 0)),
-                        up_count=int(cached_counters.get("up", 0)),
-                        down_count=int(cached_counters.get("down", 0)),
-                        new_count=int(cached_counters.get("new", 0)),
-                        paused_count=int(cached_counters.get("paused", 0)),
-                        avg_interval_seconds=averages.avg_interval_seconds if averages else None,
-                        avg_duration_seconds=None, # This can't be calculated from DB anymore
-                        user_queued_notifications=await get_user_queued_notification_count(db, principal)
-                    )
+                        return schemas.CheckStats(
+                            total_checks=int(cached_counters.get("total", 0)),
+                            up_count=int(cached_counters.get("up", 0)),
+                            down_count=int(cached_counters.get("down", 0)),
+                            new_count=int(cached_counters.get("new", 0)),
+                            paused_count=int(cached_counters.get("paused", 0)),
+                            avg_interval_seconds=averages.avg_interval_seconds if averages else None,
+                            avg_duration_seconds=None, # This can't be calculated from DB anymore
+                            user_queued_notifications=await get_user_queued_notification_count(db, principal)
+                        )
         except Exception as e:
             logger.error(f"Could not read from Redis counters for stats: {e}")
     # --- End Redis Counter Strategy ---
@@ -586,19 +586,19 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     # --- Rehydrate Redis Counters ---
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
-            r = get_redis_connection()
-            if r:
-                key = f"user_stats:counters:{principal.id}"
-                pipe = r.pipeline()
-                pipe.hset(key, "total", stats_obj.total_checks)
-                pipe.hset(key, "up", stats_obj.up_count)
-                pipe.hset(key, "down", stats_obj.down_count)
-                pipe.hset(key, "new", stats_obj.new_count)
-                pipe.hset(key, "paused", stats_obj.paused_count)
-                # Set a 30-day expiry on the stats key to prevent orphaned data
-                pipe.expire(key, int(timedelta(days=30).total_seconds()))
-                await pipe.execute()
-                logger.info(f"Rehydrated Redis counters for user {principal.id}")
+            async with ephemeral_redis() as r:
+                if r:
+                    key = f"user_stats:counters:{principal.id}"
+                    pipe = r.pipeline()
+                    pipe.hset(key, "total", stats_obj.total_checks)
+                    pipe.hset(key, "up", stats_obj.up_count)
+                    pipe.hset(key, "down", stats_obj.down_count)
+                    pipe.hset(key, "new", stats_obj.new_count)
+                    pipe.hset(key, "paused", stats_obj.paused_count)
+                    # Set a 30-day expiry on the stats key to prevent orphaned data
+                    pipe.expire(key, int(timedelta(days=30).total_seconds()))
+                    await pipe.execute()
+                    logger.info(f"Rehydrated Redis counters for user {principal.id}")
         except Exception as e:
             logger.error(f"Could not rehydrate Redis counters for user {principal.id}: {e}")
     # --- End Rehydration ---
@@ -655,29 +655,29 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
         return check, None
 
     try:
-        r = get_redis_connection()
-        if not r:
-            return check, None
+        async with ephemeral_redis() as r:
+            if not r:
+                return check, None
 
-        key = get_check_runtime_redis_key(check.id)
-        now = datetime.now(timezone.utc)
+            key = get_check_runtime_redis_key(check.id)
+            now = datetime.now(timezone.utc)
 
-        # Get previous state from Redis to calculate duration
-        previous_runtime_data = await r.hgetall(key)
-        previous_status = previous_runtime_data.get("status", "new")
-        last_start_str = previous_runtime_data.get("last_start")
-        last_ping_str = previous_runtime_data.get("last_ping")
+            # Get previous state from Redis to calculate duration
+            previous_runtime_data = await r.hgetall(key)
+            previous_status = previous_runtime_data.get("status", "new")
+            last_start_str = previous_runtime_data.get("last_start")
+            last_ping_str = previous_runtime_data.get("last_ping")
 
-        duration_seconds = None
-        if last_start_str:
-            last_start = datetime.fromisoformat(last_start_str)
-            duration_seconds = (now - last_start).total_seconds()
-        elif last_ping_str:
-            last_ping = datetime.fromisoformat(last_ping_str)
-            duration_seconds = (now - last_ping).total_seconds()
+            duration_seconds = None
+            if last_start_str:
+                last_start = datetime.fromisoformat(last_start_str)
+                duration_seconds = (now - last_start).total_seconds()
+            elif last_ping_str:
+                last_ping = datetime.fromisoformat(last_ping_str)
+                duration_seconds = (now - last_ping).total_seconds()
 
-        # Atomic update runtime + counters via Lua
-        lua = """
+            # Atomic update runtime + counters via Lua
+            lua = """
 local runtime_key = KEYS[1]
 local user_counters = KEYS[2]
 local global_counters = KEYS[3]
@@ -741,10 +741,10 @@ async def update_check_start(db: AsyncSession, check: models.Check):
     if settings.DEBUG_MODE:
         return check
     try:
-        r = get_redis_connection()
-        if r:
-            key = get_check_runtime_redis_key(check.id)
-            await r.hset(key, "last_start", datetime.now(timezone.utc).isoformat())
+        async with ephemeral_redis() as r:
+            if r:
+                key = get_check_runtime_redis_key(check.id)
+                await r.hset(key, "last_start", datetime.now(timezone.utc).isoformat())
     except Exception as e:
         logger.error(f"Failed to update check start time in Redis for check {check.id}: {e}")
     return check
@@ -755,9 +755,9 @@ async def toggle_check_pause(db: AsyncSession, check: models.Check):
     current_status = "new"
     if not settings.DEBUG_MODE:
         try:
-            r = get_redis_connection()
-            if r:
-                current_status = await r.hget(get_check_runtime_redis_key(check.id), "status") or "new"
+            async with ephemeral_redis() as r:
+                if r:
+                    current_status = await r.hget(get_check_runtime_redis_key(check.id), "status") or "new"
         except Exception as e:
             logger.error(f"Could not get status from Redis for pause toggle: {e}")
 
@@ -771,9 +771,9 @@ async def toggle_check_pause(db: AsyncSession, check: models.Check):
     # Update Redis counters atomically with Lua
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
-            r = get_redis_connection()
-            if r:
-                lua = """
+            async with ephemeral_redis() as r:
+                if r:
+                    lua = """
 local runtime_key = KEYS[1]
 local user_counters = KEYS[2]
 local global_counters = KEYS[3]
@@ -814,14 +814,14 @@ async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optio
         return check, reason
 
     try:
-        r = get_redis_connection()
-        if not r:
-            return check, reason
+        async with ephemeral_redis() as r:
+            if not r:
+                return check, reason
 
-        key = get_check_runtime_redis_key(check.id)
+            key = get_check_runtime_redis_key(check.id)
 
-        # Lua: mark down, increment failure_count, and update counters atomically
-        lua = """
+            # Lua: mark down, increment failure_count, and update counters atomically
+            lua = """
 local runtime_key = KEYS[1]
 local user_counters = KEYS[2]
 local global_counters = KEYS[3]
@@ -1009,10 +1009,10 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         # Initialize runtime status in Redis
         if not settings.DEBUG_MODE:
             try:
-                r = get_redis_connection()
-                if r:
-                    key = get_check_runtime_redis_key(db_check.id)
-                    await r.hset(key, mapping={"status": "new", "last_pings": "[]"})
+                async with ephemeral_redis() as r:
+                    if r:
+                        key = get_check_runtime_redis_key(db_check.id)
+                        await r.hset(key, mapping={"status": "new", "last_pings": "[]"})
             except Exception as e:
                 logger.error(f"Failed to initialize Redis runtime status for check {db_check.id}: {e}")
 
@@ -1088,26 +1088,26 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         old_status = "new"
         if not settings.DEBUG_MODE:
             try:
-                r = get_redis_connection()
-                if r:
-                    key = get_check_runtime_redis_key(db_check.id)
-                    runtime_data = await r.hgetall(key)
-                    old_status = runtime_data.get("status", "new")
-                    last_ping_str = runtime_data.get("last_ping")
-                    
-                    now = datetime.now(timezone.utc)
-                    reference_time = datetime.fromisoformat(last_ping_str) if last_ping_str else db_check.created_at
-                    
-                    # Recalculate deadline with new settings
-                    db_check.deadline = _calculate_next_deadline(db_check, reference_time)
+                async with ephemeral_redis() as r:
+                    if r:
+                        key = get_check_runtime_redis_key(db_check.id)
+                        runtime_data = await r.hgetall(key)
+                        old_status = runtime_data.get("status", "new")
+                        last_ping_str = runtime_data.get("last_ping")
+                        
+                        now = datetime.now(timezone.utc)
+                        reference_time = datetime.fromisoformat(last_ping_str) if last_ping_str else db_check.created_at
+                        
+                        # Recalculate deadline with new settings
+                        db_check.deadline = _calculate_next_deadline(db_check, reference_time)
 
-                    if db_check.deadline and now > db_check.deadline:
-                        new_status = "down"
-                    else:
-                        new_status = "up" if last_ping_str else "new"
-                    
-                    if new_status != old_status:
-                        await r.hset(key, "status", new_status)
+                        if db_check.deadline and now > db_check.deadline:
+                            new_status = "down"
+                        else:
+                            new_status = "up" if last_ping_str else "new"
+                        
+                        if new_status != old_status:
+                            await r.hset(key, "status", new_status)
 
             except Exception as e:
                 logger.error(f"Failed to re-evaluate status for check {db_check.id} during update: {e}")
@@ -1271,19 +1271,19 @@ async def delete_user_and_data(db: AsyncSession, user: models.User):
     # Optional: Clean up any related Redis data if necessary
     if not settings.DEBUG_MODE:
         try:
-            r = get_redis_connection()
-            if r:
-                pipe = r.pipeline()
-                # Clean up user stats counters
-                pipe.delete(f"user_stats:counters:{user.id}")
-                # Clean up check-related keys (explicit and non-blocking)
-                if check_ids:
-                    for check_id in check_ids:
-                        pipe.unlink(get_check_runtime_redis_key(check_id))
-                        pipe.unlink(f"ping_logs:{check_id}")
-                        pipe.unlink(f"check_content:{check_id}")
-                await pipe.execute()
-                logger.info(f"Cleaned up Redis entries for deleted user {user.id}")
+            async with ephemeral_redis() as r:
+                if r:
+                    pipe = r.pipeline()
+                    # Clean up user stats counters
+                    pipe.delete(f"user_stats:counters:{user.id}")
+                    # Clean up check-related keys (explicit and non-blocking)
+                    if check_ids:
+                        for check_id in check_ids:
+                            pipe.unlink(get_check_runtime_redis_key(check_id))
+                            pipe.unlink(f"ping_logs:{check_id}")
+                            pipe.unlink(f"check_content:{check_id}")
+                    await pipe.execute()
+                    logger.info(f"Cleaned up Redis entries for deleted user {user.id}")
         except Exception as e:
             logger.error(f"Error cleaning up Redis entries for deleted user {user.id}: {e}")
 
@@ -1307,9 +1307,9 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         old_status = "new"
         if not settings.DEBUG_MODE:
             try:
-                r = get_redis_connection()
-                if r:
-                    old_status = await r.hget(get_check_runtime_redis_key(db_check.id), "status") or "new"
+                async with ephemeral_redis() as r:
+                    if r:
+                        old_status = await r.hget(get_check_runtime_redis_key(db_check.id), "status") or "new"
             except Exception:
                 pass # Use default status on error
 
@@ -1331,14 +1331,14 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         # Clean up associated Redis keys
         if not settings.DEBUG_MODE:
             try:
-                r = get_redis_connection()
-                if r:
-                    pipe = r.pipeline()
-                    pipe.unlink(get_check_runtime_redis_key(check_id))
-                    pipe.unlink(f"ping_logs:{check_id}")
-                    pipe.unlink(f"check_content:{check_id}")
-                    await pipe.execute()
-                    logger.info(f"Cleaned up Redis entries for deleted check {check_id}")
+                async with ephemeral_redis() as r:
+                    if r:
+                        pipe = r.pipeline()
+                        pipe.unlink(get_check_runtime_redis_key(check_id))
+                        pipe.unlink(f"ping_logs:{check_id}")
+                        pipe.unlink(f"check_content:{check_id}")
+                        await pipe.execute()
+                        logger.info(f"Cleaned up Redis entries for deleted check {check_id}")
             except Exception as e:
                 logger.error(f"Error cleaning up Redis entries for deleted check {check_id}: {e}")
 
