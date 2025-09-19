@@ -16,9 +16,10 @@ from sqlalchemy.exc import IntegrityError
 import logging
 import time
 import asyncio
+import hashlib
 from app.db import models
 from app import schemas, security, metrics
-from app.services import notifications, alerting
+from app.services import notifications, alerting, rate_control
 from app.core import encryption
 from app.worker import celery_app
 from app.core.config import settings
@@ -1231,6 +1232,12 @@ async def update_check_telegram_settings(db: AsyncSession, check_id: int, settin
             token = update_data.pop('telegram_bot_token') # Remove from dict
             if token: # Only update if a new token is provided
                 db_check.telegram_bot_token = encryption.encrypt_token(token, principal.auth_key)
+                # Cache identity to avoid decryption on rate snapshot
+                try:
+                    identity = hashlib.sha256(token.encode("utf-8")).hexdigest()[:10]
+                    await rate_control.cache_identity("telegram", db_check.id, identity)
+                except Exception:
+                    pass
 
         for key, value in update_data.items():
             setattr(db_check, key, value)
@@ -1253,6 +1260,12 @@ async def update_check_slack_settings(db: AsyncSession, check_id: int, settings_
             url = update_data.pop('slack_webhook_url')
             if url:
                 db_check.slack_webhook_url = encryption.encrypt_token(url, principal.auth_key)
+                # Cache identity to avoid decryption on rate snapshot
+                try:
+                    identity = hashlib.sha256(url.encode("utf-8")).hexdigest()[:10]
+                    await rate_control.cache_identity("slack", db_check.id, identity)
+                except Exception:
+                    pass
         for key, value in update_data.items():
             setattr(db_check, key, value)
         await db.commit()
@@ -1274,6 +1287,12 @@ async def update_check_discord_settings(db: AsyncSession, check_id: int, setting
             url = update_data.pop('discord_webhook_url')
             if url:
                 db_check.discord_webhook_url = encryption.encrypt_token(url, principal.auth_key)
+                # Cache identity to avoid decryption on rate snapshot
+                try:
+                    identity = hashlib.sha256(url.encode("utf-8")).hexdigest()[:10]
+                    await rate_control.cache_identity("discord", db_check.id, identity)
+                except Exception:
+                    pass
         for key, value in update_data.items():
             setattr(db_check, key, value)
         await db.commit()
@@ -1295,6 +1314,12 @@ async def update_check_webhook_settings(db: AsyncSession, check_id: int, setting
             url = update_data.pop('webhook_url')
             if url:
                 db_check.webhook_url = encryption.encrypt_token(url, principal.auth_key)
+                # Cache identity to avoid decryption on rate snapshot
+                try:
+                    identity = hashlib.sha256(url.encode("utf-8")).hexdigest()[:10]
+                    await rate_control.cache_identity("webhook", db_check.id, identity)
+                except Exception:
+                    pass
         for key, value in update_data.items():
             setattr(db_check, key, value)
         await db.commit()

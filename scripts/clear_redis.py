@@ -23,7 +23,7 @@ async def main():
         if not r:
             logger.error("Could not get Redis connection. Aborting.")
             return
-        r.ping()
+        await r.ping()
         logger.info("Successfully connected to Redis.")
     except Exception as e:
         logger.error(f"Failed to connect to Redis: {e}")
@@ -48,11 +48,11 @@ async def main():
     for pattern in key_patterns:
         logger.info(f"Scanning for keys matching pattern: {pattern}")
         # scan_iter returns bytes, so we decode for logging
-        keys_to_delete = [key for key in r.scan_iter(match=pattern)]
+        keys_to_delete = [key async for key in r.scan_iter(match=pattern)]
         
         if keys_to_delete:
             logger.info(f"Found {len(keys_to_delete)} keys to delete for pattern '{pattern}'. Deleting...")
-            deleted_count = r.delete(*keys_to_delete)
+            deleted_count = await r.delete(*keys_to_delete)
             total_deleted_count += deleted_count
             logger.info(f"Deleted {deleted_count} keys.")
         else:
@@ -60,10 +60,16 @@ async def main():
 
     if specific_keys:
         logger.info(f"Deleting specific keys: {specific_keys}")
-        # Ensure keys are bytes if they exist
-        existing_specific_keys = [k for k in specific_keys if r.exists(k)]
+        # Ensure keys exist before attempting delete
+        existing_specific_keys = []
+        for k in specific_keys:
+            try:
+                if await r.exists(k):
+                    existing_specific_keys.append(k)
+            except Exception:
+                continue
         if existing_specific_keys:
-            deleted_count = r.delete(*existing_specific_keys)
+            deleted_count = await r.delete(*existing_specific_keys)
             total_deleted_count += deleted_count
             logger.info(f"Deleted {deleted_count} keys.")
         else:
