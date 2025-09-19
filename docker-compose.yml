@@ -32,7 +32,7 @@ services:
   migrate:
     build: .
     container_name: ttl_rip_migrate
-    command: alembic upgrade head
+    command: python -m alembic upgrade head
     volumes:
       - ./app:/app/app
     env_file:
@@ -87,7 +87,7 @@ services:
   worker:
     build: .
     container_name: ttl_rip_worker
-    command: celery -A app.worker.celery_app worker --loglevel=info -P solo -B
+    command: sh -lc 'if [ "${EMBED_BEAT:-0}" = "1" ]; then celery -A app.worker.celery_app worker --loglevel=info -P solo -B; else celery -A app.worker.celery_app worker --loglevel=info -P solo; fi'
     volumes:
       - ./app:/app/app
     env_file:
@@ -104,6 +104,22 @@ services:
       web:
         condition: service_healthy
 
+  beat:
+    build: .
+    container_name: ttl_rip_beat
+    command: sh -lc 'if [ "${EMBED_BEAT:-0}" = "1" ]; then echo "Beat embedded in worker; exiting."; exit 0; else celery -A app.worker.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule; fi'
+    volumes:
+      - ./app:/app/app
+    env_file:
+      - .env.example
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:
