@@ -3,7 +3,7 @@ import { copyUrl, debounce } from '/static/js/shared/ui.js';
 let authKey = window.AUTH_KEY;
 let csrfToken = window.CSRF_TOKEN;
 let isConnectionLost = false;
-let currentSortBy = 'id';
+let currentSortBy = 'last_ping';
 let currentSortDir = 'desc';
 let currentTagFilter = '';
 let selectedTags = new Set();
