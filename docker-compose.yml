@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15
@@ -108,7 +106,6 @@ services:
     command: ["tunnel", "run"]
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./config/hosts:/etc/hosts
     healthcheck:
       test: ["CMD", "cloudflared", "--version"]
       interval: 30s
