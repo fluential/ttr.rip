@@ -171,6 +171,14 @@
             <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
           {% endif %}
         </div>
+        <div class="meta" style="margin:.3rem 0;">
+          {% if check.schedule_type == 'interval' and check.interval_seconds %}
+            <span class="badge">{{ (check.interval_seconds)|int }}s</span>
+          {% elif check.schedule %}
+            <span class="badge">cron</span>
+          {% endif %}
+          {% if check.tags %}<span class="badge">#{{ check.tags|length }}</span>{% endif %}
+        </div>
         <small>
           {% if check.last_ping %}
             <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">recently</span>
@@ -195,11 +203,17 @@
           {% endif %}
         </div>
         <div class="t-meta">
-          Last check:
           {% if check.last_ping %}
-            <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">recently</span>
+            Last check: <span class="last-ping-time" data-timestamp="{{ check.last_ping.isoformat() }}">recently</span>
           {% else %}
-            Never
+            Never pinged
+          {% endif %}
+          {% if check.last_duration_seconds %} • {{ (check.last_duration_seconds*1000)|round(0)|int }} ms{% endif %}
+          {% if check.tags %}
+            •
+            {% for tag in check.tags %}
+              <span class="badge">{{ tag.name }}</span>
+            {% endfor %}
           {% endif %}
         </div>
       </div>
@@ -212,6 +226,15 @@
       {% set st = (check.status or 'new') %}
       <div class="card">
         <div class="title">{{ check.name }}</div>
+
+        {% if check.tags %}
+        <div style="margin:.25rem 0 .5rem 0">
+          {% for tag in check.tags %}
+            <span class="badge">{{ tag.name }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
         <div style="margin:.5rem 0 .8rem 0">
           {% if check.paused %}
             <span class="badge paused">PAUSED</span>
@@ -219,6 +242,17 @@
             <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
           {% endif %}
         </div>
+
+        <div class="meta" style="margin-bottom:.5rem">
+          {% if check.schedule_type == 'interval' and check.interval_seconds %}
+            <span class="badge">{{ (check.interval_seconds)|int }}s</span>
+            {% if check.grace_seconds %}<span class="badge">grace {{ (check.grace_seconds)|int }}s</span>{% endif %}
+          {% elif check.schedule_type in ['cron','oncalendar'] and check.schedule %}
+            <span class="badge">cron</span>
+          {% endif %}
+          {% if check.last_duration_seconds %}<span class="badge">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>{% endif %}
+        </div>
+
         <div class="meta">
           Last check:
           {% if check.last_ping %}
@@ -227,6 +261,30 @@
             Never
           {% endif %}
         </div>
+
+        {% set ping_id = check.slug or check.uuid %}
+        {% if user_slug and ping_id %}
+        <div class="meta" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+          <a href="/p/{{ user_slug }}/{{ ping_id }}" target="_blank">Ping URL</a>
+          <a href="/p/{{ user_slug }}/{{ ping_id }}/badge.svg" target="_blank">Badge</a>
+          <button class="copy-btn" data-copy="/p/{{ user_slug }}/{{ ping_id }}">Copy</button>
+        </div>
+        {% endif %}
+
+        {% if check.last_pings is defined and check.last_pings %}
+        <details style="margin-top:.5rem">
+          <summary>Recent activity</summary>
+          <ul style="margin:.5rem 0 0 1rem">
+            {% for lp in check.last_pings[:3] if check.last_pings is sequence %}
+              <li>
+                {% if lp.timestamp %}<span class="last-ping-time" data-timestamp="{{ lp.timestamp }}">recently</span>{% endif %}
+                {% if lp.country_code %} • {{ lp.country_code }}{% endif %}
+                {% if lp.user_agent %} • {{ lp.user_agent[:24] }}{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
       </div>
     {% endfor %}
   </div>
@@ -268,6 +326,19 @@ document.addEventListener('DOMContentLoaded', () => {
           elem.textContent = formatTimeAgo(date);
           elem.title = date.toLocaleString();
       }
+  });
+
+  // Copy Ping URL buttons
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const text = btn.dataset.copy;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = original; }, 1200);
+      }).catch(() => {});
+    });
   });
 
   const loadTime = performance.now() - window.pageLoadStartTime;

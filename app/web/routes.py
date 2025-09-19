@@ -284,6 +284,7 @@ async def public_status_page(
         "status_page": status_page,
         "overall_status": overall_status,
         "layout": layout,
+        "user_slug": user_slug,
         "is_public_status_page": True,
         "process_time": getattr(request.state, "process_time", 0),
         "redis_connected": request.app.state.redis_connected,
