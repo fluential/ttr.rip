@@ -1,11 +1,12 @@
 import secrets
 from datetime import timedelta, datetime, timezone
 from fastapi import APIRouter, Request, Depends, Form, status, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, ORJSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 import logging
 import json
 
@@ -300,14 +301,26 @@ async def public_status_page_data(
     request: Request,
     db: AsyncSession = Depends(db_base.get_db),
 ):
-    user = await crud.get_user_by_slug(db, slug=user_slug)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    status_page = await crud.get_status_page_by_slug(db, user=user, page_slug=page_slug)
-    if not status_page or not status_page.is_public:
+    # Single query: join user->status_page and eager load checks + tags to avoid extra DB roundtrips
+    stmt = (
+        select(db_models.StatusPage)
+        .join(db_models.User, db_models.StatusPage.owner_id == db_models.User.id)
+        .where(
+            db_models.User.slug == user_slug,
+            db_models.StatusPage.slug == page_slug,
+            db_models.StatusPage.is_public.is_(True),
+        )
+        .options(
+            selectinload(db_models.StatusPage.checks).selectinload(db_models.Check.tags),
+            selectinload(db_models.StatusPage.owner),
+        )
+    )
+    result = await db.execute(stmt)
+    status_page = result.scalars().first()
+    if not status_page:
         raise HTTPException(status_code=404, detail="Status page not found")
 
-    # Enrich runtime data
+    # Enrich runtime data (Redis) and default missing statuses to 'new'
     if status_page.checks:
         await crud.enrich_checks_with_runtime_data(status_page.checks)
         for c in status_page.checks:
@@ -334,7 +347,7 @@ async def public_status_page_data(
             "tags": [t.name for t in getattr(c, "tags", [])] if getattr(c, "tags", None) else [],
         })
 
-    return JSONResponse(content={
+    return ORJSONResponse(content={
         "overall_status": overall_status,
         "checks": checks_payload,
     })
