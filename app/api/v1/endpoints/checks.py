@@ -427,7 +427,7 @@ async def get_integration_rate_snapshot(
     check_id: int,
     integration: str,
     db: AsyncSession = Depends(db_base.get_db),
-    principal: db_models.User = Depends(security.get_public_user_from_key),
+    principal: db_models.User = Depends(security.get_either_admin_or_public_user),
 ):
     """
     Returns current adaptive rate state for the given integration on this check.

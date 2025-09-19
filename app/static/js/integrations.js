@@ -99,6 +99,8 @@ async function fetchIntegrationRate(integration) {
             ? data.max_tokens : 'N/A';
         const limitPerMin = data && typeof data.assumed_limit_per_minute === 'number'
             ? data.assumed_limit_per_minute.toFixed(0) : '30';
+        const sentPerMin = data && typeof data.sent_per_minute === 'number'
+            ? data.sent_per_minute.toFixed(0) : 'N/A';
 
         let statusIcon = '✅';
         let statusText = 'normal';
@@ -113,7 +115,7 @@ async function fetchIntegrationRate(integration) {
             }
         }
 
-        rateEl.innerHTML = `<strong>Rate:</strong> ${perMin}/min (limit ${limitPerMin}/min, min ${minPerMin}/min, burst ${burst}) — ${statusIcon} ${statusText}`;
+        rateEl.innerHTML = `<strong>Rate:</strong> sent ${sentPerMin}/min, allowed ${perMin}/min (limit ${limitPerMin}/min, min ${minPerMin}/min, burst ${burst}) — ${statusIcon} ${statusText}`;
     } catch (e) {
         console.error("Failed to load rate snapshot:", e);
         rateEl.innerHTML = `<strong>Rate:</strong> ⚠️ unavailable`;

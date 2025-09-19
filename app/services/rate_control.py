@@ -53,6 +53,9 @@ class TransientSendError(Exception):
 def _state_key(channel: str, identity: str) -> str:
     return f"rc:{channel}:{identity}:state"
 
+def _sent_key(channel: str, identity: str) -> str:
+    return f"rc:{channel}:{identity}:sent"
+
 
 # Atomic reserve via Lua (refill, honor backoff, grant or compute wait)
 _RESERVE_LUA = """
@@ -166,6 +169,15 @@ async def report(
                 max_tokens = min(BURST_MAX, max_tokens + 0.25)
             # Decay backoff level
             backoff_level = max(backoff_level - 1, 0)
+            # Track send event for actual throughput (sliding window)
+            try:
+                skey = _sent_key(channel, identity)
+                await r.zadd(skey, {str(now_ms): now_ms})
+                # Keep last 10 minutes of events
+                await r.zremrangebyscore(skey, 0, now_ms - 600_000)
+                await r.expire(skey, 900)
+            except Exception:
+                pass
 
         elif outcome == "rate_limited":
             refill_rps = max(refill_rps * MD_FACTOR, RPS_MIN)
@@ -221,6 +233,7 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
             "current_rps_per_minute": START_RPS * 60.0,
             "min_rps_per_minute": DRIP_RPS * 60.0,
             "assumed_limit_per_minute": ASSUMED_LIMIT_PER_MIN,
+            "sent_per_minute": 0,
             "tokens": BURST_MAX,
             "max_tokens": BURST_MAX,
             "backoff_seconds_remaining": 0.0,
@@ -254,6 +267,17 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
             limited_reason = "rate_limited"
             retry_after = (1.0 - refilled_tokens) / eff_rps if eff_rps > 0 else None
 
+        # Compute actual sends/min from sliding window
+        sent_per_minute = 0
+        try:
+            skey = _sent_key(channel, identity)
+            # Trim old entries and count last 60s
+            await r.zremrangebyscore(skey, 0, now_ms - 600_000)
+            cnt = await r.zcount(skey, now_ms - 60_000, now_ms)
+            sent_per_minute = int(cnt or 0)
+        except Exception:
+            sent_per_minute = 0
+
         return {
             "enabled": True,
             "limited": limited,
@@ -264,6 +288,7 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
             "current_rps_per_minute": eff_rps * 60.0,
             "min_rps_per_minute": DRIP_RPS * 60.0,
             "assumed_limit_per_minute": ASSUMED_LIMIT_PER_MIN,
+            "sent_per_minute": sent_per_minute,
             "tokens": refilled_tokens,
             "max_tokens": max_tokens,
             "backoff_seconds_remaining": backoff_seconds,
@@ -279,6 +304,7 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
             "current_rps_per_minute": START_RPS * 60.0,
             "min_rps_per_minute": DRIP_RPS * 60.0,
             "assumed_limit_per_minute": ASSUMED_LIMIT_PER_MIN,
+            "sent_per_minute": 0,
             "tokens": BURST_MAX,
             "max_tokens": BURST_MAX,
             "backoff_seconds_remaining": 0.0,

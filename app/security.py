@@ -212,6 +212,33 @@ async def get_current_admin_user(
     return user
 
 
+async def get_either_admin_or_public_user(
+    request: Request,
+    db: AsyncSession = Depends(db_base.get_db),
+    token_from_header: Optional[str] = Depends(oauth2_scheme),
+) -> db_models.User:
+    """
+    Resolve a principal either via admin Authorization header (Bearer) or X-Auth-Key.
+    - If a valid admin JWT is provided, return that admin user (can access any check).
+    - Otherwise, fall back to public key auth via X-Auth-Key.
+    """
+    # Try admin token first
+    if token_from_header:
+        try:
+            payload = jwt.decode(token_from_header, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            username: str = payload.get("sub")
+            if username:
+                user = await crud.get_user_by_username(db, username=username)
+                if user and user.is_admin:
+                    return user
+        except JWTError:
+            pass  # fall through to public key
+
+    # Fallback to public key auth
+    x_auth_key = request.headers.get("X-Auth-Key")
+    return await get_public_user_from_key(x_auth_key=x_auth_key, db=db, request=request)
+
+
 def create_telegram_session_token(data: dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
