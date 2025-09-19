@@ -275,20 +275,3 @@
     }
 }
 
-pings.example.com:8080 {
-    @pings {
-        path /p /p/*
-    }
-    rate_limit {
-        zone_size 10M
-        zone pings {
-            key {remote_host}
-            matcher @pings
-            events 5
-            window 1s
-            burst 20
-        }
-    }
-
-    reverse_proxy web:8000
-}
