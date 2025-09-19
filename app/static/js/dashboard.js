@@ -610,9 +610,9 @@ async function fetchDashboardAggregate() {
 
         // Render checks table
         const data = agg.checks;
-        const selected = Array.from(selectedTags);
-        const checks = selected.length
-            ? data.items.filter(c => selected.every(t => (c.tags || []).some(tag => tag.name === t)))
+        const selected2 = Array.from(selectedTags);
+        const checks = selected2.length
+            ? data.items.filter(c => selected2.every(t => (c.tags || []).some(tag => tag.name === t)))
             : data.items;
         checks.forEach(c => checksData[c.id] = c); // Update global cache
         allChecksForStatusPage = checks; // Cache for status page form
@@ -1116,9 +1116,9 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         }
 
         const data = await response.json();
-    const selected = Array.from(selectedTags);
-    const checks = selected.length
-        ? data.items.filter(c => selected.every(t => (c.tags || []).some(tag => tag.name === t)))
+    const selected2 = Array.from(selectedTags);
+    const checks = selected2.length
+        ? data.items.filter(c => selected2.every(t => (c.tags || []).some(tag => tag.name === t)))
         : data.items;
     checks.forEach(c => checksData[c.id] = c); // Update global cache
     allChecksForStatusPage = checks; // Cache for status page form
