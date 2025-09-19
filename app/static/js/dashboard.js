@@ -22,6 +22,14 @@ let metricsEtag = null;
 let lastUserStats = null;
 let lastOperationalMetrics = null;
 
+function setLastUpdatedNow() {
+    const el = document.getElementById('last-updated');
+    if (el) {
+        const now = new Date();
+        el.textContent = `Last updated: ${now.toLocaleString()}`;
+    }
+}
+
 function getUserSlug() {
     return (currentUser && currentUser.slug) || (window.USER_SLUG || '');
 }
@@ -759,6 +767,7 @@ async function fetchDashboardAggregate() {
 
         // Render tags
         renderTagFilter(agg.tags);
+        setLastUpdatedNow();
     } catch (error) {
         console.error("Error fetching dashboard aggregate:", error);
         updateConnectionStatus('error');
@@ -1035,12 +1044,12 @@ function toggleAutoRefresh() {
     if (autoRefreshEnabled) {
         button.textContent = '⏸️';
         button.title = 'Pause automatic refresh';
-        statusEl.innerHTML = `Auto-refresh: <span id="refresh-countdown">${autoRefreshInterval}</span>s`;
+        statusEl.innerHTML = `<span id="refresh-countdown">${autoRefreshInterval}</span>s to refresh`;
         startAutoRefreshTimer();
     } else {
         button.textContent = '▶️';
         button.title = 'Resume automatic refresh';
-        statusEl.textContent = 'Auto-refresh: paused';
+        statusEl.textContent = 'Refresh paused';
         stopAutoRefreshTimer();
     }
 }
@@ -1215,6 +1224,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
     }
     updatePagination(data.next_cursor, data.prev_cursor);
     updateSortIndicators();
+    setLastUpdatedNow();
 
     } catch (error) {
         console.error("Network error during fetchChecks:", error);
