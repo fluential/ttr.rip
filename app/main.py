@@ -438,15 +438,8 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
         except Exception as e:
             logger.error(f"Failed to store ping content in Redis for check {db_check.id}: {e}")
 
-    # Get previous status from Redis for metrics
-    previous_status = "new"
-    if not settings.DEBUG_MODE:
-        try:
-            r = get_redis_connection()
-            if r:
-                previous_status = await r.hget(crud.get_check_runtime_redis_key(db_check.id), "status") or "new"
-        except Exception as e:
-            logger.error(f"Could not get previous status from Redis for check {db_check.id}: {e}")
+    # Get previous status from DB for metrics
+    previous_status = db_check.status or "new"
 
     updated_check, reason = await crud.update_check_ping(db, check=db_check, content=content)
 
@@ -496,28 +489,18 @@ async def get_status_badge(user_slug: str, check_identifier: str, db: AsyncSessi
     if not db_check:
         raise HTTPException(status_code=404, detail="Check not found")
 
-    # Get current status from Redis and re-evaluate to ensure badge is up-to-date.
-    current_status = "new"
-    if not settings.DEBUG_MODE:
-        try:
-            r = get_redis_connection()
-            if r:
-                key = crud.get_check_runtime_redis_key(db_check.id)
-                runtime_data = await r.hgetall(key)
-                current_status = runtime_data.get("status", "new")
-                last_ping_str = runtime_data.get("last_ping")
-
-                if current_status != 'down':
-                    now = datetime.now(timezone.utc)
-                    reference_time = datetime.fromisoformat(last_ping_str) if last_ping_str else db_check.created_at
-                    
-                    deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
-                    
-                    if now > deadline:
-                        current_status = "down"
-        except Exception as e:
-            logger.error(f"Failed to get runtime status for badge for check {db_check.id}: {e}")
-            current_status = "unknown" # Should probably be a different badge
+    # Determine current status from DB and deadline
+    current_status = db_check.status or "new"
+    try:
+        if current_status != 'down':
+            now = datetime.now(timezone.utc)
+            reference_time = db_check.last_ping or db_check.created_at
+            deadline = reference_time + timedelta(seconds=db_check.interval_seconds + db_check.grace_seconds)
+            if now > deadline:
+                current_status = "down"
+    except Exception as e:
+        logger.error(f"Failed to compute badge status for check {db_check.id}: {e}")
+        current_status = "unknown"  # Should probably be a different badge
     
     status = "paused" if db_check.paused else current_status
     badge_svg = BADGE_TEMPLATES.get(status, BADGE_TEMPLATES["new"])

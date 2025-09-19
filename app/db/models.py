@@ -55,6 +55,8 @@ class User(Base):
     slug: Optional[str] = Column(String, unique=True, index=True, nullable=True)
     hashed_password: Optional[str] = Column(String, nullable=True)
     is_admin: bool = Column(Boolean, default=False, nullable=False)
+    # Version used for ETag on checks lists
+    checks_version: int = Column(Integer, default=0, nullable=False)
 
     # For anonymous/telegram users
     auth_key: Optional[str] = Column(String, unique=True, index=True, nullable=True)
@@ -108,6 +110,12 @@ class Check(Base):
     grace_seconds: int = Column(Integer)
 
     deadline: Optional[datetime] = Column(DateTime(timezone=True), nullable=True, index=True)
+    # Runtime status persisted in DB (no longer only in Redis)
+    status: str = Column(String, default="new", nullable=False, index=True)
+    last_ping: Optional[datetime] = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_start: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    last_duration_seconds: Optional[float] = Column(Float, nullable=True)
+    failure_count: int = Column(Integer, default=0, nullable=False)
     max_runtime_seconds: Optional[int] = Column(Integer, nullable=True)
     paused: bool = Column(Boolean, default=False, nullable=False)
 
@@ -150,11 +158,6 @@ class Check(Base):
 
     owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # Runtime-only fields (not persisted). These are populated from Redis at read time.
-    # Providing defaults avoids AttributeError when templates or APIs access them before enrichment.
-    status: ClassVar[Optional[str]] = None
-    last_ping: ClassVar[Optional[datetime]] = None
-    last_duration_seconds: ClassVar[Optional[float]] = None
 
     owner = relationship("User", back_populates="checks", lazy="selectin")
     status_pages = relationship("StatusPage", secondary=status_page_checks, back_populates="checks")

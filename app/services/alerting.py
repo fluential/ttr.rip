@@ -46,11 +46,11 @@ def _rate_key(channel: str, identity: str) -> str:
     return f"rate:{channel}:{identity}"
 
 
-async def _get_redis():
+def _get_redis():
     if get_redis_connection is None:
         return None
     try:
-        return await get_redis_connection()
+        return get_redis_connection()
     except Exception:
         return None
 
@@ -72,7 +72,7 @@ async def record_check_transition(
 
     Returns True if flapping was detected and suppression engaged; False otherwise.
     """
-    r = await _get_redis()
+    r = _get_redis()
     if r is None:
         return False  # No Redis: cannot persist, treat as not flapping
 
@@ -141,7 +141,7 @@ async def should_suppress_alert(check_id: int) -> bool:
     """
     Check whether alerts are currently suppressed for a check due to flapping.
     """
-    r = await _get_redis()
+    r = _get_redis()
     if r is None:
         return False
     try:
@@ -168,7 +168,7 @@ async def rate_limit_ok(
         # Without identity, we can't limit per-bot; allow
         return True
 
-    r = await _get_redis()
+    r = _get_redis()
     if r is None:
         return True
 

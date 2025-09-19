@@ -100,19 +100,17 @@ def get_check_runtime_redis_key(check_id: int) -> str:
 async def enrich_checks_with_runtime_data(checks: list[models.Check]):
     """
     Enriches a list of Check model objects with runtime data from Redis.
-    This includes status, last ping, ping logs, and last content.
+    DB is the source of truth for status/last_* now; we only fetch optional logs/content.
     """
     if not checks:
         return
 
-    # Set defaults for all checks first
+    # Ensure optional runtime-related arrays/strings have defaults; status/timestamps are in DB now
     for check in checks:
-        check.status = "new"
-        check.last_ping = None
-        check.last_start = None
-        check.last_duration_seconds = None
-        check.last_pings = []
-        check.last_content = None
+        if not hasattr(check, "last_pings") or check.last_pings is None:
+            check.last_pings = []
+        if not hasattr(check, "last_content"):
+            check.last_content = None
 
     if settings.DEBUG_MODE:
         return
@@ -120,34 +118,19 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
     try:
         async with ephemeral_redis() as r:
             if not r:
-                raise ConnectionError("Redis connection not available")
+                return
 
             pipe = r.pipeline()
             for check in checks:
                 key = get_check_runtime_redis_key(check.id)
-                pipe.hmget(key, "status", "last_ping", "last_start", "last_duration_seconds", "last_pings", "last_content")
-            
+                pipe.hmget(key, "last_pings", "last_content")
             results = await pipe.execute()
 
         for i, check in enumerate(checks):
-            status_val, last_ping_str, last_start_str, last_duration_str, last_pings_json, last_content = results[i]
+            last_pings_json, last_content = results[i]
 
-            # Normalize potential bytes from Redis
-            if isinstance(status_val, bytes):
-                status_val = status_val.decode()
-            if isinstance(last_ping_str, bytes):
-                last_ping_str = last_ping_str.decode()
-            if isinstance(last_start_str, bytes):
-                last_start_str = last_start_str.decode()
-            if isinstance(last_duration_str, bytes):
-                last_duration_str = last_duration_str.decode()
             if isinstance(last_content, bytes):
                 last_content = last_content.decode()
-
-            check.status = status_val or "new"
-            check.last_ping = datetime.fromisoformat(last_ping_str) if last_ping_str else None
-            check.last_start = datetime.fromisoformat(last_start_str) if last_start_str else None
-            check.last_duration_seconds = float(last_duration_str) if last_duration_str else None
 
             # Parse last_pings JSON array (keep [] on error)
             last_pings_list = []
@@ -166,9 +149,8 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
 
     except Exception as e:
         logger.error(f"Failed to enrich checks with Redis data: {e}")
-        # Set a special status if Redis fails to indicate an issue
-        for check in checks:
-            check.status = "unknown"
+        # Leave DB-backed fields as-is
+        return
 
 
 def _calculate_next_deadline(check: models.Check, from_time: datetime) -> Optional[datetime]:
@@ -329,17 +311,15 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
     await db.refresh(db_user)
     return db_user
 
-async def bump_checks_version(user_id: int):
+async def bump_checks_version(db: AsyncSession, user_id: int):
     """
     Bump the per-user checks version used for lightweight ETag generation.
-    Safe to call frequently; uses Redis INCR.
+    Persisted in the database (users.checks_version).
     """
-    if not user_id or settings.DEBUG_MODE:
+    if not user_id:
         return
     try:
-        r = get_redis_connection()
-        if r:
-            await r.incr(f"checks:ver:{user_id}")
+        await db.execute(text("UPDATE users SET checks_version = COALESCE(checks_version, 0) + 1 WHERE id = :uid"), {"uid": user_id})
     except Exception as e:
         logger.debug(f"Failed to bump checks version for user {user_id}: {e}", exc_info=False)
 
@@ -523,7 +503,54 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
     if not principal.id:
         return schemas.CheckStats(total_checks=0, up_count=0, down_count=0, new_count=0, paused_count=0)
 
-    # --- Redis Counter Strategy ---
+    # Fast path: compute counts directly from DB (status persisted)
+    now_utc = datetime.now(timezone.utc)
+
+    total_checks_q = select(func.count(models.Check.id)).where(models.Check.owner_id == principal.id)
+    counts_q = select(
+        func.sum(case((models.Check.status == "up", 1), else_=0)).label("up_count"),
+        func.sum(case((models.Check.status == "down", 1), else_=0)).label("down_count"),
+        func.sum(case((models.Check.status == "new", 1), else_=0)).label("new_count"),
+        func.sum(case((models.Check.paused == True, 1), else_=0)).label("paused_count"),
+        func.avg(models.Check.interval_seconds).label("avg_interval_seconds"),
+        func.avg(models.Check.last_duration_seconds).label("avg_duration_seconds"),
+    ).where(models.Check.owner_id == principal.id)
+    overdue_q = select(func.count(models.Check.id)).where(
+        models.Check.owner_id == principal.id,
+        models.Check.paused == False,
+        models.Check.deadline.isnot(None),
+        models.Check.deadline < now_utc,
+    )
+    tags_q = select(func.count(func.distinct(models.Tag.id))).where(models.Tag.owner_id == principal.id)
+
+    total_checks = (await db.execute(total_checks_q)).scalar_one() or 0
+    counts_row = (await db.execute(counts_q)).first()
+    up_count = int((counts_row.up_count or 0)) if counts_row else 0
+    down_count = int((counts_row.down_count or 0)) if counts_row else 0
+    new_count = int((counts_row.new_count or 0)) if counts_row else 0
+    paused_count = int((counts_row.paused_count or 0)) if counts_row else 0
+    avg_interval = float(counts_row.avg_interval_seconds) if counts_row and counts_row.avg_interval_seconds is not None else None
+    avg_duration = float(counts_row.avg_duration_seconds) if counts_row and counts_row.avg_duration_seconds is not None else None
+
+    overdue_count = int((await db.execute(overdue_q)).scalar_one() or 0)
+    tags_count = int((await db.execute(tags_q)).scalar_one() or 0)
+    active_count = max(int(total_checks) - paused_count, 0)
+
+    return schemas.CheckStats(
+        total_checks=int(total_checks or 0),
+        up_count=up_count,
+        down_count=down_count,
+        new_count=new_count,
+        paused_count=paused_count,
+        overdue_count=overdue_count,
+        active_count=active_count,
+        tags_count=tags_count,
+        avg_interval_seconds=avg_interval,
+        avg_duration_seconds=avg_duration,
+        user_queued_notifications=await get_user_queued_notification_count(db, principal)
+    )
+
+    # Legacy Redis strategy (unused due to early return above)
     if not settings.DEBUG_MODE and settings.REDIS_URL:
         try:
             async with ephemeral_redis() as r:
@@ -763,91 +790,54 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
     if settings.DEBUG_MODE:
         return check, None
 
+    now = datetime.now(timezone.utc)
     try:
-        async with ephemeral_redis() as r:
-            if not r:
-                return check, None
+        previous_status = check.status or "new"
 
-            key = get_check_runtime_redis_key(check.id)
-            now = datetime.now(timezone.utc)
+        # Compute duration based on last_start (preferred) or last_ping
+        duration_seconds = None
+        if check.last_start:
+            duration_seconds = (now - check.last_start).total_seconds()
+        elif check.last_ping:
+            duration_seconds = (now - check.last_ping).total_seconds()
 
-            # Get previous state from Redis to calculate duration
-            previous_runtime_data = await r.hgetall(key)
-            previous_status = previous_runtime_data.get("status", "new")
-            last_start_str = previous_runtime_data.get("last_start")
-            last_ping_str = previous_runtime_data.get("last_ping")
+        # Persist runtime fields in DB
+        check.status = "up"
+        check.last_ping = now
+        check.last_duration_seconds = duration_seconds
+        check.last_start = None  # clear any in-progress start
+        check.failure_count = 0
 
-            duration_seconds = None
-            if last_start_str:
-                last_start = datetime.fromisoformat(last_start_str)
-                duration_seconds = (now - last_start).total_seconds()
-            elif last_ping_str:
-                last_ping = datetime.fromisoformat(last_ping_str)
-                duration_seconds = (now - last_ping).total_seconds()
+        # Update deadline
+        check.deadline = _calculate_next_deadline(check, now)
 
-            # Atomic update runtime + counters via Lua
-            lua = """
-local runtime_key = KEYS[1]
-local user_counters = KEYS[2]
-local global_counters = KEYS[3]
-local new_status = ARGV[1]
-local is_paused = ARGV[2]
-local now_iso = ARGV[3]
-local last_duration = ARGV[4]
-local clear_last_start = ARGV[5]
-local prev = redis.call('HGET', runtime_key, 'status')
-if not prev then prev = 'new' end
-redis.call('HSET', runtime_key, 'status', new_status, 'last_ping', now_iso)
-if clear_last_start == '1' then redis.call('HSET', runtime_key, 'last_start','') end
-if last_duration and last_duration ~= '' then redis.call('HSET', runtime_key, 'last_duration_seconds', last_duration) end
-if new_status == 'up' then redis.call('HSET', runtime_key, 'failure_count', 0) end
-if is_paused ~= '1' then
-  if prev ~= new_status then
-    redis.call('HINCRBY', user_counters, prev, -1)
-    redis.call('HINCRBY', global_counters, prev, -1)
-    redis.call('HINCRBY', user_counters, new_status, 1)
-    redis.call('HINCRBY', global_counters, new_status, 1)
-  end
-end
-return prev
-"""
-        user_key = f"user_stats:counters:{check.owner_id}"
-        global_key = "metrics:checks_status_counts"
-        _ = await r.eval(lua, 3, key, user_key, global_key, "up", "1" if check.paused else "0", now.isoformat(), str(duration_seconds or ""), "1")
-        # Record transition for flapping detection
+        await db.commit()
+        await db.refresh(check)
+
+        # Flapping detection (best-effort)
         try:
             await alerting.record_check_transition(check.id, "up")
         except Exception:
             pass
-        
-        # Update deadline in the database for the scheduler
-        check.deadline = _calculate_next_deadline(check, now)
 
+        # Notify recovery
         if previous_status == "down" and check.notify_on_up:
             logger.info(f"Check '{check.name}' (ID: {check.id}) is back UP.")
             message = f"🟢 Check Up: [{check.name}] is back up."
             if duration_seconds is not None:
-                duration_str = notifications.format_duration(duration_seconds)
+                duration_str = notifications.format_duration(int(duration_seconds))
                 message += f" Last run took {duration_str}."
             await notifications.schedule_all_notifications(check, message)
-        
-        await db.commit()
-        await db.refresh(check)
 
-        # Enrich the check object for the response
-        check.status = "up"
-        check.last_ping = now
-        check.last_duration_seconds = duration_seconds
-
-        # Bump ETag version for this user's checks
+        # Bump ETag version
         try:
-            await bump_checks_version(check.owner_id)
+            await bump_checks_version(db, check.owner_id)
         except Exception:
             pass
 
         return check, None
     except Exception as e:
-        logger.error(f"Failed to update check ping status in Redis for check {check.id}: {e}")
+        logger.error(f"Failed to update check ping status in DB for check {check.id}: {e}")
         await db.rollback()
         return check, None
 
@@ -855,12 +845,11 @@ async def update_check_start(db: AsyncSession, check: models.Check):
     if settings.DEBUG_MODE:
         return check
     try:
-        async with ephemeral_redis() as r:
-            if r:
-                key = get_check_runtime_redis_key(check.id)
-                await r.hset(key, "last_start", datetime.now(timezone.utc).isoformat())
+        check.last_start = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(check)
     except Exception as e:
-        logger.error(f"Failed to update check start time in Redis for check {check.id}: {e}")
+        logger.error(f"Failed to update check start time in DB for check {check.id}: {e}")
     return check
 
 async def toggle_check_pause(db: AsyncSession, check: models.Check):
@@ -928,39 +917,16 @@ async def update_check_fail(db: AsyncSession, check: models.Check, reason: Optio
         return check, reason
 
     try:
-        async with ephemeral_redis() as r:
-            if not r:
-                return check, reason
+        previous_status = check.status or "new"
+        # Increment failure count, set down, clear last_start
+        check.status = "down"
+        check.last_start = None
+        check.failure_count = (check.failure_count or 0) + 1
 
-            key = get_check_runtime_redis_key(check.id)
+        await db.commit()
+        await db.refresh(check)
 
-            # Lua: mark down, increment failure_count, and update counters atomically
-            lua = """
-local runtime_key = KEYS[1]
-local user_counters = KEYS[2]
-local global_counters = KEYS[3]
-local is_paused = ARGV[1]
-local prev = redis.call('HGET', runtime_key, 'status')
-if not prev then prev = 'new' end
-redis.call('HSET', runtime_key, 'status', 'down', 'last_start', '')
-local failure_count = redis.call('HINCRBY', runtime_key, 'failure_count', 1)
-if is_paused ~= '1' then
-  if prev ~= 'down' then
-    redis.call('HINCRBY', user_counters, prev, -1)
-    redis.call('HINCRBY', global_counters, prev, -1)
-    redis.call('HINCRBY', user_counters, 'down', 1)
-    redis.call('HINCRBY', global_counters, 'down', 1)
-  end
-end
-return {prev, tostring(failure_count)}
-"""
-        user_key = f"user_stats:counters:{check.owner_id}"
-        global_key = "metrics:checks_status_counts"
-        result = await r.eval(lua, 3, key, user_key, global_key, "1" if check.paused else "0")
-
-        previous_status = result[0].decode() if isinstance(result[0], bytes) else result[0]
-        failure_count = int(result[1].decode() if isinstance(result[1], bytes) else result[1])
-        # Record transition for flapping detection
+        # Flapping detection
         try:
             await alerting.record_check_transition(check.id, "down")
         except Exception:
@@ -969,27 +935,24 @@ return {prev, tostring(failure_count)}
         # --- Conditional Notification Logic ---
         should_notify = True
         notify_threshold = check.notify_after_failures or 0
-        if notify_threshold > 0 and failure_count < notify_threshold:
+        if notify_threshold > 0 and (check.failure_count or 0) < notify_threshold:
             should_notify = False
-        # --- End Logic ---
 
         if previous_status != "down" and should_notify:
             message = f"🔴 Check Failed: [{check.name}] reported a failure."
             if reason:
                 message += f" Reason: {reason}."
             await notifications.schedule_all_notifications(check, message)
-        
-        check.status = "down" # Enrich for response
 
-        # Bump ETag version for this user's checks
+        # Bump ETag version
         try:
-            await bump_checks_version(check.owner_id)
+            await bump_checks_version(db, check.owner_id)
         except Exception:
             pass
 
         return check, reason
     except Exception as e:
-        logger.error(f"Failed to update check fail status in Redis for check {check.id}: {e}")
+        logger.error(f"Failed to update check fail status in DB for check {check.id}: {e}")
         return check, reason
 
 async def get_checks_by_owner(db: AsyncSession, principal: models.User, size: int = 25, sort_by: str = 'id', sort_direction: str = 'desc', cursor: Optional[str] = None, tag: Optional[str] = None):
@@ -1135,24 +1098,8 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         await db.commit()
         await db.refresh(db_check)
 
-        # Initialize runtime status in Redis
-        if not settings.DEBUG_MODE:
-            try:
-                async with ephemeral_redis() as r:
-                    if r:
-                        key = get_check_runtime_redis_key(db_check.id)
-                        await r.hset(key, mapping={"status": "new", "last_pings": "[]"})
-            except Exception as e:
-                logger.error(f"Failed to initialize Redis runtime status for check {db_check.id}: {e}")
-
-        _update_redis_stats_counters(principal.id, old_status=None, new_status="new")
-        # Increment global counters (buffered)
-        try:
-            _buffer_hincrby("metrics:checks_status_counts", "new", 1)
-        except Exception:
-            pass
         metrics.record_check_creation()
-        await bump_checks_version(principal.id)
+        await bump_checks_version(db, principal.id)
         
         result = await db.execute(
             select(models.Check)
@@ -1244,7 +1191,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         try:
             await db.commit()
             await db.refresh(db_check)
-            await bump_checks_version(principal.id)
+            await bump_checks_version(db, principal.id)
         except IntegrityError as e:
             await db.rollback()
             if "UNIQUE constraint failed: checks.slug" in str(e).lower():
@@ -1455,7 +1402,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
         except Exception:
             pass
         metrics.record_check_deletion(status_to_decrement)
-        await bump_checks_version(owner_id)
+        await bump_checks_version(db, owner_id)
 
         # Clean up associated Redis keys
         if not settings.DEBUG_MODE:

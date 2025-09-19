@@ -343,11 +343,7 @@ async def public_status_page_data(
     # Weak ETag pre-check based on per-user checks version + page id
     etag = None
     try:
-        ver = "0"
-        async with ephemeral_redis() as r:
-            if r:
-                v = await r.get(f"checks:ver:{status_page.owner_id}")
-                ver = v if isinstance(v, str) else (v.decode() if v else "0")
+        ver = str(getattr(status_page.owner, "checks_version", 0) or 0)
         # Time-bucket every 2s to reflect runtime changes in ETag
         t_bucket = int(time.time() // 2)
         etag = f'W/"{ver}:{status_page.id}:{t_bucket}"'
