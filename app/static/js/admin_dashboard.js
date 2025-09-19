@@ -1,40 +1,8 @@
+import { getCsrfToken, refreshAdminToken, fetchWithAuth } from '/static/js/shared/auth.js';
 let apiToken = sessionStorage.getItem('admin_access_token');
 const csrfToken = window.CSRF_TOKEN;
 
-async function refreshAdminToken() {
-    try {
-        const res = await fetch('/admin/token/refresh', {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': getCsrfToken() }
-        });
-        if (!res.ok) throw new Error('Refresh failed');
-        const data = await res.json();
-        apiToken = data.access_token;
-        sessionStorage.setItem('admin_access_token', apiToken);
-        return true;
-    } catch (e) {
-        console.error('Could not refresh token:', e);
-        sessionStorage.removeItem('admin_access_token');
-        window.location.href = '/admin/login';
-        return false;
-    }
-}
 
-async function fetchWithAuth(url, options = {}) {
-    const opts = { ...options };
-    opts.headers = {
-        ...(options.headers || {}),
-        'Authorization': `Bearer ${apiToken}`,
-    };
-    let res = await fetch(url, opts);
-    if (res.status === 401) {
-        const refreshed = await refreshAdminToken();
-        if (!refreshed) return res;
-        opts.headers['Authorization'] = `Bearer ${apiToken}`;
-        res = await fetch(url, opts);
-    }
-    return res;
-}
 let currentSortBy = 'id';
 let currentSortDir = 'desc';
 let pageSize = 25;
@@ -47,11 +15,6 @@ let autoRefreshTimer = null;
 let adminChecksEtag = null;
 let metricsEtag = null;
 
-function getCsrfToken() {
-    const cookies = document.cookie.split(';').map(c => c.trim());
-    const csrfCookie = cookies.find(c => c.startsWith('csrf_token='));
-    return csrfCookie ? csrfCookie.split('=')[1] : null;
-}
 
 function copyUrl(element) {
     element.select();

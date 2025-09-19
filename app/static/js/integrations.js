@@ -1,51 +1,10 @@
+import { getCsrfToken, refreshAdminToken, fetchWithAuth } from '/static/js/shared/auth.js';
 const checkId = window.CHECK_ID;
 const isAdmin = window.IS_ADMIN;
 let apiToken = sessionStorage.getItem('admin_access_token');
 
-function getCsrfToken() {
-    const cookies = document.cookie.split(';').map(c => c.trim());
-    const csrfCookie = cookies.find(c => c.startsWith('csrf_token='));
-    return csrfCookie ? csrfCookie.split('=')[1] : null;
-}
 
-async function refreshAdminToken() {
-    try {
-        const res = await fetch('/admin/token/refresh', {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': getCsrfToken() }
-        });
-        if (!res.ok) throw new Error('Refresh failed');
-        const data = await res.json();
-        apiToken = data.access_token;
-        sessionStorage.setItem('admin_access_token', apiToken);
-        return true;
-    } catch (e) {
-        console.error('Could not refresh token:', e);
-        sessionStorage.removeItem('admin_access_token');
-        window.location.href = '/admin/login';
-        return false;
-    }
-}
 
-async function fetchWithAuth(url, options = {}) {
-    const opts = { ...options };
-    if (isAdmin) {
-        opts.headers = {
-            ...(options.headers || {}),
-            'Authorization': `Bearer ${apiToken}`,
-        };
-    } else {
-        opts.headers = { ...(options.headers || {}), 'X-Auth-Key': authKey };
-    }
-    let res = await fetch(url, opts);
-    if (isAdmin && res.status === 401) {
-        const refreshed = await refreshAdminToken();
-        if (!refreshed) return res;
-        opts.headers['Authorization'] = `Bearer ${apiToken}`;
-        res = await fetch(url, opts);
-    }
-    return res;
-}
 const authKey = window.AUTH_KEY;
 const csrfToken = window.CSRF_TOKEN;
 

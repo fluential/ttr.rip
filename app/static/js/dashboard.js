@@ -1,3 +1,5 @@
+import { parseUTCDate, formatTimeDifference, formatDuration } from '/static/js/shared/time.js';
+import { copyUrl, debounce } from '/static/js/shared/ui.js';
 let authKey = window.AUTH_KEY;
 let csrfToken = window.CSRF_TOKEN;
 let isConnectionLost = false;
@@ -114,14 +116,6 @@ async function rotateApiKey() {
     }
 }
 
-function debounce(func, delay) {
-    let timeout;
-    return function(...args) {
-        const context = this;
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(context, args), delay);
-    };
-}
 
 const checkSlugAvailability = debounce(async function(slug) {
     const feedbackEl = document.getElementById('slug-feedback');
@@ -892,65 +886,8 @@ async function handleImport(file) {
     }
 }
 
-function copyUrl(element, textToCopy) {
-    if (element.dataset.copying) {
-        return;
-    }
-    element.dataset.copying = 'true';
-    const originalValue = element.value;
-    const text = textToCopy || originalValue;
 
-    navigator.clipboard.writeText(text).then(() => {
-        element.value = 'Copied!';
-        setTimeout(() => {
-            element.value = originalValue;
-            delete element.dataset.copying;
-        }, 1200);
-    }).catch(err => {
-        console.error('Failed to copy text: ', err);
-        element.value = originalValue; // Restore on error
-        delete element.dataset.copying;
-    });
-}
 
-function parseUTCDate(dateString) {
-    if (!dateString) return null;
-    // If timezone info (Z or +/-hh:mm) is missing, treat the string as UTC.
-    // This corrects for browsers interpreting naive ISO-like strings as local time.
-    if (!/Z|[+-]\d{2}:\d{2}$/.test(dateString)) {
-        return new Date(dateString.replace(' ', 'T') + 'Z');
-    }
-    return new Date(dateString);
-}
-
-function formatTimeDifference(seconds) {
-    if (isNaN(seconds)) return 'N/A';
-
-    const isPast = seconds < 0;
-    seconds = Math.abs(seconds);
-
-    if (seconds < 1) {
-        return isPast ? '0 seconds ago' : 'in 0 seconds';
-    }
-
-    const days = Math.floor(seconds / 86400);
-    seconds %= 86400;
-    const hours = Math.floor(seconds / 3600);
-    seconds %= 3600;
-    const minutes = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-
-    const parts = [];
-    if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
-    if (hours > 0) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
-    if (minutes > 0) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
-    if (secs > 0 || parts.length === 0) parts.push(`${secs} second${secs !== 1 ? 's' : ''}`);
-
-    // Show only the two most significant parts for brevity
-    const result = parts.slice(0, 2).join(' ');
-
-    return isPast ? `${result} ago` : `in ${result}`;
-}
 
 function formatDuration(seconds) {
     if (seconds === null || seconds === undefined || isNaN(seconds)) return 'N/A';

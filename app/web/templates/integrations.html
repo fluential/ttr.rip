@@ -113,5 +113,5 @@
     window.AUTH_KEY = "{{ auth_key if not is_admin else '' }}";
     window.CSRF_TOKEN = "{{ csrf_token }}";
 </script>
-<script src="/static/js/integrations.js?v={{ process_time }}" defer></script>
+<script type="module" src="/static/js/integrations.js?v={{ process_time }}"></script>
 {% endblock %}
