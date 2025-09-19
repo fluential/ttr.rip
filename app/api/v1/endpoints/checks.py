@@ -125,7 +125,8 @@ async def read_dashboard_aggregate(
         "average_api_latency_seconds": avg_api_latency,
         "average_db_latency_seconds": avg_db_latency,
         "average_redis_latency_seconds": avg_redis_latency,
-        "total_api_requests": int(parse_prometheus_metric("ttl_api_requests_total") or 0),
+        "workers_online": int(parse_prometheus_metric("ttl_workers_online") or 0),
+        "queue_depth": int(parse_prometheus_metric("ttl_queue_size") or 0),
         "health": {
             "api_latency": get_latency_health(avg_api_latency, yellow_threshold=0.5, red_threshold=1.0),
             "db_latency": get_latency_health(avg_db_latency, yellow_threshold=0.1, red_threshold=0.5),
@@ -150,7 +151,7 @@ async def read_dashboard_aggregate(
     }
 
     # Aggregate ETag
-    etag_base = f"{checks_etag}|{user_stats_payload.get('total_checks', 0)}|{metrics_summary['total_api_requests']}|{metrics_summary['total_notifications_sent']}"
+    etag_base = f"{checks_etag}|{user_stats_payload.get('total_checks', 0)}|{metrics_summary['workers_online']}|{metrics_summary['queue_depth']}|{metrics_summary['total_notifications_sent']}"
     agg_etag = f'W/"{hashlib.sha256(etag_base.encode()).hexdigest()}"'
     if request and request.headers.get("if-none-match") == agg_etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)

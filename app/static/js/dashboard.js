@@ -673,7 +673,8 @@ async function fetchDashboardAggregate() {
             metricsDiv.innerHTML = `
                 <div class="grid">
                     <div class="metric"><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
-                    <div class="metric"><strong>API Requests:</strong> ${metrics.total_api_requests || 0}</div>
+                    <div class="metric"><strong>Workers Online:</strong> ${metrics.workers_online || 0}</div>
+                    <div class="metric"><strong>Queue Depth:</strong> ${metrics.queue_depth || 0}</div>
                     <div class="metric"><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
                 </div>
                 <div class="grid">
@@ -721,7 +722,8 @@ async function fetchOperationalMetrics() {
         summaryDiv.innerHTML = `
             <div class="grid">
                 <div><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
-                <div><strong>API Requests:</strong> ${metrics.total_api_requests || 0}</div>
+                <div><strong>Workers Online:</strong> ${metrics.workers_online || 0}</div>
+                <div><strong>Queue Depth:</strong> ${metrics.queue_depth || 0}</div>
                 <div><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
             </div>
             <div class="grid">
