@@ -28,6 +28,7 @@ async def get_queue_stats():
             "total_queued": 0,
             "total_active": 0,
             "total_reserved": 0,
+            "total_checks": 0,
         }
 
     # Try Redis cache first
@@ -60,6 +61,7 @@ async def get_queue_stats():
         "total_queued": "N/A",
         "total_active": "N/A",
         "total_reserved": "N/A",
+        "total_checks": "N/A",
     }
 
 async def _store_cache(data: dict):
@@ -85,6 +87,7 @@ async def refresh_queue_stats_cache():
             "total_queued": 0,
             "total_active": 0,
             "total_reserved": 0,
+            "total_checks": 0,
         }
         await _store_cache(snapshot)
         return snapshot
@@ -98,6 +101,7 @@ async def refresh_queue_stats_cache():
                     "total_queued": "N/A",
                     "total_active": "N/A",
                     "total_reserved": "N/A",
+                    "total_checks": "N/A",
                 }
                 await _store_cache(snapshot)
                 return snapshot
@@ -106,6 +110,23 @@ async def refresh_queue_stats_cache():
             await r.ping()
             queue_name = celery_app.conf.get('task_default_queue', 'celery')
             total_queued = await r.llen(queue_name)
+            # Compute total checks from Redis global counters
+            total_checks = 0
+            try:
+                counts = await r.hgetall("metrics:checks_status_counts") or {}
+                def _to_int(v):
+                    try:
+                        if isinstance(v, (bytes, bytearray)):
+                            v = v.decode()
+                        return int(v)
+                    except Exception:
+                        return 0
+                known = ("up", "down", "new", "paused")
+                total_checks = sum(_to_int(counts.get(k)) for k in known)
+                if total_checks == 0 and counts:
+                    total_checks = sum(_to_int(v) for v in counts.values())
+            except Exception:
+                total_checks = 0
 
             inspector = celery_app.control.inspect(timeout=1)
             stats = inspector.stats()
@@ -116,6 +137,7 @@ async def refresh_queue_stats_cache():
                     "total_queued": total_queued,
                     "total_active": "N/A",
                     "total_reserved": "N/A",
+                    "total_checks": total_checks,
                 }
                 await _store_cache(snapshot)
                 return snapshot
@@ -132,6 +154,7 @@ async def refresh_queue_stats_cache():
                 "total_queued": total_queued,
                 "total_active": total_active,
                 "total_reserved": total_reserved,
+                "total_checks": total_checks,
             }
             await _store_cache(snapshot)
             return snapshot
@@ -143,6 +166,7 @@ async def refresh_queue_stats_cache():
             "total_queued": "N/A",
             "total_active": "N/A",
             "total_reserved": "N/A",
+            "total_checks": "N/A",
         }
         await _store_cache(snapshot)
         return snapshot
