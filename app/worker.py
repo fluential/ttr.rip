@@ -161,7 +161,7 @@ async def _send_notification(check_id: int, message: str, send_function):
     """Generic async logic for sending a notification and updating the DB."""
     owner_identifier_for_stats = None
     async with AsyncSessionLocal() as session:
-        async with session.begin():
+        if True:
             result = await session.execute(
                 select(Check)
                 .options(selectinload(Check.owner))
@@ -317,10 +317,11 @@ async def _check_overdue_jobs():
                     r = None
                     logger.error(f"Redis connection error while processing overdue checks: {e}")
                 for check in overdue_checks:
+                    check_id = getattr(check, "id", None)
                     try:
                         await crud.update_check_fail(session, check, reason="overdue")
                     except Exception as e:
-                        logger.error(f"Failed to mark overdue check {check.id} as down: {e}")
+                        logger.error(f"Failed to mark overdue check {check_id} as down: {e}")
             else:
                 logger.info("Scheduler found no overdue checks.")
 
@@ -348,10 +349,11 @@ async def _check_overdue_jobs():
             if long_running_checks:
                 logger.info(f"Scheduler found {len(long_running_checks)} long-running checks.")
                 for check in long_running_checks:
+                    check_id = getattr(check, "id", None)
                     try:
                         await crud.update_check_fail(session, check, reason=f"exceeded max runtime of {check.max_runtime_seconds}s")
                     except Exception as e:
-                        logger.error(f"Failed to mark long-running check {check.id} as down: {e}")
+                        logger.error(f"Failed to mark long-running check {check_id} as down: {e}")
             else:
                 logger.info("Scheduler found no long-running checks.")
 
