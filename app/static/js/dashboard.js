@@ -21,6 +21,7 @@ let dashboardAggregateEtag = null;
 let metricsEtag = null;
 let lastUserStats = null;
 let lastOperationalMetrics = null;
+let prevDisplayStatus = {};
 
 function setLastUpdatedNow() {
     const el = document.getElementById('last-updated');
@@ -596,6 +597,13 @@ async function fetchDashboardAggregate() {
                         <div><span class="health-dot ${m.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
                     </div>
                 `;
+                // Trigger subtle glow on latency dots to indicate update
+                setTimeout(() => {
+                    summaryDiv.querySelectorAll('.health-dot').forEach(dot => {
+                        dot.classList.add('glow');
+                        setTimeout(() => dot.classList.remove('glow'), 700);
+                    });
+                }, 0);
 
                 const footerApiLatency = document.getElementById('footer-api-latency');
                 const footerRedisLatency = document.getElementById('footer-redis-latency');
@@ -703,6 +711,14 @@ async function fetchDashboardAggregate() {
                 </td>
             `;
             tableBody.appendChild(row);
+            // Glow when status changes
+            const statusEl = row.querySelector('td:first-child span');
+            const prev = prevDisplayStatus[check.id];
+            if (prev !== undefined && prev !== displayStatus && statusEl) {
+                statusEl.classList.add('glow');
+                setTimeout(() => statusEl.classList.remove('glow'), 800);
+            }
+            prevDisplayStatus[check.id] = displayStatus;
         });
 
         if (statusSummary) {
@@ -759,6 +775,13 @@ async function fetchDashboardAggregate() {
                     <div><span class="health-dot ${metrics.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
                 </div>
             `;
+            // Subtle glow on update
+            setTimeout(() => {
+                metricsDiv.querySelectorAll('.health-dot').forEach(dot => {
+                    dot.classList.add('glow');
+                    setTimeout(() => dot.classList.remove('glow'), 700);
+                });
+            }, 0);
             const footerApiLatency = document.getElementById('footer-api-latency');
             const footerRedisLatency = document.getElementById('footer-redis-latency');
             if (footerApiLatency) footerApiLatency.textContent = avgApiLatency;
@@ -803,6 +826,13 @@ async function fetchOperationalMetrics() {
                         <div><span class="health-dot ${m.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
                     </div>
                 `;
+                // Trigger subtle glow on latency dots to indicate update
+                setTimeout(() => {
+                    summaryDiv.querySelectorAll('.health-dot').forEach(dot => {
+                        dot.classList.add('glow');
+                        setTimeout(() => dot.classList.remove('glow'), 700);
+                    });
+                }, 0);
 
                 const footerApiLatency = document.getElementById('footer-api-latency');
                 const footerRedisLatency = document.getElementById('footer-redis-latency');
@@ -841,6 +871,13 @@ async function fetchOperationalMetrics() {
                 <div><span class="health-dot ${metrics.health.check_duration || ''}"></span><strong>Avg. Check Duration:</strong> ${avgCheckDuration} ms</div>
             </div>
         `;
+        // Trigger subtle glow on latency dots to indicate update
+        setTimeout(() => {
+            summaryDiv.querySelectorAll('.health-dot').forEach(dot => {
+                dot.classList.add('glow');
+                setTimeout(() => dot.classList.remove('glow'), 700);
+            });
+        }, 0);
 
         // Update footer metrics
         const footerApiLatency = document.getElementById('footer-api-latency');
@@ -1214,6 +1251,14 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             </td>
         `;
         tableBody.appendChild(row);
+        // Glow when status changes
+        const statusEl = row.querySelector('td:first-child span');
+        const prev = prevDisplayStatus[check.id];
+        if (prev !== undefined && prev !== displayStatus && statusEl) {
+            statusEl.classList.add('glow');
+            setTimeout(() => statusEl.classList.remove('glow'), 800);
+        }
+        prevDisplayStatus[check.id] = displayStatus;
     });
 
     if (statusSummary) {

@@ -337,6 +337,23 @@
     .health-dot.red { background-color: #d32f2f; }
     .health-dot.unknown { background-color: #9e9e9e; }
 
+    /* Status text colors and glow on change */
+    .status-up { color: #4caf50; transition: text-shadow 800ms ease-out; }
+    .status-down { color: #d32f2f; transition: text-shadow 800ms ease-out; }
+    .status-new { color: #ffc107; transition: text-shadow 800ms ease-out; }
+    .status-paused { color: #9e9e9e; transition: text-shadow 800ms ease-out; }
+    .status-up.glow,
+    .status-down.glow,
+    .status-new.glow,
+    .status-paused.glow { text-shadow: 0 0 10px currentColor; }
+
+    /* Health-dot subtle glow to indicate refresh activity */
+    .health-dot { transition: box-shadow 600ms ease-out; }
+    .health-dot.green.glow { box-shadow: 0 0 10px 2px rgba(76,175,80,0.7); }
+    .health-dot.yellow.glow { box-shadow: 0 0 10px 2px rgba(255,193,7,0.7); }
+    .health-dot.red.glow { box-shadow: 0 0 10px 2px rgba(211,47,47,0.7); }
+    .health-dot.unknown.glow { box-shadow: 0 0 10px 2px rgba(158,158,158,0.6); }
+
     /* Make the "New Status Page" summary stand out as a call-to-action */
     summary.summary-cta {
         display: inline-block;
