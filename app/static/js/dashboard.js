@@ -1672,7 +1672,15 @@ const validateAndSaveUserSlug = debounce(async function(slug) {
             throw new Error(data.detail || 'Failed to update slug');
         }
 
+        // Ensure currentUser exists before setting
+        if (!currentUser) currentUser = {};
         currentUser.slug = data.slug;
+
+        // Update globals and input to reflect the new slug immediately
+        window.USER_SLUG = data.slug;
+        window.PING_BASE = `/p/${data.slug}`;
+        slugInput.value = data.slug;
+
         feedbackEl.textContent = 'Saved!';
         feedbackEl.style.color = 'var(--pico-color-green-500)';
         slugInput.setAttribute('aria-invalid', 'false');
