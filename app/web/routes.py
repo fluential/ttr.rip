@@ -1,7 +1,7 @@
 import secrets
 from datetime import timedelta, datetime, timezone
 from fastapi import APIRouter, Request, Depends, Form, status, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, ORJSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, ORJSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +15,7 @@ from app.db import models as db_models
 from app import crud, security, schemas
 from app.core.config import settings
 from app.core import encryption
+from app.core.redis_pool import get_redis_connection
 
 router = APIRouter()
 admin_router = APIRouter(prefix="/admin")
@@ -320,6 +321,19 @@ async def public_status_page_data(
     if not status_page:
         raise HTTPException(status_code=404, detail="Status page not found")
 
+    # Weak ETag pre-check based on per-user checks version + page id
+    etag = None
+    try:
+        r = get_redis_connection()
+        if r:
+            ver = await r.get(f"checks:ver:{status_page.owner_id}") or "0"
+            etag = f'W/"{ver}:{status_page.id}"'
+            inm = request.headers.get("if-none-match")
+            if inm and inm == etag:
+                return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag, "Cache-Control": "public, max-age=2"})
+    except Exception:
+        etag = None
+
     # Enrich runtime data (Redis) and default missing statuses to 'new'
     if status_page.checks:
         await crud.enrich_checks_with_runtime_data(status_page.checks)
@@ -347,10 +361,14 @@ async def public_status_page_data(
             "tags": [t.name for t in getattr(c, "tags", [])] if getattr(c, "tags", None) else [],
         })
 
-    return ORJSONResponse(content={
+    payload = {
         "overall_status": overall_status,
         "checks": checks_payload,
-    })
+    }
+    headers = {}
+    if etag:
+        headers = {"ETag": etag, "Cache-Control": "public, max-age=2"}
+    return ORJSONResponse(content=payload, headers=headers)
 
 
 # --- Admin Routes ---
