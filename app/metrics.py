@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Optional, Set
 from prometheus_client import Counter, Gauge, Histogram, Info
 import prometheus_client
-from app.core.redis_pool import get_redis_connection
+from app.core.redis_pool import get_redis_connection, ephemeral_redis
 
 logger = logging.getLogger(__name__)
 
@@ -109,35 +109,35 @@ async def initialize_check_counts(session):
         CHECKS_TOTAL.labels(status=s).set(0)
 
     try:
-        r = get_redis_connection()
-        if r:
-            counts = await r.hgetall("metrics:checks_status_counts") or {}
-            # Normalize values (handle bytes or str)
-            def _get_int(key: str) -> int:
-                v = counts.get(key)
-                if v is None and isinstance(counts, dict):
-                    v = counts.get(key.encode())  # type: ignore
-                if v is None:
-                    return 0
-                try:
-                    if isinstance(v, bytes):
-                        v = v.decode()
-                    return int(v)
-                except Exception:
-                    return 0
+        async with ephemeral_redis() as r:
+            if r:
+                counts = await r.hgetall("metrics:checks_status_counts") or {}
+                # Normalize values (handle bytes or str)
+                def _get_int(key: str) -> int:
+                    v = counts.get(key)
+                    if v is None and isinstance(counts, dict):
+                        v = counts.get(key.encode())  # type: ignore
+                    if v is None:
+                        return 0
+                    try:
+                        if isinstance(v, bytes):
+                            v = v.decode()
+                        return int(v)
+                    except Exception:
+                        return 0
 
-            up = _get_int("up")
-            down = _get_int("down")
-            new = _get_int("new")
-            paused = _get_int("paused")
+                up = _get_int("up")
+                down = _get_int("down")
+                new = _get_int("new")
+                paused = _get_int("paused")
 
-            CHECKS_TOTAL.labels(status="up").set(up)
-            CHECKS_TOTAL.labels(status="down").set(down)
-            CHECKS_TOTAL.labels(status="new").set(new)
-            CHECKS_TOTAL.labels(status="paused").set(paused)
+                CHECKS_TOTAL.labels(status="up").set(up)
+                CHECKS_TOTAL.labels(status="down").set(down)
+                CHECKS_TOTAL.labels(status="new").set(new)
+                CHECKS_TOTAL.labels(status="paused").set(paused)
 
-            logger.info(f"Initialized check counts from Redis cache: up={up}, down={down}, new={new}, paused={paused}")
-            return
+                logger.info(f"Initialized check counts from Redis cache: up={up}, down={down}, new={new}, paused={paused}")
+                return
     except Exception as e:
         logger.error(f"Failed reading cached global status counters from Redis: {e}")
 
@@ -149,9 +149,9 @@ async def initialize_check_counts(session):
         CHECKS_TOTAL.labels(status='paused').set(paused_count)
         # Optionally seed Redis with paused count so next startup has it
         try:
-            r = get_redis_connection()
-            if r:
-                await r.hset("metrics:checks_status_counts", mapping={"paused": paused_count})
+            async with ephemeral_redis() as r:
+                if r:
+                    await r.hset("metrics:checks_status_counts", mapping={"paused": paused_count})
         except Exception:
             pass
         logger.info(f"Initialized paused check count from DB: paused={paused_count}; other counts default to 0.")

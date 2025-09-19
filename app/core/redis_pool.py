@@ -1,6 +1,7 @@
 import logging
 import time
 import asyncio
+from contextlib import asynccontextmanager
 from app.core.config import settings
 from app import metrics
 
@@ -30,6 +31,44 @@ if aioredis:
 else:
     class TimedAsyncRedis:  # Fallback stub to keep typing happy if Redis is unavailable
         pass
+
+@asynccontextmanager
+async def ephemeral_redis():
+    """
+    Async context manager that yields a short-lived Redis client bound to the current event loop.
+    Useful during application startup or one-off tasks to avoid cross-loop reuse.
+    """
+    if aioredis is None:
+        yield None
+        return
+    pool = None
+    client = None
+    try:
+        pool = aioredis.ConnectionPool.from_url(
+            str(settings.REDIS_URL),
+            decode_responses=True,
+            max_connections=50,
+            socket_timeout=5.0,
+            socket_connect_timeout=5.0,
+            health_check_interval=30,
+        )
+        client = TimedAsyncRedis(connection_pool=pool)
+        yield client
+    finally:
+        try:
+            if client is not None:
+                res = client.close()
+                if asyncio.iscoroutine(res):
+                    await res
+        except Exception:
+            pass
+        try:
+            if pool is not None:
+                res = pool.disconnect()
+                if asyncio.iscoroutine(res):
+                    await res
+        except Exception:
+            pass
 
 def _init_redis_client_if_needed() -> bool:
     """

@@ -25,7 +25,7 @@ from app.core.logging_config import setup_logging
 from app.tasks import cleanup  # Add this import
 from app import metrics  # Add metrics import
 from app.worker import celery_app
-from app.core.redis_pool import get_redis_connection, init_redis_for_app, close_redis_for_app
+from app.core.redis_pool import get_redis_connection, close_redis_for_app, ephemeral_redis
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -40,13 +40,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Initialize Redis client/pool early for startup tasks
-    if not settings.DEBUG_MODE:
-        try:
-            await init_redis_for_app(app)
-        except Exception as e:
-            logger.error(f"Failed initializing Redis client: {e}")
-    
+    # Redis will be initialized lazily when first used; avoid creating it in lifespan loop
     # Initialize metrics with app version
     metrics.initialize_metrics(app_version="1.0.0")
 
@@ -62,32 +56,32 @@ async def lifespan(app: FastAPI):
     # Check Redis connection and potentially start worker
     if not settings.DEBUG_MODE:
         try:
-            r = get_redis_connection()
-            if r:
-                await r.ping()
-                logger.info("Successfully connected to Redis for Celery broker.")
-                app.state.redis_connected = True
+            async with ephemeral_redis() as r:
+                if r:
+                    await r.ping()
+                    logger.info("Successfully connected to Redis for Celery broker.")
+                    app.state.redis_connected = True
 
-                # Clear stale user stats counters on startup without KEYS fan-out
-                logger.info("Clearing stale user stats counters from Redis...")
-                deleted = 0
-                cursor = 0
-                while True:
-                    cursor, keys = await r.scan(cursor=cursor, match="user_stats:counters:*", count=1000)
-                    if keys:
-                        try:
-                            await r.unlink(*keys)
-                        except Exception:
-                            # Fallback if UNLINK not supported
-                            await r.delete(*keys)
-                        deleted += len(keys)
-                    if cursor == 0:
-                        break
-                logger.info(f"Deleted {deleted} stale user stats counters.")
-                
-                # Start Celery worker if enabled for testing/dev
-                if settings.AUTO_START_EMBEDDED_WORKER:
-                    start_celery_worker()
+                    # Clear stale user stats counters on startup without KEYS fan-out
+                    logger.info("Clearing stale user stats counters from Redis...")
+                    deleted = 0
+                    cursor = 0
+                    while True:
+                        cursor, keys = await r.scan(cursor=cursor, match="user_stats:counters:*", count=1000)
+                        if keys:
+                            try:
+                                await r.unlink(*keys)
+                            except Exception:
+                                # Fallback if UNLINK not supported
+                                await r.delete(*keys)
+                            deleted += len(keys)
+                        if cursor == 0:
+                            break
+                    logger.info(f"Deleted {deleted} stale user stats counters.")
+                    
+                    # Start Celery worker if enabled for testing/dev
+                    if settings.AUTO_START_EMBEDDED_WORKER:
+                        start_celery_worker()
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
     
