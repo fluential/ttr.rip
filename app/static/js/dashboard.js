@@ -907,6 +907,8 @@ function startAutoRefreshTimer() {
             autoRefreshCountdown = autoRefreshInterval;
             countdownEl.textContent = autoRefreshInterval;
             fetchDashboardAggregate();
+            fetchUserStats();
+            fetchOperationalMetrics();
         }
     }, 1000);
 }
@@ -1514,6 +1516,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (manualRefreshBtn) {
         manualRefreshBtn.addEventListener('click', () => {
             fetchDashboardAggregate();
+            fetchUserStats();
+            fetchOperationalMetrics();
             
             // Reset the countdown if auto-refresh is enabled
             if (autoRefreshEnabled) {
@@ -1528,6 +1532,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await updateTelegramSection(); // Fetch user data first
     await Promise.all([fetchDashboardAggregate(), fetchStatusPages()]);
+    await fetchUserStats();
+    await fetchOperationalMetrics();
     
     const loadTime = performance.now() - window.pageLoadStartTime;
     const clientTimeElem = document.getElementById('client-load-time');
