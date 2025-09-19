@@ -355,26 +355,36 @@
     .health-dot.unknown.glow { box-shadow: 0 0 10px 2px rgba(158,158,158,0.6); }
 
     /* Neon row glow on hover and on state change */
-    #checks-table tbody tr td { transition: background-color 300ms ease, box-shadow 300ms ease; }
-    #checks-table tbody tr:hover td {
+    #checks-table { border-collapse: collapse; }
+    #checks-table tbody tr { transition: background-color 300ms ease, box-shadow 300ms ease; }
+    #checks-table tbody tr:hover {
         box-shadow: 0 0 10px 1px rgba(0, 255, 255, 0.25);
         background-color: rgba(0, 255, 255, 0.03);
     }
-    #checks-table tbody tr.row-glow-up td {
+    #checks-table tbody tr.row-glow-up {
         box-shadow: 0 0 12px 2px rgba(76, 175, 80, 0.35);
         background-color: rgba(76, 175, 80, 0.08);
     }
-    #checks-table tbody tr.row-glow-down td {
+    #checks-table tbody tr.row-glow-down {
         box-shadow: 0 0 12px 2px rgba(211, 47, 47, 0.35);
         background-color: rgba(211, 47, 47, 0.08);
     }
-    #checks-table tbody tr.row-glow-new td {
+    #checks-table tbody tr.row-glow-new {
         box-shadow: 0 0 12px 2px rgba(255, 193, 7, 0.35);
         background-color: rgba(255, 193, 7, 0.08);
     }
-    #checks-table tbody tr.row-glow-paused td {
+    #checks-table tbody tr.row-glow-paused {
         box-shadow: 0 0 12px 2px rgba(158, 158, 158, 0.35);
         background-color: rgba(158, 158, 158, 0.08);
+    }
+    /* Hide inner borders during glow/hover for a single unified row look */
+    #checks-table tbody tr:hover td,
+    #checks-table tbody tr.row-glow-up td,
+    #checks-table tbody tr.row-glow-down td,
+    #checks-table tbody tr.row-glow-new td,
+    #checks-table tbody tr.row-glow-paused td {
+        border-color: transparent !important;
+        background-color: transparent;
     }
 
     /* Make the "New Status Page" summary stand out as a call-to-action */
