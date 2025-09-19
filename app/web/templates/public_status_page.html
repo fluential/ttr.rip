@@ -218,12 +218,14 @@ details.recent[open] summary {
           {% else %}
             Never
           {% endif %}
+          <br>
           {% if check.last_duration_seconds %}
-            • <strong>Dur:</strong> <span class="js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>
+            <strong>Dur:</strong> <span class="js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>
           {% else %}
-            • <strong>Dur:</strong> <span class="js-duration" style="display:none;"></span>
+            <strong>Dur:</strong> <span class="js-duration" style="display:none;"></span>
           {% endif %}
-          • <strong>Expires:</strong> <span class="js-expires">calculating…</span>
+          <br>
+          <strong>Expires:</strong> <span class="js-expires">calculating…</span>
         </small>
         <details class="recent" style="margin-top:.3rem">
           <summary>📜 Recent activity</summary>
@@ -263,8 +265,9 @@ details.recent[open] summary {
           {% else %}
             Never pinged
           {% endif %}
-          {% if check.last_duration_seconds %} • <span class="badge js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>{% endif %}
-          • <span class="badge js-expires">calculating…</span>
+          <br>
+          {% if check.last_duration_seconds %} <span class="badge js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>{% endif %}
+          <span class="badge js-expires">calculating…</span>
           {% if check.tags %}
             •
             {% for tag in check.tags %}
@@ -332,7 +335,8 @@ details.recent[open] summary {
           {% else %}
             Never
           {% endif %}
-          • <strong>Expires:</strong> <span class="badge js-expires">calculating…</span>
+          <br>
+          <strong>Expires:</strong> <span class="badge js-expires">calculating…</span>
         </div>
 
         {% set ping_id = check.slug or check.uuid %}
