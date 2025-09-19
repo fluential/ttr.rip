@@ -38,29 +38,6 @@
 
     # Micro-caching is applied within specific handlers below (static, API GET, badges)
 
-    # Handle /static/ path with longer cache time
-    handle /static/* {
-        # Higher rate limit for static assets
-        rate_limit {
-            zone static {
-                key {remote_host}
-                events 50
-                window 1s
-                burst 100
-            }
-        }
-        
-        # Longer cache time for static assets
-        cache {
-            ttl 1h
-        }
-        
-        # Add cache control header for browsers
-        header Cache-Control "public, max-age=3600"
-        
-        # Standard file server for static files
-        file_server
-    }
 
     # Handle login attempts to prevent brute-forcing
     handle /api/v1/token {
@@ -261,7 +238,7 @@
         Referrer-Policy "strict-origin-when-cross-origin"
         
         # Content Security Policy to mitigate XSS attacks
-        Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; object-src 'none'; media-src 'self'; frame-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; media-src 'self'; frame-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
         
         # Feature Policy to limit which browser features your site can use
         Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), accelerometer=(), gyroscope=(), interest-cohort=()"
