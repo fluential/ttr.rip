@@ -31,35 +31,15 @@ else:
     class TimedAsyncRedis:  # Fallback stub to keep typing happy if Redis is unavailable
         pass
 
-def get_redis_connection():
+def _init_redis_client_if_needed() -> bool:
     """
-    Returns the process-wide async Redis client initialized at app startup.
-    Operations on the returned client must be awaited.
-    """
-    if aioredis is None:
-        logger.error("Async Redis library (redis.asyncio) is not available")
-        return None
-    if _redis_client is None:
-        logger.error("Async Redis client is not initialized. Ensure init_redis_for_app() is called at startup.")
-        return None
-    return _redis_client
-
-async def init_redis_for_app(app):
-    """
-    Create and attach a single Redis pool/client to the FastAPI app state.
-    Should be called during application startup on the serving event loop.
+    Lazily initialize the Redis pool/client for non-FastAPI contexts
+    (e.g., Celery worker) where init_redis_for_app() is not called.
     """
     global _redis_pool, _redis_client
     if aioredis is None:
-        logger.error("Async Redis library (redis.asyncio) is not available")
         return False
     if _redis_client is not None:
-        # Already initialized; ensure app.state is populated
-        try:
-            app.state.redis = _redis_client
-            app.state.redis_pool = _redis_pool
-        except Exception:
-            pass
         return True
     try:
         _redis_pool = aioredis.ConnectionPool.from_url(
@@ -71,18 +51,50 @@ async def init_redis_for_app(app):
             health_check_interval=30,
         )
         _redis_client = TimedAsyncRedis(connection_pool=_redis_pool)
-        try:
-            app.state.redis = _redis_client
-            app.state.redis_pool = _redis_pool
-        except Exception:
-            pass
-        logger.info("Async Redis connection pool initialized")
+        logger.info("Async Redis connection pool initialized (lazy)")
         return True
     except Exception as e:
         logger.error(f"Error initializing async Redis connection pool: {e}")
         _redis_client = None
         _redis_pool = None
         return False
+
+def get_redis_connection():
+    """
+    Returns the process-wide async Redis client. If not yet initialized,
+    attempts a lazy initialization (for non-FastAPI contexts like Celery).
+    Operations on the returned client must be awaited.
+    """
+    if aioredis is None:
+        logger.error("Async Redis library (redis.asyncio) is not available")
+        return None
+    if _redis_client is None:
+        _init_redis_client_if_needed()
+    if _redis_client is None:
+        logger.error("Async Redis client is not initialized.")
+        return None
+    return _redis_client
+
+async def init_redis_for_app(app):
+    """
+    Create and attach a single Redis pool/client to the FastAPI app state.
+    Should be called during application startup on the serving event loop.
+    """
+    if aioredis is None:
+        logger.error("Async Redis library (redis.asyncio) is not available")
+        return False
+
+    ok = _init_redis_client_if_needed()
+    if not ok:
+        return False
+
+    try:
+        app.state.redis = _redis_client
+        app.state.redis_pool = _redis_pool
+    except Exception:
+        pass
+    logger.info("Async Redis connection pool initialized")
+    return True
 
 async def close_redis_for_app(app):
     """
