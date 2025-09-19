@@ -289,4 +289,6 @@ pings.example.com:8080 {
             burst 20
         }
     }
+
+    reverse_proxy web:8000
 }
