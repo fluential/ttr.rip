@@ -33,6 +33,7 @@
             <ul>
                 {% if request.path.startswith('/dashboard') or request.path.startswith('/admin/dashboard') %}
                 <li><a href="#new-check-section" id="new-check-link">New Check</a></li>
+                <li><a href="#new-status-page-section" id="new-status-page-link">New Status Page</a></li>
                 {% endif %}
                 {% if status_pages is defined and status_pages and user is defined and user and user.slug %}
                 <li>
@@ -139,6 +140,20 @@
                 if (newCheckSection) {
                     if (!newCheckSection.open) {
                         newCheckSection.open = true;
+                    }
+                    // Default anchor behavior will scroll to the section
+                }
+            });
+        }
+
+        // New Status Page link handler
+        const newStatusPageLink = document.getElementById('new-status-page-link');
+        if (newStatusPageLink) {
+            newStatusPageLink.addEventListener('click', (e) => {
+                const newStatusPageSection = document.getElementById('new-status-page-section');
+                if (newStatusPageSection) {
+                    if (!newStatusPageSection.open) {
+                        newStatusPageSection.open = true;
                     }
                     // Default anchor behavior will scroll to the section
                 }
