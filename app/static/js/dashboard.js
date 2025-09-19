@@ -540,10 +540,10 @@ async function fetchDashboardAggregate() {
 
                 summaryDiv.innerHTML = `
                     <div class="grid">
-                        <div><strong>Total Checks:</strong> ${m.total_checks || 0}</div>
-                        <div><strong>Workers Online:</strong> ${m.workers_online || 0}</div>
-                        <div><strong>Queue Depth:</strong> ${m.queue_depth || 0}</div>
-                        <div><strong>Notifications Sent:</strong> ${m.total_notifications_sent || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Total Checks:</strong> ${m.total_checks || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Workers Online:</strong> ${m.workers_online || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Queue Depth:</strong> ${m.queue_depth || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Notifications Sent:</strong> ${m.total_notifications_sent || 0}</div>
                     </div>
                     <div class="grid">
                         <div><span class="health-dot ${m.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
@@ -700,10 +700,10 @@ async function fetchDashboardAggregate() {
             const avgCheckDuration = metrics.average_check_duration_seconds ? (metrics.average_check_duration_seconds * 1000).toFixed(2) : 'N/A';
             metricsDiv.innerHTML = `
                 <div class="grid">
-                    <div class="metric"><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
-                    <div class="metric"><strong>Workers Online:</strong> ${metrics.workers_online || 0}</div>
-                    <div class="metric"><strong>Queue Depth:</strong> ${metrics.queue_depth || 0}</div>
-                    <div class="metric"><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
+                    <div class="metric"><span class="health-dot unknown"></span><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
+                    <div class="metric"><span class="health-dot unknown"></span><strong>Workers Online:</strong> ${metrics.workers_online || 0}</div>
+                    <div class="metric"><span class="health-dot unknown"></span><strong>Queue Depth:</strong> ${metrics.queue_depth || 0}</div>
+                    <div class="metric"><span class="health-dot unknown"></span><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
                 </div>
                 <div class="grid">
                     <div><span class="health-dot ${metrics.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
@@ -743,10 +743,10 @@ async function fetchOperationalMetrics() {
 
                 summaryDiv.innerHTML = `
                     <div class="grid">
-                        <div><strong>Total Checks:</strong> ${m.total_checks || 0}</div>
-                        <div><strong>Workers Online:</strong> ${m.workers_online || 0}</div>
-                        <div><strong>Queue Depth:</strong> ${m.queue_depth || 0}</div>
-                        <div><strong>Notifications Sent:</strong> ${m.total_notifications_sent || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Total Checks:</strong> ${m.total_checks || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Workers Online:</strong> ${m.workers_online || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Queue Depth:</strong> ${m.queue_depth || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Notifications Sent:</strong> ${m.total_notifications_sent || 0}</div>
                     </div>
                     <div class="grid">
                         <div><span class="health-dot ${m.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
@@ -781,10 +781,10 @@ async function fetchOperationalMetrics() {
 
         summaryDiv.innerHTML = `
             <div class="grid">
-                <div><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
-                <div><strong>Workers Online:</strong> ${metrics.workers_online || 0}</div>
-                <div><strong>Queue Depth:</strong> ${metrics.queue_depth || 0}</div>
-                <div><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
+                <div><span class="health-dot unknown"></span><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
+                <div><span class="health-dot unknown"></span><strong>Workers Online:</strong> ${metrics.workers_online || 0}</div>
+                <div><span class="health-dot unknown"></span><strong>Queue Depth:</strong> ${metrics.queue_depth || 0}</div>
+                <div><span class="health-dot unknown"></span><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
             </div>
             <div class="grid">
                 <div><span class="health-dot ${metrics.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
