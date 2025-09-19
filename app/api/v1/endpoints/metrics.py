@@ -91,6 +91,9 @@ async def get_metrics_summary(request: Request):
     avg_redis_latency = parse_prometheus_metric("ttl_redis_command_duration_seconds")
     # Average ping processing latency from dedicated histogram
     avg_ping_latency = parse_prometheus_metric("ttl_ping_process_time_seconds")
+    if avg_ping_latency is None:
+        # Fallback to overall API latency until ping endpoint is instrumented
+        avg_ping_latency = avg_api_latency
 
     summary = {
         "total_checks": int(parse_prometheus_metric("ttl_checks_total") or 0),
