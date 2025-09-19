@@ -103,11 +103,11 @@ services:
       - CLOUDFLARED_URL=http://caddy:8080
       - CLOUDFLARED_OPTS=
     command: >
-      sh -lc 'if [ -n "${CLOUDFLARED_TOKEN:-}" ]; then
-        echo "Starting Cloudflare Tunnel with token";
-        cloudflared tunnel run --no-autoupdate --token "${CLOUDFLARED_TOKEN}" ${CLOUDFLARED_OPTS:-};
+      sh -lc 'token="${CLOUDFLARED_TOKEN:-${CLOUDFLARE_TUNNEL_TOKEN:-}}"; if [ -n "$token" ]; then
+        echo "Starting Cloudflare Tunnel with named token";
+        cloudflared tunnel run --no-autoupdate --token "$token" ${CLOUDFLARED_OPTS:-};
       else
-        echo "No CLOUDFLARED_TOKEN provided. Starting Quick Tunnel to ${CLOUDFLARED_URL:-http://caddy:8080}";
+        echo "No tunnel token provided. Starting Quick Tunnel to ${CLOUDFLARED_URL:-http://caddy:8080}";
         cloudflared tunnel --no-autoupdate --url "${CLOUDFLARED_URL:-http://caddy:8080}" ${CLOUDFLARED_OPTS:-};
       fi'
 

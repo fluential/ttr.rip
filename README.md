@@ -176,6 +176,7 @@ Requirements:
   - Set CLOUDFLARED_TOKEN in .env to attach to a named Tunnel (hostnames managed under Cloudflare Zero Trust → Tunnels → Public Hostnames, e.g. status.example.com → http://caddy:8080).
   - Leave CLOUDFLARED_TOKEN empty to start a temporary Quick Tunnel (random trycloudflare.com URL).
   - cloudflared forwards to http://caddy:8080 by default; override with CLOUDFLARED_URL. Extra flags via CLOUDFLARED_OPTS.
+  - Compatibility: you can also set CLOUDFLARE_TUNNEL_TOKEN (alias used by community examples); compose prefers CLOUDFLARED_TOKEN, then CLOUDFLARE_TUNNEL_TOKEN.
 
 4) Get a key
 - Click “Get a New Key” to obtain an access key, then go to /dashboard.
