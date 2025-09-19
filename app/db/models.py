@@ -80,8 +80,8 @@ class StatusPage(Base):
     is_public: bool = Column(Boolean, default=True, nullable=False)
     owner_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    owner = relationship("User", back_populates="status_pages")
-    checks = relationship("Check", secondary=status_page_checks, back_populates="status_pages")
+    owner = relationship("User", back_populates="status_pages", lazy="selectin")
+    checks = relationship("Check", secondary=status_page_checks, back_populates="status_pages", lazy="selectin")
 
 
 class Check(Base):
