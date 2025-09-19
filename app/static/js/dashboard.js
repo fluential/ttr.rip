@@ -750,12 +750,18 @@ async function fetchDashboardAggregate() {
                 </td>
             `;
             tableBody.appendChild(row);
-            // Glow when status changes
+            // Glow when status changes (status text + entire row)
             const statusEl = row.querySelector('td:first-child span');
             const prev = prevDisplayStatus[check.id];
-            if (prev !== undefined && prev !== displayStatus && statusEl) {
-                statusEl.classList.add('glow');
-                setTimeout(() => statusEl.classList.remove('glow'), 800);
+            if (prev !== undefined && prev !== displayStatus) {
+                if (statusEl) {
+                    statusEl.classList.add('glow');
+                    setTimeout(() => statusEl.classList.remove('glow'), 800);
+                }
+                row.classList.add('row-glow', `row-glow-${displayStatus}`);
+                setTimeout(() => {
+                    row.classList.remove('row-glow', `row-glow-${displayStatus}`);
+                }, 800);
             }
             prevDisplayStatus[check.id] = displayStatus;
         });
@@ -1299,12 +1305,18 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             </td>
         `;
         tableBody.appendChild(row);
-        // Glow when status changes
+        // Glow when status changes (status text + entire row)
         const statusEl = row.querySelector('td:first-child span');
         const prev = prevDisplayStatus[check.id];
-        if (prev !== undefined && prev !== displayStatus && statusEl) {
-            statusEl.classList.add('glow');
-            setTimeout(() => statusEl.classList.remove('glow'), 800);
+        if (prev !== undefined && prev !== displayStatus) {
+            if (statusEl) {
+                statusEl.classList.add('glow');
+                setTimeout(() => statusEl.classList.remove('glow'), 800);
+            }
+            row.classList.add('row-glow', `row-glow-${displayStatus}`);
+            setTimeout(() => {
+                row.classList.remove('row-glow', `row-glow-${displayStatus}`);
+            }, 800);
         }
         prevDisplayStatus[check.id] = displayStatus;
     });
