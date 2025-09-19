@@ -75,6 +75,13 @@ async function fetchIntegrationRate(integration) {
     // Show a placeholder immediately so the user sees the field even if the request fails
     rateEl.innerHTML = `<strong>Rate:</strong> loading…`;
 
+    // Skip network call for disabled integrations
+    const form = document.querySelector(`form[data-integration="${integration}"]`);
+    if (form && form.dataset.enabled === 'false') {
+        rateEl.innerHTML = `<strong>Rate:</strong> disabled`;
+        return;
+    }
+
     try {
         const res = await fetchWithAuth(`/api/v1/checks/${checkId}/${integration}/rate`);
         if (!res.ok) {
@@ -225,9 +232,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Fetch rate info for all integrations on page load
+    // Fetch rate info only for enabled integrations on page load
     document.querySelectorAll('form[data-integration]').forEach(form => {
         const integ = form.dataset.integration;
-        if (integ) fetchIntegrationRate(integ);
+        const enabled = form.dataset.enabled === 'true';
+        if (integ && enabled) fetchIntegrationRate(integ);
     });
 });

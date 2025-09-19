@@ -35,7 +35,7 @@
     {{ integration_status('telegram', check.telegram_last_notification_status, check.telegram_last_notification_timestamp, check.telegram_last_notification_message) }}
     <hr>
     <p>Get an alert via Telegram when this check goes down. Simply provide your bot token and chat ID below.</p>
-    <form data-integration="telegram">
+    <form data-integration="telegram" data-enabled="{{ 'true' if check.telegram_enabled else 'false' }}">
         <label><input type="checkbox" name="telegram_enabled" role="switch" {% if check.telegram_enabled %}checked{% endif %}> Enable Telegram Notifications</label>
         <div class="grid">
             <label>Bot Token <input type="password" name="telegram_bot_token" placeholder="{{ telegram_bot_token_placeholder }}" value=""><small>Leave empty to keep existing token.</small></label>
@@ -56,7 +56,7 @@
     {{ integration_status('slack', check.slack_last_notification_status, check.slack_last_notification_timestamp, check.slack_last_notification_message) }}
     <hr>
     <p>Get an alert via Slack. Provide your Incoming Webhook URL.</p>
-    <form data-integration="slack">
+    <form data-integration="slack" data-enabled="{{ 'true' if check.slack_enabled else 'false' }}">
         <label><input type="checkbox" name="slack_enabled" role="switch" {% if check.slack_enabled %}checked{% endif %}> Enable Slack Notifications</label>
         <label>Webhook URL <input type="password" name="slack_webhook_url" placeholder="https://hooks.slack.com/services/..." value=""><small>Leave empty to keep existing URL.</small></label>
         <footer class="grid">
@@ -74,7 +74,7 @@
     {{ integration_status('discord', check.discord_last_notification_status, check.discord_last_notification_timestamp, check.discord_last_notification_message) }}
     <hr>
     <p>Get an alert via Discord. Provide your Webhook URL.</p>
-    <form data-integration="discord">
+    <form data-integration="discord" data-enabled="{{ 'true' if check.discord_enabled else 'false' }}">
         <label><input type="checkbox" name="discord_enabled" role="switch" {% if check.discord_enabled %}checked{% endif %}> Enable Discord Notifications</label>
         <label>Webhook URL <input type="password" name="discord_webhook_url" placeholder="https://discord.com/api/webhooks/..." value=""><small>Leave empty to keep existing URL.</small></label>
         <footer class="grid">
@@ -92,7 +92,7 @@
     {{ integration_status('webhook', check.webhook_last_notification_status, check.webhook_last_notification_timestamp, check.webhook_last_notification_message) }}
     <hr>
     <p>Send a POST request to any URL. The payload will be a JSON object.</p>
-    <form data-integration="webhook">
+    <form data-integration="webhook" data-enabled="{{ 'true' if check.webhook_enabled else 'false' }}">
         <label><input type="checkbox" name="webhook_enabled" role="switch" {% if check.webhook_enabled %}checked{% endif %}> Enable Webhook Notifications</label>
         <label>Webhook URL <input type="password" name="webhook_url" placeholder="https://yourapi.com/endpoint" value=""><small>Leave empty to keep existing URL.</small></label>
         <footer class="grid">
