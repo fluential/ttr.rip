@@ -594,7 +594,8 @@ async function deleteStatusPage(pageId) {
 
 async function fetchDashboardAggregate() {
     try {
-        let url = `/api/v1/checks/aggregate?size=${pageSize}&sort_by=${currentSortBy}&sort_direction=${currentSortDir}`;
+        const apiSortBy = (currentSortBy === 'last_ping') ? 'id' : currentSortBy;
+        let url = `/api/v1/checks/aggregate?size=${pageSize}&sort_by=${apiSortBy}&sort_direction=${currentSortDir}`;
         const selected = Array.from(selectedTags);
         if (selected.length === 1) {
             url += `&tag=${encodeURIComponent(selected[0])}`;
@@ -628,6 +629,14 @@ async function fetchDashboardAggregate() {
             : data.items;
         if (checksSearchTerm) {
             checks = checks.filter(c => (c.name || '').toLowerCase().includes(checksSearchTerm));
+        }
+        // Client-side sort fallback for last_ping (API may not support this sort field)
+        if (currentSortBy === 'last_ping') {
+            checks.sort((a, b) => {
+                const aTs = a.last_ping ? parseUTCDate(a.last_ping).getTime() : -Infinity;
+                const bTs = b.last_ping ? parseUTCDate(b.last_ping).getTime() : -Infinity;
+                return currentSortDir === 'asc' ? (aTs - bTs) : (bTs - aTs);
+            });
         }
         checks.forEach(c => checksData[c.id] = c); // Update global cache
         allChecksForStatusPage = checks; // Cache for status page form
@@ -1120,7 +1129,8 @@ async function fetchUserStats() {
 }
 
 async function fetchChecks(cursor = null, direction = currentSortDir) {
-    let url = `/api/v1/checks?size=${pageSize}&sort_by=${currentSortBy}&sort_direction=${direction}`;
+    const apiSortBy = (currentSortBy === 'last_ping') ? 'id' : currentSortBy;
+    let url = `/api/v1/checks?size=${pageSize}&sort_by=${apiSortBy}&sort_direction=${direction}`;
     if (cursor) {
         url += `&cursor=${cursor}`;
     }
@@ -1157,6 +1167,14 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
         : data.items;
     if (checksSearchTerm) {
         checks = checks.filter(c => (c.name || '').toLowerCase().includes(checksSearchTerm));
+    }
+    // Client-side sort fallback for last_ping when API doesn't support it
+    if (currentSortBy === 'last_ping') {
+        checks.sort((a, b) => {
+            const aTs = a.last_ping ? parseUTCDate(a.last_ping).getTime() : -Infinity;
+            const bTs = b.last_ping ? parseUTCDate(b.last_ping).getTime() : -Infinity;
+            return direction === 'asc' ? (aTs - bTs) : (bTs - aTs);
+        });
     }
     checks.forEach(c => checksData[c.id] = c); // Update global cache
     allChecksForStatusPage = checks; // Cache for status page form
