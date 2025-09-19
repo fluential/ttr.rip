@@ -23,6 +23,7 @@ let metricsEtag = null;
 let lastUserStats = null;
 let lastOperationalMetrics = null;
 let prevDisplayStatus = {};
+let prevLastPingByCheckId = {};
 
 function setLastUpdatedNow() {
     const el = document.getElementById('last-updated');
@@ -739,7 +740,7 @@ async function fetchDashboardAggregate() {
                         <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;">
                     </div>
                 </td>
-                <td>${lastPing}</td>
+                <td class="cell-last-ping">${lastPing}</td>
                 <td>${lastDuration}</td>
                 <td>${expiresIn}</td>
                 <td>
@@ -756,11 +757,15 @@ async function fetchDashboardAggregate() {
                 </td>
             `;
             tableBody.appendChild(row);
-            // Glow when status changes (status text + entire row)
+            // Glow when status or last ping changes (status text + entire row)
             const statusEl = row.querySelector('td:first-child span');
             const prev = prevDisplayStatus[check.id];
-            if (prev !== undefined && prev !== displayStatus) {
-                if (statusEl) {
+            const statusChanged = (prev !== undefined && prev !== displayStatus);
+            const prevPingIso = prevLastPingByCheckId[check.id];
+            const pingChanged = (prevPingIso !== undefined && prevPingIso !== check.last_ping);
+
+            if (statusChanged || pingChanged) {
+                if (statusChanged && statusEl) {
                     statusEl.classList.add('glow');
                     setTimeout(() => statusEl.classList.remove('glow'), 800);
                 }
@@ -770,6 +775,7 @@ async function fetchDashboardAggregate() {
                 }, 800);
             }
             prevDisplayStatus[check.id] = displayStatus;
+            prevLastPingByCheckId[check.id] = check.last_ping || null;
         });
 
         if (statusSummary) {
@@ -1303,7 +1309,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
                     <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;">
                 </div>
             </td>
-            <td>${lastPing}</td>
+            <td class="cell-last-ping">${lastPing}</td>
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
             <td>
@@ -1320,11 +1326,15 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             </td>
         `;
         tableBody.appendChild(row);
-        // Glow when status changes (status text + entire row)
+        // Glow when status or last ping changes (status text + entire row)
         const statusEl = row.querySelector('td:first-child span');
         const prev = prevDisplayStatus[check.id];
-        if (prev !== undefined && prev !== displayStatus) {
-            if (statusEl) {
+        const statusChanged = (prev !== undefined && prev !== displayStatus);
+        const prevPingIso = prevLastPingByCheckId[check.id];
+        const pingChanged = (prevPingIso !== undefined && prevPingIso !== check.last_ping);
+
+        if (statusChanged || pingChanged) {
+            if (statusChanged && statusEl) {
                 statusEl.classList.add('glow');
                 setTimeout(() => statusEl.classList.remove('glow'), 800);
             }
@@ -1334,6 +1344,7 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             }, 800);
         }
         prevDisplayStatus[check.id] = displayStatus;
+        prevLastPingByCheckId[check.id] = check.last_ping || null;
     });
 
     if (statusSummary) {
