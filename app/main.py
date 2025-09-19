@@ -191,9 +191,9 @@ def start_celery_worker():
         
         # Start the worker
         cmd = [
-            sys.executable, "-m", "celery", 
-            "-A", "app.worker.celery_app", "worker", 
-            "--loglevel=info", 
+            sys.executable, "-m", "celery",
+            "-A", "app.worker:celery_app", "worker",
+            "--loglevel=info",
             "--pool=threads",
             f"--concurrency={settings.WORKER_CONCURRENCY}"
         ]

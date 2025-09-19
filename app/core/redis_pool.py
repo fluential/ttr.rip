@@ -3,7 +3,6 @@ import time
 import asyncio
 from contextlib import asynccontextmanager
 from app.core.config import settings
-from app import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,12 @@ if aioredis:
                 return await super().execute_command(*args, **kwargs)
             finally:
                 duration = time.perf_counter() - start_time
-                metrics.REDIS_COMMAND_DURATION.observe(duration)
+                try:
+                    from app import metrics as _metrics
+                    _metrics.REDIS_COMMAND_DURATION.observe(duration)
+                except Exception:
+                    # Avoid import-time cycles; metrics is optional here
+                    pass
 else:
     class TimedAsyncRedis:  # Fallback stub to keep typing happy if Redis is unavailable
         pass
