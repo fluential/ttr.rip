@@ -1,4 +1,3 @@
-import redis
 import logging
 import time
 from app.core.config import settings
@@ -6,38 +5,45 @@ from app import metrics
 
 logger = logging.getLogger(__name__)
 
-# Create a global Redis connection pool
+# Async Redis
 try:
-    redis_pool = redis.ConnectionPool.from_url(
+    import redis.asyncio as aioredis
+except Exception as e:
+    logger.critical(f"Failed to import redis.asyncio: {e}")
+    aioredis = None
+
+# Create a global async Redis connection pool
+try:
+    redis_pool = aioredis.ConnectionPool.from_url(  # type: ignore[attr-defined]
         str(settings.REDIS_URL),
         decode_responses=True,
-        max_connections=50,  # Adjust this based on your application needs
+        max_connections=50,
         socket_timeout=5.0,
         socket_connect_timeout=5.0,
-        health_check_interval=30
-    )
-    logger.info("Redis connection pool initialized successfully")
+        health_check_interval=30,
+    ) if aioredis else None
+    if redis_pool:
+        logger.info("Async Redis connection pool initialized successfully")
 except Exception as e:
-    logger.error(f"Error initializing Redis connection pool: {e}")
+    logger.error(f"Error initializing async Redis connection pool: {e}")
     redis_pool = None
 
-class TimedRedis(redis.Redis):
-    """A Redis client that records command execution times."""
-    def execute_command(self, *args, **kwargs):
+class TimedAsyncRedis(aioredis.Redis):  # type: ignore[misc]
+    """An async Redis client that records command execution times."""
+    async def execute_command(self, *args, **kwargs):
         start_time = time.perf_counter()
         try:
-            return super().execute_command(*args, **kwargs)
+            return await super().execute_command(*args, **kwargs)
         finally:
             duration = time.perf_counter() - start_time
             metrics.REDIS_COMMAND_DURATION.observe(duration)
 
 def get_redis_connection():
     """
-    Returns a Redis connection from the pool.
-    This doesn't actually establish a connection until it's used.
+    Returns an async Redis client bound to the global pool.
+    Operations on the returned client must be awaited.
     """
-    if redis_pool is None:
-        logger.error("Redis connection pool is not initialized")
+    if redis_pool is None or aioredis is None:
+        logger.error("Async Redis connection pool is not initialized")
         return None
-    
-    return TimedRedis(connection_pool=redis_pool)
+    return TimedAsyncRedis(connection_pool=redis_pool)

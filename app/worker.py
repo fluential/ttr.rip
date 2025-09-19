@@ -63,7 +63,7 @@ else:
     try:
         r = get_redis_connection()
         if r:
-            r.ping()
+            run_coro(r.ping())
             logger.info("Celery worker successfully connected to Redis.")
     except Exception as e:
         logger.error(f"Celery worker failed to connect to Redis: {e}. Tasks may not be processed.")
@@ -91,7 +91,7 @@ async def _send_notification(check_id: int, message: str, send_function):
                 try:
                     r = get_redis_connection()
                     if r:
-                        r.decr(f"user_stats:queued_notifications:{owner_identifier_for_stats}")
+                        await r.decr(f"user_stats:queued_notifications:{owner_identifier_for_stats}")
                 except Exception as e:
                     logger.error(f"Could not decrement queued notification count for check {check_id}: {e}")
 
@@ -179,7 +179,7 @@ return prev
                     user_key = f"user_stats:counters:{check.owner_id}"
                     global_key = "metrics:checks_status_counts"
                     try:
-                        prev = r.eval(lua, 3, runtime_key, user_key, global_key, "1" if check.paused else "0")
+                        prev = await r.eval(lua, 3, runtime_key, user_key, global_key, "1" if check.paused else "0")
                         previous_status = prev.decode() if isinstance(prev, bytes) else prev
                     except Exception as e:
                         logger.error(f"Failed to update Redis status for overdue check {check.id}: {e}")
@@ -216,7 +216,7 @@ return prev
                         key = get_check_runtime_redis_key(check.id)
                         keys.append((check, key))
                         pipe.hmget(key, "last_start", "status")
-                    redis_results = pipe.execute()
+                    redis_results = await pipe.execute()
                     for (check, _), (last_start_str, status_val) in zip(keys, redis_results):
                         if isinstance(last_start_str, bytes):
                             last_start_str = last_start_str.decode()
@@ -267,7 +267,7 @@ return prev
                     user_key = f"user_stats:counters:{check.owner_id}"
                     global_key = "metrics:checks_status_counts"
                     try:
-                        prev = r.eval(lua, 3, runtime_key, user_key, global_key, "1" if check.paused else "0")
+                        prev = await r.eval(lua, 3, runtime_key, user_key, global_key, "1" if check.paused else "0")
                         previous_status = prev.decode() if isinstance(prev, bytes) else prev
                     except Exception as e:
                         logger.error(f"Failed to update Redis status for long-running check {check.id}: {e}")

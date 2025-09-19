@@ -2,6 +2,7 @@ import logging
 import time
 import json
 import threading
+import asyncio
 from app.worker import celery_app
 from app.core.config import settings
 from app.core.redis_pool import get_redis_connection
@@ -16,7 +17,7 @@ _CACHE_TTL = 60.0
 _REDIS_KEY = "cache:queue_stats:latest"
 _REDIS_TTL = 65  # seconds
 
-def get_queue_stats():
+async def get_queue_stats():
     """
     Fast path: read cached snapshot (Redis first, in-memory fallback).
     No Celery inspector calls on the request path.
@@ -34,10 +35,8 @@ def get_queue_stats():
     try:
         r = get_redis_connection()
         if r:
-            raw = r.get(_REDIS_KEY)
+            raw = await r.get(_REDIS_KEY)
             if raw:
-                if isinstance(raw, bytes):
-                    raw = raw.decode()
                 return json.loads(raw)
     except Exception as e:
         logger.debug(f"Redis queue stats cache read failed: {e}", exc_info=False)
@@ -56,18 +55,18 @@ def get_queue_stats():
         "total_reserved": "N/A",
     }
 
-def _store_cache(data: dict):
+async def _store_cache(data: dict):
     global _CACHE, _CACHE_TS
     _CACHE = data
     _CACHE_TS = time.time()
     try:
         r = get_redis_connection()
         if r:
-            r.setex(_REDIS_KEY, _REDIS_TTL, json.dumps(data))
+            await r.setex(_REDIS_KEY, _REDIS_TTL, json.dumps(data))
     except Exception as e:
         logger.warning(f"Could not write queue stats to Redis: {e}", exc_info=False)
 
-def refresh_queue_stats_cache():
+async def refresh_queue_stats_cache():
     """
     Runs the slow/expensive inspector calls and stores a snapshot in Redis for quick reads.
     Intended to be called from a background thread/task, not the request path.
@@ -80,7 +79,7 @@ def refresh_queue_stats_cache():
             "total_active": 0,
             "total_reserved": 0,
         }
-        _store_cache(snapshot)
+        await _store_cache(snapshot)
         return snapshot
 
     try:
@@ -93,13 +92,13 @@ def refresh_queue_stats_cache():
                 "total_active": "N/A",
                 "total_reserved": "N/A",
             }
-            _store_cache(snapshot)
+            await _store_cache(snapshot)
             return snapshot
 
         # Broker connectivity and queue length
-        r.ping()
+        await r.ping()
         queue_name = celery_app.conf.get('task_default_queue', 'celery')
-        total_queued = r.llen(queue_name)
+        total_queued = await r.llen(queue_name)
 
         inspector = celery_app.control.inspect(timeout=1)
         stats = inspector.stats()
@@ -111,7 +110,7 @@ def refresh_queue_stats_cache():
                 "total_active": "N/A",
                 "total_reserved": "N/A",
             }
-            _store_cache(snapshot)
+            await _store_cache(snapshot)
             return snapshot
 
         active = inspector.active()
@@ -127,7 +126,7 @@ def refresh_queue_stats_cache():
             "total_active": total_active,
             "total_reserved": total_reserved,
         }
-        _store_cache(snapshot)
+        await _store_cache(snapshot)
         return snapshot
     except Exception as e:
         logger.error(f"refresh_queue_stats_cache failed: {e}", exc_info=False)
@@ -138,7 +137,7 @@ def refresh_queue_stats_cache():
             "total_active": "N/A",
             "total_reserved": "N/A",
         }
-        _store_cache(snapshot)
+        await _store_cache(snapshot)
         return snapshot
 
 def _bg_loop():
@@ -146,7 +145,7 @@ def _bg_loop():
     interval = 60.0
     while True:
         try:
-            refresh_queue_stats_cache()
+            asyncio.run(refresh_queue_stats_cache())
         except Exception as e:
             logger.error(f"Queue stats background refresh failed: {e}", exc_info=False)
         time.sleep(interval)

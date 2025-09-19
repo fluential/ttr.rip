@@ -109,7 +109,7 @@ async def get_public_user_from_key(
             ak_hash = hashlib.sha256(auth_key.encode()).hexdigest()
             # Record last-used info
             usage_key = f"authkey:usage:{ak_hash}"
-            r.hset(
+            await r.hset(
                 usage_key,
                 mapping={
                     "last_used": datetime.now(timezone.utc).isoformat(),
@@ -118,14 +118,14 @@ async def get_public_user_from_key(
                     "ua": (request.headers.get("user-agent") if request else "") or "",
                 },
             )
-            r.expire(usage_key, 30 * 24 * 3600)  # keep 30 days
-            r.incr(f"authkey:usage_count:{ak_hash}")
+            await r.expire(usage_key, 30 * 24 * 3600)  # keep 30 days
+            await r.incr(f"authkey:usage_count:{ak_hash}")
 
             # Per-key IP restriction
             allowed_ip_set = f"authkey:allowed_ips:{ak_hash}"
             try:
-                if r.scard(allowed_ip_set) > 0:
-                    if not client_ip or not r.sismember(allowed_ip_set, client_ip):
+                if await r.scard(allowed_ip_set) > 0:
+                    if not client_ip or not await r.sismember(allowed_ip_set, client_ip):
                         logger.warning(f"Auth key usage from disallowed IP {client_ip}")
                         raise credentials_exception
             except Exception:
@@ -136,8 +136,8 @@ async def get_public_user_from_key(
             # Per-key Origin restriction
             allowed_origin_set = f"authkey:allowed_origins:{ak_hash}"
             try:
-                if r.scard(allowed_origin_set) > 0:
-                    if not origin or not r.sismember(allowed_origin_set, origin):
+                if await r.scard(allowed_origin_set) > 0:
+                    if not origin or not await r.sismember(allowed_origin_set, origin):
                         logger.warning(f"Auth key usage from disallowed Origin/Referer {origin}")
                         raise credentials_exception
             except Exception:
@@ -152,7 +152,7 @@ async def get_public_user_from_key(
     if not settings.DEBUG_MODE:
         try:
             r = get_redis_connection()
-            if r and r.exists(f"blacklist:auth_key:{auth_key}"):
+            if r and await r.exists(f"blacklist:auth_key:{auth_key}"):
                 logger.warning(f"Authentication attempt with blacklisted key: ...{auth_key[-4:]}")
                 raise credentials_exception
         except Exception as e:

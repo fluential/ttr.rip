@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.exc import IntegrityError
 import logging
 import time
+import asyncio
 from app.db import models
 from app import schemas, security, metrics
 from app.services import notifications
@@ -38,9 +39,13 @@ def _buffer_hincrby(key: str, field: str, delta: int):
     _INCR_EXPIRE_KEYS.add(key)
     now = time.time()
     if now - _LAST_FLUSH_TS >= _FLUSH_INTERVAL:
-        _flush_incr_buffer()
+        try:
+            asyncio.get_running_loop().create_task(_flush_incr_buffer_async())
+        except RuntimeError:
+            # No running loop (e.g., during startup); run synchronously
+            asyncio.run(_flush_incr_buffer_async())
 
-def _flush_incr_buffer():
+async def _flush_incr_buffer_async():
     global _LAST_FLUSH_TS
     if not _INCR_BUFFER:
         _LAST_FLUSH_TS = time.time()
@@ -54,9 +59,10 @@ def _flush_incr_buffer():
             if delta != 0:
                 pipe.hincrby(key, field, delta)
         # Apply expirations (30 days) for any touched keys
+        ttl_seconds = int(timedelta(days=30).total_seconds())
         for key in list(_INCR_EXPIRE_KEYS):
-            pipe.expire(key, timedelta(days=30))
-        pipe.execute()
+            pipe.expire(key, ttl_seconds)
+        await pipe.execute()
     except Exception as e:
         logger.error(f"Failed to flush Redis increment buffer: {e}")
     finally:
@@ -98,7 +104,7 @@ async def enrich_checks_with_runtime_data(checks: list[models.Check]):
             key = get_check_runtime_redis_key(check.id)
             pipe.hmget(key, "status", "last_ping", "last_start", "last_duration_seconds", "last_pings", "last_content")
         
-        results = pipe.execute()
+        results = await pipe.execute()
 
         for i, check in enumerate(checks):
             status_val, last_ping_str, last_start_str, last_duration_str, last_pings_json, last_content = results[i]
@@ -487,7 +493,7 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
             if r:
                 key = f"user_stats:counters:{principal.id}"
                 # HGETALL returns strings, so we need to convert them
-                cached_counters = r.hgetall(key)
+                cached_counters = await r.hgetall(key)
                 if cached_counters:
                     logger.debug(f"Redis counter hit for user stats: {principal.id}")
                     # Averages are not stored in counters, so we still need a DB query for them.
@@ -553,8 +559,8 @@ async def get_check_stats_by_owner(db: AsyncSession, principal: models.User):
                 pipe.hset(key, "new", stats_obj.new_count)
                 pipe.hset(key, "paused", stats_obj.paused_count)
                 # Set a 30-day expiry on the stats key to prevent orphaned data
-                pipe.expire(key, timedelta(days=30))
-                pipe.execute()
+                pipe.expire(key, int(timedelta(days=30).total_seconds()))
+                await pipe.execute()
                 logger.info(f"Rehydrated Redis counters for user {principal.id}")
         except Exception as e:
             logger.error(f"Could not rehydrate Redis counters for user {principal.id}: {e}")
@@ -620,7 +626,7 @@ async def update_check_ping(db: AsyncSession, check: models.Check, content: Opti
         now = datetime.now(timezone.utc)
 
         # Get previous state from Redis to calculate duration
-        previous_runtime_data = r.hgetall(key)
+        previous_runtime_data = await r.hgetall(key)
         previous_status = previous_runtime_data.get("status", "new")
         last_start_str = previous_runtime_data.get("last_start")
         last_ping_str = previous_runtime_data.get("last_ping")
@@ -661,7 +667,7 @@ return prev
 """
         user_key = f"user_stats:counters:{check.owner_id}"
         global_key = "metrics:checks_status_counts"
-        _ = r.eval(lua, 3, key, user_key, global_key, "up", "1" if check.paused else "0", now.isoformat(), str(duration_seconds or ""), "1")
+        _ = await r.eval(lua, 3, key, user_key, global_key, "up", "1" if check.paused else "0", now.isoformat(), str(duration_seconds or ""), "1")
         
         # Update deadline in the database for the scheduler
         check.deadline = _calculate_next_deadline(check, now)
@@ -672,7 +678,7 @@ return prev
             if duration_seconds is not None:
                 duration_str = notifications.format_duration(duration_seconds)
                 message += f" Last run took {duration_str}."
-            notifications.schedule_all_notifications(check, message)
+            await notifications.schedule_all_notifications(check, message)
         
         await db.commit()
         await db.refresh(check)
@@ -695,7 +701,7 @@ async def update_check_start(db: AsyncSession, check: models.Check):
         r = get_redis_connection()
         if r:
             key = get_check_runtime_redis_key(check.id)
-            r.hset(key, "last_start", datetime.now(timezone.utc).isoformat())
+            await r.hset(key, "last_start", datetime.now(timezone.utc).isoformat())
     except Exception as e:
         logger.error(f"Failed to update check start time in Redis for check {check.id}: {e}")
     return check
@@ -708,7 +714,7 @@ async def toggle_check_pause(db: AsyncSession, check: models.Check):
         try:
             r = get_redis_connection()
             if r:
-                current_status = r.hget(get_check_runtime_redis_key(check.id), "status") or "new"
+                current_status = await r.hget(get_check_runtime_redis_key(check.id), "status") or "new"
         except Exception as e:
             logger.error(f"Could not get status from Redis for pause toggle: {e}")
 
@@ -747,7 +753,7 @@ return status
                 runtime_key = get_check_runtime_redis_key(check.id)
                 user_key = f"user_stats:counters:{check.owner_id}"
                 global_key = "metrics:checks_status_counts"
-                _ = r.eval(lua, 3, runtime_key, user_key, global_key, "1" if is_pausing else "0")
+                _ = await r.eval(lua, 3, runtime_key, user_key, global_key, "1" if is_pausing else "0")
         except Exception as e:
             logger.error(f"Could not update Redis stats counters for pause toggle: {e}")
 
@@ -792,7 +798,7 @@ return {prev, tostring(failure_count)}
 """
         user_key = f"user_stats:counters:{check.owner_id}"
         global_key = "metrics:checks_status_counts"
-        result = r.eval(lua, 3, key, user_key, global_key, "1" if check.paused else "0")
+        result = await r.eval(lua, 3, key, user_key, global_key, "1" if check.paused else "0")
 
         previous_status = result[0].decode() if isinstance(result[0], bytes) else result[0]
         failure_count = int(result[1].decode() if isinstance(result[1], bytes) else result[1])
@@ -808,7 +814,7 @@ return {prev, tostring(failure_count)}
             message = f"🔴 Check Failed: [{check.name}] reported a failure."
             if reason:
                 message += f" Reason: {reason}."
-            notifications.schedule_all_notifications(check, message)
+            await notifications.schedule_all_notifications(check, message)
         
         check.status = "down" # Enrich for response
         return check, reason
@@ -955,7 +961,7 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
                 r = get_redis_connection()
                 if r:
                     key = get_check_runtime_redis_key(db_check.id)
-                    r.hset(key, mapping={"status": "new", "last_pings": "[]"})
+                    await r.hset(key, mapping={"status": "new", "last_pings": "[]"})
             except Exception as e:
                 logger.error(f"Failed to initialize Redis runtime status for check {db_check.id}: {e}")
 
@@ -1033,7 +1039,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
                 r = get_redis_connection()
                 if r:
                     key = get_check_runtime_redis_key(db_check.id)
-                    runtime_data = r.hgetall(key)
+                    runtime_data = await r.hgetall(key)
                     old_status = runtime_data.get("status", "new")
                     last_ping_str = runtime_data.get("last_ping")
                     
@@ -1049,7 +1055,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
                         new_status = "up" if last_ping_str else "new"
                     
                     if new_status != old_status:
-                        r.hset(key, "status", new_status)
+                        await r.hset(key, "status", new_status)
 
             except Exception as e:
                 logger.error(f"Failed to re-evaluate status for check {db_check.id} during update: {e}")
@@ -1223,7 +1229,7 @@ async def delete_user_and_data(db: AsyncSession, user: models.User):
                         pipe.unlink(get_check_runtime_redis_key(check_id))
                         pipe.unlink(f"ping_logs:{check_id}")
                         pipe.unlink(f"check_content:{check_id}")
-                pipe.execute()
+                await pipe.execute()
                 logger.info(f"Cleaned up Redis entries for deleted user {user.id}")
         except Exception as e:
             logger.error(f"Error cleaning up Redis entries for deleted user {user.id}: {e}")
@@ -1250,7 +1256,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
             try:
                 r = get_redis_connection()
                 if r:
-                    old_status = r.hget(get_check_runtime_redis_key(db_check.id), "status") or "new"
+                    old_status = await r.hget(get_check_runtime_redis_key(db_check.id), "status") or "new"
             except Exception:
                 pass # Use default status on error
 
@@ -1277,7 +1283,7 @@ async def delete_check(db: AsyncSession, check_id: int, principal: models.User):
                     pipe.unlink(get_check_runtime_redis_key(check_id))
                     pipe.unlink(f"ping_logs:{check_id}")
                     pipe.unlink(f"check_content:{check_id}")
-                    pipe.execute()
+                    await pipe.execute()
                     logger.info(f"Cleaned up Redis entries for deleted check {check_id}")
             except Exception as e:
                 logger.error(f"Error cleaning up Redis entries for deleted check {check_id}: {e}")

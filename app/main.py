@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
         try:
             r = get_redis_connection()
             if r:
-                r.ping()
+                await r.ping()
                 logger.info("Successfully connected to Redis for Celery broker.")
                 app.state.redis_connected = True
 
@@ -66,13 +66,13 @@ async def lifespan(app: FastAPI):
                 deleted = 0
                 cursor = 0
                 while True:
-                    cursor, keys = r.scan(cursor=cursor, match="user_stats:counters:*", count=1000)
+                    cursor, keys = await r.scan(cursor=cursor, match="user_stats:counters:*", count=1000)
                     if keys:
                         try:
-                            r.unlink(*keys)
+                            await r.unlink(*keys)
                         except Exception:
                             # Fallback if UNLINK not supported
-                            r.delete(*keys)
+                            await r.delete(*keys)
                         deleted += len(keys)
                     if cursor == 0:
                         break
@@ -127,7 +127,7 @@ async def collect_metrics_periodically():
                     r = get_redis_connection()
                     if r:
                         queue_name = 'rtt_celery_queue'
-                        queue_size = r.llen(queue_name)
+                        queue_size = await r.llen(queue_name)
                         metrics.record_queue_size(queue_name, queue_size)
                         
                         # Update worker count by pinging Celery workers directly
@@ -359,11 +359,11 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
                     "user_agent": user_agent,
                     **geoip_details,
                 }
-                
+                        
                 key = crud.get_check_runtime_redis_key(db_check.id)
                 # Update last_pings JSON array inside the runtime hash (keep last 3)
                 try:
-                    existing = r.hget(key, "last_pings")
+                    existing = await r.hget(key, "last_pings")
                 except Exception:
                     existing = None
                 logs = []
@@ -379,7 +379,7 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
                 logs.insert(0, log_entry)
                 if len(logs) > 3:
                     logs = logs[:3]
-                r.hset(key, "last_pings", json.dumps(logs))
+                await r.hset(key, "last_pings", json.dumps(logs))
         except Exception as e:
             logger.error(f"Failed to log ping details to Redis for check {db_check.id}: {e}")
     # --- End Log Ping ---
@@ -404,7 +404,7 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
             r = get_redis_connection()
             if r:
                 key = crud.get_check_runtime_redis_key(db_check.id)
-                r.hset(key, "last_content", content)
+                await r.hset(key, "last_content", content)
         except Exception as e:
             logger.error(f"Failed to store ping content in Redis for check {db_check.id}: {e}")
 
@@ -414,7 +414,7 @@ async def ping_check(user_slug: str, check_identifier: str, request: Request, db
         try:
             r = get_redis_connection()
             if r:
-                previous_status = r.hget(crud.get_check_runtime_redis_key(db_check.id), "status") or "new"
+                previous_status = await r.hget(crud.get_check_runtime_redis_key(db_check.id), "status") or "new"
         except Exception as e:
             logger.error(f"Could not get previous status from Redis for check {db_check.id}: {e}")
 
@@ -473,7 +473,7 @@ async def get_status_badge(user_slug: str, check_identifier: str, db: AsyncSessi
             r = get_redis_connection()
             if r:
                 key = crud.get_check_runtime_redis_key(db_check.id)
-                runtime_data = r.hgetall(key)
+                runtime_data = await r.hgetall(key)
                 current_status = runtime_data.get("status", "new")
                 last_ping_str = runtime_data.get("last_ping")
 
@@ -513,7 +513,7 @@ async def fail_check(user_slug: str, check_identifier: str, db: AsyncSession = D
         try:
             r = get_redis_connection()
             if r:
-                previous_status = r.hget(crud.get_check_runtime_redis_key(db_check.id), "status") or "new"
+                previous_status = await r.hget(crud.get_check_runtime_redis_key(db_check.id), "status") or "new"
         except Exception as e:
             logger.error(f"Could not get previous status from Redis for check {db_check.id}: {e}")
 

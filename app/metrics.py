@@ -111,7 +111,7 @@ async def initialize_check_counts(session):
     try:
         r = get_redis_connection()
         if r:
-            counts = r.hgetall("metrics:checks_status_counts") or {}
+            counts = await r.hgetall("metrics:checks_status_counts") or {}
             # Normalize values (handle bytes or str)
             def _get_int(key: str) -> int:
                 v = counts.get(key)
@@ -151,7 +151,7 @@ async def initialize_check_counts(session):
         try:
             r = get_redis_connection()
             if r:
-                r.hset("metrics:checks_status_counts", mapping={"paused": paused_count})
+                await r.hset("metrics:checks_status_counts", mapping={"paused": paused_count})
         except Exception:
             pass
         logger.info(f"Initialized paused check count from DB: paused={paused_count}; other counts default to 0.")

@@ -75,10 +75,10 @@ async def cleanup_inactive_checks(db: AsyncSession, inactive_threshold: datetime
                 pipe = r.pipeline()
                 for check_id in check_ids:
                     key_pattern = f"check:{check_id}:*"
-                    keys = r.keys(key_pattern)
+                    keys = await r.keys(key_pattern)
                     if keys:
                         pipe.delete(*keys)
-                pipe.execute()
+                await pipe.execute()
                 logger.info(f"Cleaned up Redis entries for {len(check_ids)} deleted checks")
         except Exception as e:
             logger.error(f"Error cleaning up Redis entries for deleted checks: {e}")
@@ -176,11 +176,11 @@ async def cleanup_inactive_users(db: AsyncSession, inactive_threshold: datetime)
                     
                     # Find and delete any other user-related keys
                     user_key_pattern = f"*{owner_identifier}*"
-                    keys = r.keys(user_key_pattern)
+                    keys = await r.keys(user_key_pattern)
                     if keys:
                         pipe.delete(*keys)
                 
-                pipe.execute()
+                await pipe.execute()
                 logger.info(f"Cleaned up Redis entries for {len(user_ids)} users to be deleted")
         except Exception as e:
             logger.error(f"Error cleaning up Redis entries for users: {e}")

@@ -267,7 +267,7 @@ async def get_check_last_content(
         try:
             r = get_redis_connection()
             if r:
-                redis_content = r.hget(crud.get_check_runtime_redis_key(check_id), "last_content")
+                redis_content = await r.hget(crud.get_check_runtime_redis_key(check_id), "last_content")
                 if redis_content:
                     content = redis_content.decode() if isinstance(redis_content, bytes) else redis_content
         except Exception as e:
@@ -362,7 +362,7 @@ async def test_telegram_notification_queue(
 
     logger.info(f"Queueing test Telegram notification for check ID {check_id} on behalf of user {principal.id}.")
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
-    notifications.schedule_telegram_notification(check, message)
+    await notifications.schedule_telegram_notification(check, message)
     return {"message": "Test notification queued."}
 
 
@@ -377,7 +377,7 @@ async def test_slack_notification_queue(
     if not all([check.slack_enabled, check.slack_webhook_url]):
         raise HTTPException(status_code=400, detail="Slack settings are incomplete.")
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
-    notifications.schedule_slack_notification(check, message)
+    await notifications.schedule_slack_notification(check, message)
     return {"message": "Test notification queued."}
 
 
@@ -392,7 +392,7 @@ async def test_discord_notification_queue(
     if not all([check.discord_enabled, check.discord_webhook_url]):
         raise HTTPException(status_code=400, detail="Discord settings are incomplete.")
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
-    notifications.schedule_discord_notification(check, message)
+    await notifications.schedule_discord_notification(check, message)
     return {"message": "Test notification queued."}
 
 
@@ -407,7 +407,7 @@ async def test_webhook_notification_queue(
     if not all([check.webhook_enabled, check.webhook_url]):
         raise HTTPException(status_code=400, detail="Webhook settings are incomplete.")
     message = f"🔔 This is a test notification for your check '[{check.name}]' (via queue)."
-    notifications.schedule_webhook_notification(check, message)
+    await notifications.schedule_webhook_notification(check, message)
     return {"message": "Test notification queued."}
 
 

@@ -12,5 +12,5 @@ async def get_system_stats(
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not an admin")
     
-    stats = queue_stats.get_queue_stats()
+    stats = await queue_stats.get_queue_stats()
     return stats

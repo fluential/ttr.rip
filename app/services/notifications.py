@@ -167,14 +167,14 @@ async def send_webhook_notification(db: AsyncSession, check: Check, message: str
     await _execute_webhook_send(check, message)
 
 
-def _schedule_notification(check: Check, message: str, task_func, async_func):
+async def _schedule_notification(check: Check, message: str, task_func, async_func):
     """Generic helper to enqueue a notification task."""
     if not settings.DEBUG_MODE:
         try:
             r = get_redis_connection()
             if r:
                 owner_identifier = f"user_id_{check.owner_id}"
-                r.incr(f"user_stats:queued_notifications:{owner_identifier}")
+                await r.incr(f"user_stats:queued_notifications:{owner_identifier}")
         except Exception as e:
             logger.error(f"Could not increment queued notification count for check {check.id}: {e}")
 
@@ -188,7 +188,7 @@ def _schedule_notification(check: Check, message: str, task_func, async_func):
         task_func.delay(check.id, message)
 
 
-def schedule_all_notifications(check: Check, message: str):
+async def schedule_all_notifications(check: Check, message: str):
     """Schedules all enabled notifications for a check."""
     from app.worker import (
         _send_telegram_notification, send_telegram_notification_task,
@@ -197,27 +197,27 @@ def schedule_all_notifications(check: Check, message: str):
         _send_webhook_notification, send_webhook_notification_task
     )
     if check.telegram_enabled:
-        _schedule_notification(check, message, send_telegram_notification_task, _send_telegram_notification)
+        await _schedule_notification(check, message, send_telegram_notification_task, _send_telegram_notification)
     if check.slack_enabled:
-        _schedule_notification(check, message, send_slack_notification_task, _send_slack_notification)
+        await _schedule_notification(check, message, send_slack_notification_task, _send_slack_notification)
     if check.discord_enabled:
-        _schedule_notification(check, message, send_discord_notification_task, _send_discord_notification)
+        await _schedule_notification(check, message, send_discord_notification_task, _send_discord_notification)
     if check.webhook_enabled:
-        _schedule_notification(check, message, send_webhook_notification_task, _send_webhook_notification)
+        await _schedule_notification(check, message, send_webhook_notification_task, _send_webhook_notification)
 
 
-def schedule_telegram_notification(check: Check, message: str):
+async def schedule_telegram_notification(check: Check, message: str):
     from app.worker import _send_telegram_notification, send_telegram_notification_task
-    _schedule_notification(check, message, send_telegram_notification_task, _send_telegram_notification)
+    await _schedule_notification(check, message, send_telegram_notification_task, _send_telegram_notification)
 
-def schedule_slack_notification(check: Check, message: str):
+async def schedule_slack_notification(check: Check, message: str):
     from app.worker import _send_slack_notification, send_slack_notification_task
-    _schedule_notification(check, message, send_slack_notification_task, _send_slack_notification)
+    await _schedule_notification(check, message, send_slack_notification_task, _send_slack_notification)
 
-def schedule_discord_notification(check: Check, message: str):
+async def schedule_discord_notification(check: Check, message: str):
     from app.worker import _send_discord_notification, send_discord_notification_task
-    _schedule_notification(check, message, send_discord_notification_task, _send_discord_notification)
+    await _schedule_notification(check, message, send_discord_notification_task, _send_discord_notification)
 
-def schedule_webhook_notification(check: Check, message: str):
+async def schedule_webhook_notification(check: Check, message: str):
     from app.worker import _send_webhook_notification, send_webhook_notification_task
-    _schedule_notification(check, message, send_webhook_notification_task, _send_webhook_notification)
+    await _schedule_notification(check, message, send_webhook_notification_task, _send_webhook_notification)
