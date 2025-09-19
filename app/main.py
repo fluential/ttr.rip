@@ -137,19 +137,18 @@ async def collect_metrics_periodically():
             # Update queue metrics if Redis is available
             if not settings.DEBUG_MODE:
                 try:
-                    r = get_redis_connection()
-                    if r:
-                        queue_name = 'rtt_celery_queue'
-                        queue_size = await r.llen(queue_name)
-                        metrics.record_queue_size(queue_name, queue_size)
-                        
-                        # Update worker count by pinging Celery workers directly
-                        try:
-                            replies = celery_app.control.ping(timeout=1.0) or []
-                            metrics.record_workers_count(len(replies))
-                        except Exception as e:
-                            logger.debug(f"Celery ping failed: {e}")
-                            metrics.record_workers_count(0)
+                    async with ephemeral_redis() as r:
+                        if r:
+                            queue_name = 'rtt_celery_queue'
+                            queue_size = await r.llen(queue_name)
+                            metrics.record_queue_size(queue_name, queue_size)
+                    # Update worker count by pinging Celery workers directly
+                    try:
+                        replies = celery_app.control.ping(timeout=1.0) or []
+                        metrics.record_workers_count(len(replies))
+                    except Exception as e:
+                        logger.debug(f"Celery ping failed: {e}")
+                        metrics.record_workers_count(0)
                 except Exception as e:
                     logger.error(f"Error collecting queue metrics: {e}")
             

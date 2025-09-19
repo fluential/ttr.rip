@@ -4,7 +4,7 @@ import json
 import asyncio
 from app.worker import celery_app
 from app.core.config import settings
-from app.core.redis_pool import get_redis_connection
+from app.core.redis_pool import ephemeral_redis
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ async def get_queue_stats():
 
     # Try Redis cache first
     try:
-        r = get_redis_connection()
-        if r:
-            raw = await r.get(_REDIS_KEY)
-            if raw:
-                return json.loads(raw)
+        async with ephemeral_redis() as r:
+            if r:
+                raw = await r.get(_REDIS_KEY)
+                if raw:
+                    return json.loads(raw)
     except Exception as e:
         logger.debug(f"Redis queue stats cache read failed: {e}", exc_info=False)
 
@@ -67,9 +67,9 @@ async def _store_cache(data: dict):
     _CACHE = data
     _CACHE_TS = time.time()
     try:
-        r = get_redis_connection()
-        if r:
-            await r.setex(_REDIS_KEY, _REDIS_TTL, json.dumps(data))
+        async with ephemeral_redis() as r:
+            if r:
+                await r.setex(_REDIS_KEY, _REDIS_TTL, json.dumps(data))
     except Exception as e:
         logger.warning(f"Could not write queue stats to Redis: {e}", exc_info=False)
 
@@ -90,51 +90,51 @@ async def refresh_queue_stats_cache():
         return snapshot
 
     try:
-        r = get_redis_connection()
-        if not r:
-            snapshot = {
-                "broker_status": "Redis (Connection failed)",
-                "workers_online": "N/A",
-                "total_queued": "N/A",
-                "total_active": "N/A",
-                "total_reserved": "N/A",
-            }
-            await _store_cache(snapshot)
-            return snapshot
+        async with ephemeral_redis() as r:
+            if not r:
+                snapshot = {
+                    "broker_status": "Redis (Connection failed)",
+                    "workers_online": "N/A",
+                    "total_queued": "N/A",
+                    "total_active": "N/A",
+                    "total_reserved": "N/A",
+                }
+                await _store_cache(snapshot)
+                return snapshot
 
-        # Broker connectivity and queue length
-        await r.ping()
-        queue_name = celery_app.conf.get('task_default_queue', 'celery')
-        total_queued = await r.llen(queue_name)
+            # Broker connectivity and queue length
+            await r.ping()
+            queue_name = celery_app.conf.get('task_default_queue', 'celery')
+            total_queued = await r.llen(queue_name)
 
-        inspector = celery_app.control.inspect(timeout=1)
-        stats = inspector.stats()
-        if not stats:
+            inspector = celery_app.control.inspect(timeout=1)
+            stats = inspector.stats()
+            if not stats:
+                snapshot = {
+                    "broker_status": "Redis (Connected, no workers)",
+                    "workers_online": 0,
+                    "total_queued": total_queued,
+                    "total_active": "N/A",
+                    "total_reserved": "N/A",
+                }
+                await _store_cache(snapshot)
+                return snapshot
+
+            active = inspector.active()
+            reserved = inspector.reserved()
+            workers_online = len(stats)
+            total_active = sum(len(tasks) for tasks in active.values()) if active else 0
+            total_reserved = sum(len(tasks) for tasks in reserved.values()) if reserved else 0
+
             snapshot = {
-                "broker_status": "Redis (Connected, no workers)",
-                "workers_online": 0,
+                "broker_status": "Redis (Connected)",
+                "workers_online": workers_online,
                 "total_queued": total_queued,
-                "total_active": "N/A",
-                "total_reserved": "N/A",
+                "total_active": total_active,
+                "total_reserved": total_reserved,
             }
             await _store_cache(snapshot)
             return snapshot
-
-        active = inspector.active()
-        reserved = inspector.reserved()
-        workers_online = len(stats)
-        total_active = sum(len(tasks) for tasks in active.values()) if active else 0
-        total_reserved = sum(len(tasks) for tasks in reserved.values()) if reserved else 0
-
-        snapshot = {
-            "broker_status": "Redis (Connected)",
-            "workers_online": workers_online,
-            "total_queued": total_queued,
-            "total_active": total_active,
-            "total_reserved": total_reserved,
-        }
-        await _store_cache(snapshot)
-        return snapshot
     except Exception as e:
         logger.error(f"refresh_queue_stats_cache failed: {e}", exc_info=False)
         snapshot = {
