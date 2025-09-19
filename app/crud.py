@@ -930,12 +930,13 @@ async def create_check(db: AsyncSession, check: schemas.CheckCreate, principal: 
         # Now, principal is guaranteed to be a persisted User object.
         check_data = check.model_dump()
         tag_names = check_data.pop("tags", [])
+        new_uuid = str(uuid.uuid4())
         if not check_data.get("slug"):
-            check_data["slug"] = None # Ensure empty string is saved as NULL
+            check_data["slug"] = new_uuid
 
         db_check_data = {
             **check_data,
-            "uuid": str(uuid.uuid4()),
+            "uuid": new_uuid,
             "owner_id": principal.id
         }
         
@@ -1019,7 +1020,7 @@ async def update_check(db: AsyncSession, check_id: int, check_data: schemas.Chec
         db_check.tags = await _handle_tags(db, db_check.owner_id, tag_names)
 
         if "slug" in update_data and not update_data["slug"]:
-            update_data["slug"] = None # Ensure empty string is saved as NULL
+            update_data["slug"] = db_check.uuid
 
         for key, value in update_data.items():
             setattr(db_check, key, value)
