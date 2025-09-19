@@ -172,6 +172,10 @@ Requirements:
 3) Access
 - Via Caddy (recommended): http://localhost:8080
 - Direct FastAPI (dev): http://localhost:8000
+- Optional: Cloudflare Tunnel
+  - Set CLOUDFLARED_TOKEN in .env to attach to a named Tunnel (hostnames managed under Cloudflare Zero Trust → Tunnels → Public Hostnames, e.g. status.example.com → http://caddy:8080).
+  - Leave CLOUDFLARED_TOKEN empty to start a temporary Quick Tunnel (random trycloudflare.com URL).
+  - cloudflared forwards to http://caddy:8080 by default; override with CLOUDFLARED_URL. Extra flags via CLOUDFLARED_OPTS.
 
 4) Get a key
 - Click “Get a New Key” to obtain an access key, then go to /dashboard.
