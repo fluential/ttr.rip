@@ -1,7 +1,7 @@
 import secrets
 from datetime import timedelta
 from fastapi import APIRouter, Request, Depends, Form, status, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -291,6 +291,52 @@ async def public_status_page(
         "debug_mode": settings.DEBUG_MODE,
     }
     return templates.TemplateResponse("public_status_page.html", context)
+
+@router.get("/s/{user_slug}/{page_slug}/data")
+async def public_status_page_data(
+    user_slug: str,
+    page_slug: str,
+    request: Request,
+    db: AsyncSession = Depends(db_base.get_db),
+):
+    user = await crud.get_user_by_slug(db, slug=user_slug)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    status_page = await crud.get_status_page_by_slug(db, user=user, page_slug=page_slug)
+    if not status_page or not status_page.is_public:
+        raise HTTPException(status_code=404, detail="Status page not found")
+
+    # Enrich runtime data
+    if status_page.checks:
+        await crud.enrich_checks_with_runtime_data(status_page.checks)
+        for c in status_page.checks:
+            if getattr(c, "status", None) is None:
+                c.status = "new"
+
+    # Compute overall
+    if not status_page.checks:
+        overall_status = "empty"
+    elif any((c.status == "down") and not getattr(c, "paused", False) for c in status_page.checks):
+        overall_status = "down"
+    else:
+        overall_status = "up"
+
+    checks_payload = []
+    for c in status_page.checks or []:
+        checks_payload.append({
+            "id": c.id,
+            "name": c.name,
+            "paused": bool(getattr(c, "paused", False)),
+            "status": getattr(c, "status", "new"),
+            "last_ping": c.last_ping.isoformat() if getattr(c, "last_ping", None) else None,
+            "last_duration_seconds": getattr(c, "last_duration_seconds", None),
+            "tags": [t.name for t in getattr(c, "tags", [])] if getattr(c, "tags", None) else [],
+        })
+
+    return JSONResponse(content={
+        "overall_status": overall_status,
+        "checks": checks_payload,
+    })
 
 
 # --- Admin Routes ---

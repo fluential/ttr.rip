@@ -162,13 +162,13 @@
   <div class="grid-tiles">
     {% for check in status_page.checks %}
       {% set st = (check.status or 'new') %}
-      <div class="tile">
-        <div><span class="dot {% if check.paused %}paused{% elif st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}"></span><span class="name">{{ check.name }}</span></div>
+      <div class="tile" data-check-id="{{ check.id }}">
+        <div><span class="dot js-dot {% if check.paused %}paused{% elif st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}"></span><span class="name">{{ check.name }}</span></div>
         <div>
           {% if check.paused %}
-            <span class="badge paused">PAUSED</span>
+            <span class="badge paused js-status-badge">PAUSED</span>
           {% else %}
-            <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
+            <span class="badge js-status-badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
           {% endif %}
         </div>
         <div class="meta" style="margin:.3rem 0;">
@@ -193,13 +193,13 @@
   <div class="timeline">
     {% for check in status_page.checks %}
       {% set st = (check.status or 'new') %}
-      <div class="t-item {% if check.paused %}paused{% elif st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">
+      <div class="t-item {% if check.paused %}paused{% elif st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}" data-check-id="{{ check.id }}">
         <div class="t-title">
           <span>{{ check.name }}</span>
           {% if check.paused %}
-            <span class="badge paused">PAUSED</span>
+            <span class="badge paused js-status-badge">PAUSED</span>
           {% else %}
-            <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
+            <span class="badge js-status-badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
           {% endif %}
         </div>
         <div class="t-meta">
@@ -208,7 +208,7 @@
           {% else %}
             Never pinged
           {% endif %}
-          {% if check.last_duration_seconds %} • {{ (check.last_duration_seconds*1000)|round(0)|int }} ms{% endif %}
+          {% if check.last_duration_seconds %} • <span class="badge js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>{% endif %}
           {% if check.tags %}
             •
             {% for tag in check.tags %}
@@ -224,7 +224,7 @@
   <div class="cards" id="cards-container">
     {% for check in status_page.checks %}
       {% set st = (check.status or 'new') %}
-      <div class="card">
+      <div class="card" data-check-id="{{ check.id }}">
         <div class="title">{{ check.name }}</div>
 
         {% if check.tags %}
@@ -237,9 +237,9 @@
 
         <div style="margin:.5rem 0 .8rem 0">
           {% if check.paused %}
-            <span class="badge paused">PAUSED</span>
+            <span class="badge paused js-status-badge">PAUSED</span>
           {% else %}
-            <span class="badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
+            <span class="badge js-status-badge {% if st == 'up' %}ok{% elif st == 'down' %}err{% elif st == 'new' %}new{% else %}warn{% endif %}">{{ st|upper }}</span>
           {% endif %}
         </div>
 
@@ -250,7 +250,7 @@
           {% elif check.schedule_type in ['cron','oncalendar'] and check.schedule %}
             <span class="badge">cron</span>
           {% endif %}
-          {% if check.last_duration_seconds %}<span class="badge">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>{% endif %}
+          {% if check.last_duration_seconds %}<span class="badge js-duration">{{ (check.last_duration_seconds*1000)|round(0)|int }} ms</span>{% endif %}
         </div>
 
         <div class="meta">
@@ -349,5 +349,90 @@ document.addEventListener('DOMContentLoaded', () => {
       clientTimeContainer.style.display = 'inline';
   }
 });
+</script>
+
+<script>
+(function() {
+  const dataUrl = `${location.pathname}/data`;
+
+  function statusToClass(st, paused) {
+    if (paused) return 'paused';
+    if (st === 'up') return 'ok';
+    if (st === 'down') return 'err';
+    if (st === 'new') return 'new';
+    return 'warn';
+  }
+
+  function updateRelative(el, iso) {
+    if (!iso) {
+      el.textContent = 'Never';
+      el.removeAttribute('data-timestamp');
+      return;
+    }
+    el.dataset.timestamp = iso;
+    try {
+      const date = new Date(iso);
+      el.textContent = (typeof formatTimeAgo === 'function') ? formatTimeAgo(date) : date.toLocaleString();
+      el.title = date.toLocaleString();
+    } catch {
+      el.textContent = iso;
+    }
+  }
+
+  function updateCheck(el, check) {
+    const st = check.status || 'new';
+    const paused = !!check.paused;
+    const cls = statusToClass(st, paused);
+
+    const badge = el.querySelector('.js-status-badge');
+    if (badge) {
+      badge.textContent = paused ? 'PAUSED' : st.toUpperCase();
+      badge.classList.remove('ok','err','warn','new','paused');
+      badge.classList.add(cls);
+    }
+
+    const dot = el.querySelector('.js-dot');
+    if (dot) {
+      dot.classList.remove('ok','err','warn','new','paused');
+      dot.classList.add(cls);
+    }
+
+    if (el.classList.contains('t-item')) {
+      el.classList.remove('ok','err','warn','new','paused');
+      el.classList.add(cls);
+    }
+
+    const dur = el.querySelector('.js-duration');
+    if (dur) {
+      if (check.last_duration_seconds != null && check.last_duration_seconds >= 0) {
+        const ms = Math.round(check.last_duration_seconds * 1000);
+        dur.textContent = `${ms} ms`;
+        dur.style.display = '';
+      } else {
+        dur.style.display = 'none';
+      }
+    }
+
+    const last = el.querySelector('.last-ping-time');
+    if (last) updateRelative(last, check.last_ping);
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch(dataUrl, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      (data.checks || []).forEach(ch => {
+        const el = document.querySelector(`[data-check-id="${ch.id}"]`);
+        if (el) updateCheck(el, ch);
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 30000);
+})();
 </script>
 {% endblock %}
