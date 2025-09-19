@@ -415,6 +415,26 @@
         gap: 0.75rem;
         flex-wrap: wrap;
     }
+
+    /* Inline actions next to URLs */
+    .inline-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .icon-button {
+        padding: 0.1rem 0.35rem;
+        line-height: 1;
+        font-size: 0.95rem;
+    }
+    tr.pinging {
+        animation: pingPulse 0.8s ease-in-out 1;
+    }
+    @keyframes pingPulse {
+        0% { background-color: transparent; }
+        50% { background-color: rgba(76, 175, 80, 0.12); }
+        100% { background-color: transparent; }
+    }
 </style>
 
 <!-- Recent Pings Modal -->

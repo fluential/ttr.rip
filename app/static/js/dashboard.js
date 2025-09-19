@@ -31,6 +31,36 @@ function setLastUpdatedNow() {
     }
 }
 
+function manualPing(checkId) {
+    const check = checksData[checkId];
+    if (!check) {
+        alert('Could not find check to ping.');
+        return;
+    }
+    const userSlug = getUserSlug();
+    const pingIdentifier = check.slug || check.uuid;
+    const url = `${window.location.origin}/p/${userSlug}/${pingIdentifier}`;
+
+    // Optional: provide quick visual feedback on the row
+    const row = document.querySelector(`tr[data-check-id="${checkId}"]`);
+    if (row) row.classList.add('pinging');
+
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: 'Manual test via dashboard'
+    }).then(async (res) => {
+        if (!res.ok) throw new Error('Ping failed');
+        // Refresh current checks to reflect new last ping without reloading the page
+        await fetchChecks();
+    }).catch((err) => {
+        console.error('Manual ping failed:', err);
+        alert('Manual ping failed.');
+    }).finally(() => {
+        if (row) row.classList.remove('pinging');
+    });
+}
+
 function getUserSlug() {
     return (currentUser && currentUser.slug) || (window.USER_SLUG || '');
 }
@@ -692,8 +722,18 @@ async function fetchDashboardAggregate() {
                 <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
                 <td>${check.name}</td>
                 <td>${check.tags.map(t => `<span class="tag">${t.name}</span>`).join(' ')}</td>
-                <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;"></td>
-                <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;"></td>
+                <td>
+                    <div class="inline-actions">
+                        <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;">
+                        <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
+                    </div>
+                </td>
+                <td>
+                    <div class="inline-actions">
+                        <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;">
+                        <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
+                    </div>
+                </td>
                 <td>${lastPing}</td>
                 <td>${lastDuration}</td>
                 <td>${expiresIn}</td>
@@ -1232,8 +1272,18 @@ async function fetchChecks(cursor = null, direction = currentSortDir) {
             <td><span class="status-${displayStatus}" title="${statusText}">${statusIcon[displayStatus] || '⚪️'} ${statusText}</span></td>
             <td>${check.name}</td>
             <td>${check.tags.map(t => `<span class="tag">${t.name}</span>`).join(' ')}</td>
-            <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;"></td>
-            <td><input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;"></td>
+            <td>
+                <div class="inline-actions">
+                    <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${pingUrl}')" style="width: 10ch; text-align: center;">
+                    <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
+                </div>
+            </td>
+            <td>
+                <div class="inline-actions">
+                    <input type="text" class="ping-url" value="Copy" readonly onclick="copyUrl(this, '${badgeUrl}')" style="width: 10ch; text-align: center;">
+                    <button class="icon-button" title="Manual Ping" onclick="manualPing(${check.id})">📡</button>
+                </div>
+            </td>
             <td>${lastPing}</td>
             <td>${lastDuration}</td>
             <td>${expiresIn}</td>
@@ -1908,3 +1958,4 @@ window.togglePause = togglePause;
 window.deleteCheck = deleteCheck;
 window.editStatusPage = editStatusPage;
 window.deleteStatusPage = deleteStatusPage;
+window.manualPing = manualPing;
