@@ -299,7 +299,7 @@ async def _check_overdue_jobs():
     logger.info("Scheduler task running check cycle...")
     
     async with AsyncSessionLocal() as session:
-        async with session.begin():
+        if True:
             # --- Find overdue checks ---
             overdue_query = select(Check).where(
                 Check.paused == False,
