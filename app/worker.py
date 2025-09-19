@@ -208,6 +208,12 @@ async def _send_webhook_notification(check_id: int, message: str):
 )
 def send_telegram_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
     try:
+        if enqueued_at:
+            try:
+                latency = max(0.0, time.time() - float(enqueued_at))
+                run_coro(metrics._add_latency_to_redis("queue", float(latency)))
+            except Exception:
+                pass
         run_coro(_send_telegram_notification(check_id, message))
     except RateLimitedError as e:
         if _should_drop(enqueued_at, owner_id):
@@ -231,6 +237,12 @@ def send_telegram_notification_task(self, check_id: int, message: str, enqueued_
 )
 def send_slack_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
     try:
+        if enqueued_at:
+            try:
+                latency = max(0.0, time.time() - float(enqueued_at))
+                run_coro(metrics._add_latency_to_redis("queue", float(latency)))
+            except Exception:
+                pass
         run_coro(_send_slack_notification(check_id, message))
     except RateLimitedError as e:
         if _should_drop(enqueued_at, owner_id):
@@ -254,6 +266,12 @@ def send_slack_notification_task(self, check_id: int, message: str, enqueued_at:
 )
 def send_discord_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
     try:
+        if enqueued_at:
+            try:
+                latency = max(0.0, time.time() - float(enqueued_at))
+                run_coro(metrics._add_latency_to_redis("queue", float(latency)))
+            except Exception:
+                pass
         run_coro(_send_discord_notification(check_id, message))
     except RateLimitedError as e:
         if _should_drop(enqueued_at, owner_id):
@@ -277,6 +295,12 @@ def send_discord_notification_task(self, check_id: int, message: str, enqueued_a
 )
 def send_webhook_notification_task(self, check_id: int, message: str, enqueued_at: float = None, owner_id: int | None = None):
     try:
+        if enqueued_at:
+            try:
+                latency = max(0.0, time.time() - float(enqueued_at))
+                run_coro(metrics._add_latency_to_redis("queue", float(latency)))
+            except Exception:
+                pass
         run_coro(_send_webhook_notification(check_id, message))
     except RateLimitedError as e:
         if _should_drop(enqueued_at, owner_id):

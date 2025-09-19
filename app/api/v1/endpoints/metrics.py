@@ -4,7 +4,10 @@ from prometheus_client.registry import REGISTRY
 import time
 import hashlib
 import orjson
+from sqlalchemy import select, func
 from app.core.redis_pool import ephemeral_redis
+from app.db.base import AsyncSessionLocal
+from app.db import models as db_models
 
 router = APIRouter()
 
@@ -97,18 +100,14 @@ async def get_metrics_summary(request: Request):
     avg_api_latency = parse_prometheus_metric("ttl_api_request_duration_seconds")
     avg_db_latency = parse_prometheus_metric("ttl_db_query_duration_seconds")
     avg_redis_latency = parse_prometheus_metric("ttl_redis_command_duration_seconds")
-    # Average ping processing latency from dedicated histogram
-    avg_ping_latency = parse_prometheus_metric("ttl_ping_process_time_seconds")
-    if avg_ping_latency is None:
-        # Fallback to overall API latency until ping endpoint is instrumented
-        avg_ping_latency = avg_api_latency
+    # Average queue latency (derived from Redis cross-worker aggregation)
+    avg_queue_latency = None
 
     # Redis-backed global aggregates for multi-worker correctness
     total_checks_redis = None
-    workers_online_redis = None
     queue_depth_redis = None
     avg_db_latency_redis = None
-    avg_ping_latency_redis = None
+    avg_queue_latency_redis = None
     notifications_total_redis = None
     try:
         async with ephemeral_redis() as r:
@@ -124,20 +123,6 @@ async def get_metrics_summary(request: Request):
                         return 0
                 if counts:
                     total_checks_redis = sum(_to_int(v) for v in counts.values())
-
-                # Workers online via heartbeats
-                members = await r.smembers("metrics:workers_online:set")
-                if members:
-                    wo = 0
-                    for m in members:
-                        mid = m.decode() if isinstance(m, (bytes, bytearray)) else m
-                        if await r.exists(f"metrics:worker:{mid}:hb"):
-                            wo += 1
-                        else:
-                            await r.srem("metrics:workers_online:set", mid)
-                    workers_online_redis = wo
-                else:
-                    workers_online_redis = 0
 
                 # Queue depth directly from Redis
                 q = await r.llen("rtt_celery_queue")
@@ -162,13 +147,13 @@ async def get_metrics_summary(request: Request):
                 except Exception:
                     pass
                 try:
-                    ping_sum = await r.get("metrics:latency:ping:sum")
-                    ping_count = await r.get("metrics:latency:ping:count")
-                    if ping_sum and ping_count:
-                        ping_sum_v = float(ping_sum.decode() if isinstance(ping_sum, (bytes, bytearray)) else ping_sum)
-                        ping_count_v = float(ping_count.decode() if isinstance(ping_count, (bytes, bytearray)) else ping_count)
-                        if ping_count_v > 0:
-                            avg_ping_latency_redis = ping_sum_v / ping_count_v
+                    q_sum = await r.get("metrics:latency:queue:sum")
+                    q_count = await r.get("metrics:latency:queue:count")
+                    if q_sum and q_count:
+                        q_sum_v = float(q_sum.decode() if isinstance(q_sum, (bytes, bytearray)) else q_sum)
+                        q_count_v = float(q_count.decode() if isinstance(q_count, (bytes, bytearray)) else q_count)
+                        if q_count_v > 0:
+                            avg_queue_latency_redis = q_sum_v / q_count_v
                 except Exception:
                     pass
 
@@ -184,23 +169,32 @@ async def get_metrics_summary(request: Request):
 
     if avg_db_latency_redis is not None:
         avg_db_latency = avg_db_latency_redis
-    if avg_ping_latency_redis is not None:
-        avg_ping_latency = avg_ping_latency_redis
+    if avg_queue_latency_redis is not None:
+        avg_queue_latency = avg_queue_latency_redis
+
+    # Total users (from DB)
+    total_users = 0
+    try:
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(select(func.count(db_models.User.id)))
+            total_users = int(res.scalar_one() or 0)
+    except Exception:
+        total_users = 0
 
     summary = {
         "total_checks": int(total_checks_redis if total_checks_redis is not None else (parse_prometheus_metric("ttl_checks_total") or 0)),
+        "total_users": total_users,
         "total_notifications_sent": int(notifications_total_redis if notifications_total_redis is not None else (parse_prometheus_metric("ttl_notifications_sent_total") or 0)),
         "average_api_latency_seconds": avg_api_latency,
         "average_db_latency_seconds": avg_db_latency,
         "average_redis_latency_seconds": avg_redis_latency,
-        "average_ping_process_time_seconds": avg_ping_latency,
-        "workers_online": int(workers_online_redis if workers_online_redis is not None else (parse_prometheus_metric("ttl_workers_online") or 0)),
+        "average_queue_latency_seconds": avg_queue_latency,
         "queue_depth": int(queue_depth_redis if queue_depth_redis is not None else (parse_prometheus_metric("ttl_queue_size") or 0)),
         "health": {
             "api_latency": get_latency_health(avg_api_latency, yellow_threshold=0.5, red_threshold=1.0),
             "db_latency": get_latency_health(avg_db_latency, yellow_threshold=0.1, red_threshold=0.5),
             "redis_latency": get_latency_health(avg_redis_latency, yellow_threshold=0.01, red_threshold=0.1),
-            "ping_latency": get_latency_health(avg_ping_latency, yellow_threshold=0.15, red_threshold=0.5),
+            "queue_latency": get_latency_health(avg_queue_latency, yellow_threshold=1.0, red_threshold=5.0),
         }
     }
 

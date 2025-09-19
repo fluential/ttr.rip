@@ -804,14 +804,14 @@ async function fetchOperationalMetrics() {
                 const avgApiLatency = m.average_api_latency_seconds ? (m.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
                 const avgDbLatency = m.average_db_latency_seconds ? (m.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
                 const avgRedisLatency = m.average_redis_latency_seconds ? (m.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
-                const avgPingProc = m.average_ping_process_time_seconds
-                    ? (m.average_ping_process_time_seconds * 1000).toFixed(2)
-                    : (m.average_check_duration_seconds ? (m.average_check_duration_seconds * 1000).toFixed(2) : 'N/A');
+                const avgQueueLatency = m.average_queue_latency_seconds
+                    ? (m.average_queue_latency_seconds * 1000).toFixed(2)
+                    : 'N/A';
 
                 summaryDiv.innerHTML = `
                     <div class="grid">
                         <div><span class="health-dot unknown"></span><strong>Total Checks:</strong> ${m.total_checks || 0}</div>
-                        <div><span class="health-dot unknown"></span><strong>Workers Online:</strong> ${m.workers_online || 0}</div>
+                        <div><span class="health-dot unknown"></span><strong>Users:</strong> ${m.total_users || 0}</div>
                         <div><span class="health-dot unknown"></span><strong>Queue Depth:</strong> ${m.queue_depth || 0}</div>
                         <div><span class="health-dot unknown"></span><strong>Notifications Sent:</strong> ${m.total_notifications_sent || 0}</div>
                     </div>
@@ -819,7 +819,7 @@ async function fetchOperationalMetrics() {
                         <div><span class="health-dot ${m.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
                         <div><span class="health-dot ${m.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
                         <div><span class="health-dot ${m.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
-                        <div><span class="health-dot ${(m.health && (m.health.ping_latency || m.health.check_duration)) || ''}"></span><strong>Avg. Ping Latency:</strong> ${avgPingProc} ms</div>
+                        <div><span class="health-dot ${(m.health && m.health.queue_latency) || ''}"></span><strong>Avg. Queue Latency:</strong> ${avgQueueLatency} ms</div>
                     </div>
                 `;
                 // Trigger subtle glow on latency dots to indicate update
@@ -851,14 +851,14 @@ async function fetchOperationalMetrics() {
         const avgApiLatency = metrics.average_api_latency_seconds ? (metrics.average_api_latency_seconds * 1000).toFixed(2) : 'N/A';
         const avgDbLatency = metrics.average_db_latency_seconds ? (metrics.average_db_latency_seconds * 1000).toFixed(2) : 'N/A';
         const avgRedisLatency = metrics.average_redis_latency_seconds ? (metrics.average_redis_latency_seconds * 1000).toFixed(3) : 'N/A';
-        const avgPingProc = metrics.average_ping_process_time_seconds
-            ? (metrics.average_ping_process_time_seconds * 1000).toFixed(2)
-            : (metrics.average_check_duration_seconds ? (metrics.average_check_duration_seconds * 1000).toFixed(2) : 'N/A');
+        const avgQueueLatency = metrics.average_queue_latency_seconds
+            ? (metrics.average_queue_latency_seconds * 1000).toFixed(2)
+            : 'N/A';
 
         summaryDiv.innerHTML = `
             <div class="grid">
                 <div><span class="health-dot unknown"></span><strong>Total Checks:</strong> ${metrics.total_checks || 0}</div>
-                <div><span class="health-dot unknown"></span><strong>Workers Online:</strong> ${metrics.workers_online || 0}</div>
+                <div><span class="health-dot unknown"></span><strong>Users:</strong> ${metrics.total_users || 0}</div>
                 <div><span class="health-dot unknown"></span><strong>Queue Depth:</strong> ${metrics.queue_depth || 0}</div>
                 <div><span class="health-dot unknown"></span><strong>Notifications Sent:</strong> ${metrics.total_notifications_sent || 0}</div>
             </div>
@@ -866,7 +866,7 @@ async function fetchOperationalMetrics() {
                 <div><span class="health-dot ${metrics.health.api_latency}"></span><strong>Avg. API Latency:</strong> ${avgApiLatency} ms</div>
                 <div><span class="health-dot ${metrics.health.db_latency}"></span><strong>Avg. DB Latency:</strong> ${avgDbLatency} ms</div>
                 <div><span class="health-dot ${metrics.health.redis_latency}"></span><strong>Avg. Redis Latency:</strong> ${avgRedisLatency} ms</div>
-                <div><span class="health-dot ${(metrics.health && (metrics.health.ping_latency || metrics.health.check_duration)) || ''}"></span><strong>Avg. Ping Latency:</strong> ${avgPingProc} ms</div>
+                <div><span class="health-dot ${(metrics.health && metrics.health.queue_latency) || ''}"></span><strong>Avg. Queue Latency:</strong> ${avgQueueLatency} ms</div>
             </div>
         `;
         // Trigger subtle glow on latency dots to indicate update
