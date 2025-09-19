@@ -39,6 +39,8 @@ STATE_TTL_SECONDS = int(os.getenv("RC_STATE_TTL_SECONDS", "86400"))  # 24h
 DRIP_RPS = max(float(os.getenv("RC_DRIP_RPS", str(1.0 / 60.0))), RPS_MIN)
 # Assumed external rate limit per identity (per minute) for display purposes
 ASSUMED_LIMIT_PER_MIN = int(os.getenv("RC_ASSUMED_LIMIT_PER_MIN", "30"))
+# Cap effective refill rate to assumed external limit (per-second), bounded by RPS_MAX
+CAP_RPS = min(RPS_MAX, ASSUMED_LIMIT_PER_MIN / 60.0)
 
 # Exceptions for Celery integration
 class RateLimitedError(Exception):
@@ -65,6 +67,7 @@ local start_rps = tonumber(ARGV[3])
 local burst = tonumber(ARGV[4])
 local ttl_ms = tonumber(ARGV[5])
 local min_rps = tonumber(ARGV[6]) or 0
+local cap_rps = tonumber(ARGV[7]) or 1e9
 
 local tokens = tonumber(redis.call('HGET', KEYS[1], 'tokens')) or burst
 local refill_rps = tonumber(redis.call('HGET', KEYS[1], 'refill_rps')) or start_rps
@@ -72,8 +75,8 @@ local max_tokens = tonumber(redis.call('HGET', KEYS[1], 'max_tokens')) or burst
 local last_refill_ms = tonumber(redis.call('HGET', KEYS[1], 'last_refill_ms')) or now_ms
 local backoff_until_ms = tonumber(redis.call('HGET', KEYS[1], 'backoff_until_ms')) or 0
 
--- Effective rps honors a minimum drip to avoid complete stall
-local eff_rps = math.max(refill_rps, min_rps)
+-- Effective rps honors a minimum drip and caps at configured limit
+local eff_rps = math.max(math.min(refill_rps, cap_rps), min_rps)
 
 if now_ms < backoff_until_ms then
   local retry_ms = backoff_until_ms - now_ms
@@ -121,7 +124,7 @@ async def reserve(channel: str, identity: str, weight: float = 1.0) -> Tuple[boo
         now_ms = int(time.time() * 1000)
         ttl_ms = STATE_TTL_SECONDS * 1000
         key = _state_key(channel, identity)
-        res = await r.eval(_RESERVE_LUA, 1, key, now_ms, weight, START_RPS, BURST_MAX, ttl_ms, DRIP_RPS)
+        res = await r.eval(_RESERVE_LUA, 1, key, now_ms, weight, START_RPS, BURST_MAX, ttl_ms, DRIP_RPS, CAP_RPS)
         # res = [allowed, retry_ms, tokens, refill_rps, max_tokens, backoff_until_ms]
         allowed = bool(int(res[0]))
         retry_ms = float(res[1]) if res[1] is not None else 0.0
@@ -198,8 +201,8 @@ async def report(
             # Leave rates mostly unchanged
             pass
 
-        # Ensure a non-zero drip so the system can recover
-        refill_rps = max(refill_rps, DRIP_RPS)
+        # Ensure a non-zero drip so the system can recover and cap to assumed vendor limit
+        refill_rps = max(min(refill_rps, CAP_RPS), DRIP_RPS)
 
         await r.hset(
             key,
@@ -249,7 +252,7 @@ async def snapshot(channel: str, identity: str) -> Dict[str, Any]:
         last_refill_ms = int(float(state.get("last_refill_ms", now_ms) or now_ms))
         backoff_until_ms = int(float(state.get("backoff_until_ms", "0") or 0))
 
-        eff_rps = max(refill_rps, DRIP_RPS)
+        eff_rps = max(min(refill_rps, CAP_RPS), DRIP_RPS)
         # Refill prediction
         delta_ms = max(0, now_ms - last_refill_ms)
         refilled_tokens = min(max_tokens, tokens + (delta_ms * (eff_rps / 1000.0)))
