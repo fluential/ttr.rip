@@ -93,25 +93,28 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: ttl_rip_cloudflared
+    hostname: ttl_rip_cloudflared
     restart: unless-stopped
-    #depends_on:
-    #  caddy:
-    #    condition: service_healthy
+    logging:
+      driver: "local"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    network_mode: "host"
     env_file:
       - .env.example
     environment:
-      - CLOUDFLARED_URL=http://caddy:8080
-      - CLOUDFLARED_OPTS=
-    entrypoint: ["/bin/sh", "-lc"]
-    command: >
-      token="${CLOUDFLARED_TOKEN:-${CLOUDFLARE_TUNNEL_TOKEN:-}}";
-      if [ -n "$token" ]; then
-        echo "Starting Cloudflare Tunnel with named token";
-        exec cloudflared tunnel run --no-autoupdate --token "$token" ${CLOUDFLARED_OPTS:-};
-      else
-        echo "No tunnel token provided. Starting Quick Tunnel to ${CLOUDFLARED_URL:-http://caddy:8080}";
-        exec cloudflared tunnel --no-autoupdate --url "${CLOUDFLARED_URL:-http://caddy:8080}" ${CLOUDFLARED_OPTS:-};
-      fi
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    command: ["tunnel", "run"]
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./config/hosts:/etc/hosts
+    healthcheck:
+      test: ["CMD", "cloudflared", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   worker:
     build: .
