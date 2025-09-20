@@ -35,7 +35,6 @@ async def home(request: Request):
     context = {
         "request": request,
         "process_time": getattr(request.state, "process_time", 0),
-        "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
@@ -108,7 +107,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
         "csrf_token": csrf_token,
         "status_pages": status_pages,
         "process_time": getattr(request.state, "process_time", 0),
-        "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
         "telegram_auth_enabled": settings.TELEGRAM_AUTH_ENABLED,
         "telegram_bot_name": settings.TELEGRAM_BOT_NAME,
@@ -243,7 +241,6 @@ async def public_integrations(
         "has_telegram_bot_token": has_token,  # Just indicate if one exists
         "telegram_bot_token_placeholder": "[Existing token hidden for security]" if has_token else "Enter your Telegram bot token",
         "process_time": getattr(request.state, "process_time", 0),
-        "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
     response = templates.TemplateResponse("integrations.html", context)
@@ -313,7 +310,6 @@ async def public_status_page(
         "last_updated_iso": datetime.now(timezone.utc).isoformat(),
         "is_public_status_page": True,
         "process_time": getattr(request.state, "process_time", 0),
-        "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
     return templates.TemplateResponse("public_status_page.html", context)
@@ -421,7 +417,6 @@ async def login_page(request: Request):
     context = {
         "request": request,
         "process_time": getattr(request.state, "process_time", 0),
-        "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
         "csrf_token": csrf_token,
     }
@@ -495,7 +490,6 @@ async def admin_dashboard(request: Request):
         "csrf_token": csrf_token,
         "status_pages": [],  # Loaded via API
         "process_time": getattr(request.state, "process_time", 0),
-        "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
     response = templates.TemplateResponse("admin_dashboard.html", context)
@@ -522,7 +516,6 @@ async def admin_integrations(
         "has_telegram_bot_token": False,
         "telegram_bot_token_placeholder": "Enter your Telegram bot token",
         "process_time": getattr(request.state, "process_time", 0),
-        "redis_connected": request.app.state.redis_connected,
         "debug_mode": settings.DEBUG_MODE,
     }
     response = templates.TemplateResponse("integrations.html", context)

@@ -66,22 +66,7 @@
         </nav>
         {% block content %}{% endblock %}
         <footer style="margin-top: 2rem; text-align: center;">
-            <small>
-                Server: {{ "%.3f"|format(process_time) }}s
-                <span id="client-load-time-container" style="display: none;">
-                    | Client: <span id="client-load-time"></span>s
-                </span>
-                | API Latency: <span id="footer-api-latency">...</span> ms
-                | Redis Latency: <span id="footer-redis-latency">...</span> ms
-                |
-                {% if debug_mode %}
-                    <span title="Debug Mode (In-Memory Queue)">⚙️</span>
-                {% elif redis_connected %}
-                    <span title="Redis Connected">🟢</span>
-                {% else %}
-                    <span title="Redis Disconnected">🔴</span>
-                {% endif %}
-            </small>
+            <small><strong>TTR.RIP</strong> — Powered by TTR.RIP</small>
         </footer>
     </main>
     <script>
