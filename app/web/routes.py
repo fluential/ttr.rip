@@ -48,9 +48,9 @@ async def home(request: Request):
 
 @router.post("/dashboard", response_class=HTMLResponse, dependencies=[Depends(security.verify_form_csrf_token)])
 async def login_with_key(request: Request, auth_key: str = Form(...), db: AsyncSession = Depends(db_base.get_db)):
-    # We don't need to validate the key here. If it's invalid, the user just won't see any checks.
-    # If it's a valid key for an existing user, they'll see their checks.
-    # If it's a new key, a user will be created when they create their first check.
+    # Validate the provided key format before accepting it
+    if not security.is_valid_auth_key(auth_key):
+        return RedirectResponse(url="/?error=invalid_key", status_code=status.HTTP_302_FOUND)
     response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     response.set_cookie(key="auth_key", value=auth_key, httponly=True, max_age=365*24*60*60, samesite="Lax", secure=not settings.DEBUG_MODE)
     return response
@@ -70,6 +70,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(db_base.get_db)
     auth_key = request.cookies.get("auth_key")
     if not auth_key:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    if not security.is_valid_auth_key(auth_key):
+        response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+        response.delete_cookie("auth_key")
+        return response
     
     user = await crud.get_user_by_auth_key(db, auth_key=auth_key)
     if not user:
