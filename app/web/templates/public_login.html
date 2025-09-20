@@ -25,6 +25,9 @@
                 data-auth-url="{{ request.url_for('telegram_login_callback') }}" 
                 data-request-access="write">
         </script>
+        <p style="margin-top: 0.75rem;">
+            Prefer the Telegram app? <a href="https://t.me/{{ telegram_bot_name }}" target="_blank" rel="noopener">Open @{{ telegram_bot_name }}</a>
+        </p>
     </div>
     {% endif %}
 

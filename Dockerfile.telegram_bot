@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install only what the bot needs
+RUN pip install --no-cache-dir aiogram==3.3.0
+
+# Copy bot code
+COPY bots/telegram_login_bot /app/bots/telegram_login_bot
+
+CMD ["python", "-m", "bots.telegram_login_bot.main"]
