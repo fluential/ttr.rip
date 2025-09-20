@@ -2,6 +2,7 @@ from typing import List, Union, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response, Request
 from fastapi.responses import ORJSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 import logging
 import json
 import time
@@ -514,14 +515,87 @@ async def export_checks(
     if not principal.id:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Fetch all checks for this user
     checks = await crud.get_all_checks_by_owner(db=db, principal=principal)
-    
-    export_data = [schemas.CheckExport.model_validate(c).model_dump() for c in checks]
+
+    export_checks: list[dict] = []
+    for c in checks:
+        # Decrypt secrets with the user's auth key for export
+        tg_token = None
+        slack_url = None
+        discord_url = None
+        webhook_url = None
+        try:
+            if c.telegram_bot_token and principal.auth_key:
+                tg_token = encryption.decrypt_token(c.telegram_bot_token, principal.auth_key)
+        except Exception:
+            tg_token = None
+        try:
+            if c.slack_webhook_url and principal.auth_key:
+                slack_url = encryption.decrypt_token(c.slack_webhook_url, principal.auth_key)
+        except Exception:
+            slack_url = None
+        try:
+            if c.discord_webhook_url and principal.auth_key:
+                discord_url = encryption.decrypt_token(c.discord_webhook_url, principal.auth_key)
+        except Exception:
+            discord_url = None
+        try:
+            if c.webhook_url and principal.auth_key:
+                webhook_url = encryption.decrypt_token(c.webhook_url, principal.auth_key)
+        except Exception:
+            webhook_url = None
+
+        ce = schemas.CheckExport(
+            name=c.name,
+            slug=c.slug,
+            tags=[t.name for t in (c.tags or [])],
+            schedule_type=c.schedule_type,
+            schedule=c.schedule,
+            tz=c.tz,
+            interval_seconds=c.interval_seconds,
+            grace_seconds=c.grace_seconds,
+            max_runtime_seconds=c.max_runtime_seconds,
+            notify_after_failures=c.notify_after_failures,
+            notify_on_up=c.notify_on_up,
+            expected_content=c.expected_content,
+            expected_content_type=c.expected_content_type,
+            use_regex_for_content=c.use_regex_for_content,
+            telegram_enabled=c.telegram_enabled,
+            telegram_chat_id=c.telegram_chat_id,
+            telegram_bot_token=tg_token,
+            slack_enabled=c.slack_enabled,
+            slack_webhook_url=slack_url,
+            discord_enabled=c.discord_enabled,
+            discord_webhook_url=discord_url,
+            webhook_enabled=c.webhook_enabled,
+            webhook_url=webhook_url,
+        )
+        export_checks.append(ce.model_dump())
+
+    # Export status pages with check slugs
+    status_pages = await crud.get_status_pages_by_owner(db, principal=principal)
+    export_pages: list[dict] = []
+    for sp in status_pages or []:
+        export_pages.append(
+            schemas.StatusPageExport(
+                name=sp.name,
+                slug=sp.slug,
+                check_slugs=[(chk.slug or chk.uuid) for chk in (sp.checks or [])],
+            ).model_dump()
+        )
+
+    payload = schemas.AccountExport(
+        version=1,
+        user_slug=principal.slug or None,
+        checks=[schemas.CheckExport.model_validate(x) for x in export_checks],  # type: ignore[arg-type]
+        status_pages=[schemas.StatusPageExport.model_validate(x) for x in export_pages],  # type: ignore[arg-type]
+    ).model_dump()
 
     headers = {
-        'Content-Disposition': 'attachment; filename="ttr_rip_checks_export.json"'
+        'Content-Disposition': 'attachment; filename="ttr_rip_account_export.json"'
     }
-    return ORJSONResponse(content=export_data, headers=headers)
+    return ORJSONResponse(content=payload, headers=headers)
 
 
 @router.post("/import", response_model=schemas.CheckImportResponse)
@@ -539,51 +613,120 @@ async def import_checks(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON file.")
 
-    if not isinstance(data, list):
-        raise HTTPException(status_code=400, detail="JSON file should contain a list of checks.")
-
     imported_count = 0
     failed_count = 0
-    errors = []
+    errors: list[str] = []
+    status_pages_imported = 0
+    user_slug_updated = False
 
-    for i, check_data in enumerate(data):
-        try:
-            # Validate with the export schema
-            check_to_import = schemas.CheckExport.model_validate(check_data)
-            
-            # Create the basic check
-            check_create = schemas.CheckCreate(
-                name=check_to_import.name,
-                interval_seconds=check_to_import.interval_seconds,
-                grace_seconds=check_to_import.grace_seconds,
-            )
-            new_check = await crud.create_check(db=db, check=check_create, principal=principal)
-            
-            # Manually set properties and commit
-            # Re-encrypt imported secrets with the user's current auth_key
-            new_check.telegram_bot_token = encryption.encrypt_token(check_to_import.telegram_bot_token, principal.auth_key) if check_to_import.telegram_bot_token else None
-            new_check.telegram_chat_id = check_to_import.telegram_chat_id
-            new_check.telegram_enabled = check_to_import.telegram_enabled
+    # Helper to create checks from a list of CheckExport-like dicts
+    async def _import_checks(checks_payload: list[dict]) -> dict[str, int]:
+        nonlocal imported_count, failed_count, errors
+        slug_to_id: dict[str, int] = {}
+        for i, check_data in enumerate(checks_payload):
+            try:
+                check_to_import = schemas.CheckExport.model_validate(check_data)
 
-            new_check.slack_webhook_url = encryption.encrypt_token(check_to_import.slack_webhook_url, principal.auth_key) if check_to_import.slack_webhook_url else None
-            new_check.slack_enabled = check_to_import.slack_enabled
+                # Create the check with full settings (tags, schedule, slug, etc.)
+                check_create = schemas.CheckCreate(
+                    name=check_to_import.name,
+                    slug=check_to_import.slug,
+                    tags=check_to_import.tags or [],
+                    schedule_type=check_to_import.schedule_type,
+                    schedule=check_to_import.schedule,
+                    tz=check_to_import.tz,
+                    interval_seconds=check_to_import.interval_seconds,
+                    grace_seconds=check_to_import.grace_seconds,
+                    max_runtime_seconds=check_to_import.max_runtime_seconds,
+                    notify_after_failures=check_to_import.notify_after_failures,
+                    notify_on_up=check_to_import.notify_on_up,
+                    expected_content=check_to_import.expected_content,
+                    expected_content_type=check_to_import.expected_content_type,
+                    use_regex_for_content=check_to_import.use_regex_for_content,
+                )
+                new_check = await crud.create_check(db=db, check=check_create, principal=principal)
 
-            new_check.discord_webhook_url = encryption.encrypt_token(check_to_import.discord_webhook_url, principal.auth_key) if check_to_import.discord_webhook_url else None
-            new_check.discord_enabled = check_to_import.discord_enabled
+                # Re-encrypt imported secrets with the user's current auth_key
+                new_check.telegram_bot_token = encryption.encrypt_token(check_to_import.telegram_bot_token, principal.auth_key) if check_to_import.telegram_bot_token else None
+                new_check.telegram_chat_id = check_to_import.telegram_chat_id
+                new_check.telegram_enabled = bool(check_to_import.telegram_enabled)
 
-            new_check.webhook_url = encryption.encrypt_token(check_to_import.webhook_url, principal.auth_key) if check_to_import.webhook_url else None
-            new_check.webhook_enabled = check_to_import.webhook_enabled
-            
-            await db.commit()
-            
-            imported_count += 1
-        except Exception as e:
-            await db.rollback() # Rollback on error for this check
-            failed_count += 1
-            errors.append(f"Check #{i+1} ('{check_data.get('name', 'N/A')}'): {str(e)}")
+                new_check.slack_webhook_url = encryption.encrypt_token(check_to_import.slack_webhook_url, principal.auth_key) if check_to_import.slack_webhook_url else None
+                new_check.slack_enabled = bool(check_to_import.slack_enabled)
+
+                new_check.discord_webhook_url = encryption.encrypt_token(check_to_import.discord_webhook_url, principal.auth_key) if check_to_import.discord_webhook_url else None
+                new_check.discord_enabled = bool(check_to_import.discord_enabled)
+
+                new_check.webhook_url = encryption.encrypt_token(check_to_import.webhook_url, principal.auth_key) if check_to_import.webhook_url else None
+                new_check.webhook_enabled = bool(check_to_import.webhook_enabled)
+
+                await db.commit()
+                await db.refresh(new_check)
+
+                # Map slug -> id for status pages creation
+                if new_check.slug:
+                    slug_to_id[new_check.slug] = new_check.id
+
+                imported_count += 1
+            except Exception as e:
+                await db.rollback()
+                failed_count += 1
+                try:
+                    name = check_data.get("name", "N/A")
+                except Exception:
+                    name = "N/A"
+                errors.append(f"Check #{i+1} ('{name}'): {str(e)}")
+        return slug_to_id
+
+    # Legacy format: top-level list of checks
+    slug_to_id_map: dict[str, int] = {}
+    if isinstance(data, list):
+        slug_to_id_map = await _import_checks(data)
+    elif isinstance(data, dict):
+        # Optionally update user slug
+        user_slug = data.get("user_slug")
+        if user_slug and principal.id and (principal.slug != user_slug):
+            try:
+                # Try updating; will raise IntegrityError if taken
+                updated = await crud.update_user_slug(db, user=principal, new_slug=user_slug)
+                if updated:
+                    user_slug_updated = True
+            except IntegrityError as e:
+                errors.append(f"Could not set user slug to '{user_slug}': {str(e)}")
+            except Exception as e:
+                errors.append(f"Could not set user slug to '{user_slug}': {str(e)}")
+
+        checks_payload = data.get("checks", [])
+        if not isinstance(checks_payload, list):
+            raise HTTPException(status_code=400, detail="Invalid export format: 'checks' must be a list.")
+        slug_to_id_map = await _import_checks(checks_payload)
+
+        # Import status pages if provided
+        pages_payload = data.get("status_pages", [])
+        if isinstance(pages_payload, list) and pages_payload:
+            for j, sp in enumerate(pages_payload):
+                try:
+                    sp_obj = schemas.StatusPageExport.model_validate(sp)
+                    # Map check slugs to IDs; skip unknown slugs
+                    check_ids = [cid for slug, cid in slug_to_id_map.items() if slug in set(sp_obj.check_slugs or [])]
+                    created = await crud.create_status_page(
+                        db=db,
+                        status_page=schemas.StatusPageCreate(name=sp_obj.name, slug=sp_obj.slug, check_ids=check_ids),
+                        principal=principal,
+                    )
+                    if created:
+                        status_pages_imported += 1
+                except IntegrityError as e:
+                    errors.append(f"Status page #{j+1} ('{getattr(sp, 'slug', 'N/A')}') conflict: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Status page #{j+1} import failed: {str(e)}")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid JSON root. Expected a list or an object.")
 
     return schemas.CheckImportResponse(
         imported_count=imported_count,
         failed_count=failed_count,
         errors=errors,
+        status_pages_imported=status_pages_imported,
+        user_slug_updated=user_slug_updated,
     )

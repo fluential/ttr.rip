@@ -107,6 +107,7 @@ class CheckExport(BaseModel):
     tz: str
     interval_seconds: Optional[int] = None
     grace_seconds: int
+    max_runtime_seconds: Optional[int] = None
     notify_after_failures: Optional[int] = None
     notify_on_up: bool
     expected_content: Optional[str] = None
@@ -129,6 +130,19 @@ class CheckImportResponse(BaseModel):
     imported_count: int
     failed_count: int
     errors: list[str]
+    status_pages_imported: int = 0
+    user_slug_updated: bool = False
+
+class StatusPageExport(BaseModel):
+    name: str
+    slug: str
+    check_slugs: list[str] = []
+
+class AccountExport(BaseModel):
+    version: int = 1
+    user_slug: Optional[str] = None
+    checks: list[CheckExport]
+    status_pages: list[StatusPageExport] = []
 
 
 class CheckSimpleForStatusPage(BaseModel):
