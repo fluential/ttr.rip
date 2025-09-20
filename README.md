@@ -420,3 +420,205 @@ Public Pages
 Licensed under the terms of the LICENSE file in this repository.
 
 ---
+
+## Developer quickstart: curl and API usage
+
+This section shows how to interact with ttr.rip over HTTP using curl. You can use these patterns to build simple scripts or SDKs.
+
+Environment setup
+- BASE is the base URL for your deployment.
+- AUTH_KEY is your anonymous access key (from the UI “Get a New Key” or your cookie).
+- ADMIN_TOKEN is a short‑lived JWT for admin APIs.
+
+```bash
+# Public base URL (examples assume local dev)
+BASE=http://localhost:8000
+
+# Public auth: use your X‑Auth‑Key for public endpoints
+# Replace with your actual key (32 url-safe chars); do not share it publicly.
+AUTH_KEY="YOUR_PUBLIC_AUTH_KEY"
+
+# Admin auth: exchange username/password for a JWT
+ADMIN_TOKEN=$(curl -s -X POST -d "username=admin&password=password" "$BASE/api/v1/token" | jq -r '.access_token')
+```
+
+Notes
+- Public APIs: send X-Auth-Key: <AUTH_KEY> header.
+- Admin APIs: send Authorization: Bearer <ADMIN_TOKEN> header.
+- Time fields are ISO 8601 (UTC). Status values: up | down | new | paused.
+
+### Checks API (public)
+
+List checks (paginated):
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks?size=10&sort_by=id&sort_direction=desc" | jq .
+```
+
+Create a check (interval schedule):
+```bash
+curl -s -X POST "$BASE/api/v1/checks" \
+  -H "X-Auth-Key: $AUTH_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My Job","schedule_type":"interval","interval_seconds":60,"grace_seconds":30}' | jq .
+```
+
+Update a check:
+```bash
+curl -s -X PUT "$BASE/api/v1/checks/123" \
+  -H "X-Auth-Key: $AUTH_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My Job (renamed)","schedule_type":"interval","interval_seconds":120,"grace_seconds":30}' | jq .
+```
+
+Delete a check:
+```bash
+curl -s -X DELETE -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/123" -i
+```
+
+Export all checks:
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" -H "Accept: application/json" "$BASE/api/v1/checks/export" -o ttr_rip_checks_export.json
+```
+
+Import checks (from a file produced by export):
+```bash
+curl -s -X POST "$BASE/api/v1/checks/import" \
+  -H "X-Auth-Key: $AUTH_KEY" \
+  -F "file=@ttr_rip_checks_export.json" | jq .
+```
+
+Get last content captured for a check:
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/123/content" | jq .
+```
+
+Toggle pause:
+```bash
+curl -s -X POST -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/123/toggle-pause" | jq .
+```
+
+Check slug availability:
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/slug-check?slug=my-slug" | jq .
+```
+
+Tags for your checks:
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/tags" | jq .
+```
+
+User stats (counts, averages):
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/stats" | jq .
+```
+
+### Integrations per check (public)
+
+Update Telegram settings:
+```bash
+curl -s -X PUT "$BASE/api/v1/checks/123/telegram" \
+  -H "X-Auth-Key: $AUTH_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"telegram_enabled":true,"telegram_chat_id":"123456789","telegram_bot_token":"1234:abcd"}' | jq .
+```
+
+Send test immediately / via queue:
+```bash
+curl -s -X POST -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/123/telegram/test" | jq .
+curl -s -X POST -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/123/telegram/test-queue" | jq .
+```
+
+Live rate snapshot (AIMD/backoff):
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/checks/123/telegram/rate" | jq .
+```
+
+Slack/Discord/Webhook endpoints are analogous:
+- PUT /api/v1/checks/{id}/slack
+- PUT /api/v1/checks/{id}/discord
+- PUT /api/v1/checks/{id}/webhook
+- POST /api/v1/checks/{id}/{integration}/test
+- POST /api/v1/checks/{id}/{integration}/test-queue
+- GET /api/v1/checks/{id}/{integration}/rate
+
+### Status pages (public)
+
+List pages:
+```bash
+curl -s -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/status-pages" | jq .
+```
+
+Create/update/delete:
+```bash
+curl -s -X POST "$BASE/api/v1/status-pages" \
+  -H "X-Auth-Key: $AUTH_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"Prod","slug":"prod","check_ids":[1,2,3]}' | jq .
+
+curl -s -X PUT "$BASE/api/v1/status-pages/10" \
+  -H "X-Auth-Key: $AUTH_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"Prod","slug":"prod","check_ids":[1,3]}' | jq .
+
+curl -s -X DELETE -H "X-Auth-Key: $AUTH_KEY" "$BASE/api/v1/status-pages/10" -i
+```
+
+Public page and data feed:
+```bash
+# HTML
+curl -s "$BASE/s/{user_slug}/{page_slug}" -i
+# JSON feed (etagged, 2s buckets)
+curl -s "$BASE/s/{user_slug}/{page_slug}/data" | jq .
+```
+
+### Pings and badges (public)
+
+Send a ping to your check:
+```bash
+# GET-based ping
+curl -s "$BASE/p/{user_slug}/{check_identifier}?ok=1"
+
+# POST payload ping
+curl -s -X POST "$BASE/p/{user_slug}/{check_identifier}" \
+  -H "Content-Type: text/plain" \
+  --data-binary 'hello from cron'
+```
+
+Badge:
+```bash
+curl -s "$BASE/p/{user_slug}/{check_identifier}/badge.svg" -o badge.svg
+```
+
+### Admin APIs
+
+Exchange credentials for a JWT:
+```bash
+ADMIN_TOKEN=$(curl -s -X POST -d "username=admin&password=password" "$BASE/api/v1/token" | jq -r '.access_token')
+```
+
+System stats:
+```bash
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" "$BASE/api/v1/admin/stats" | jq .
+```
+
+Prometheus metrics (admin-only):
+```bash
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" "$BASE/metrics"
+```
+
+Operational metrics summary (public read):
+```bash
+curl -s "$BASE/api/v1/metrics/summary" | jq .
+```
+
+### SDK tips
+
+- Authentication
+  - Public: X-Auth-Key in header; cookie is used by the web UI but not required for APIs.
+  - Admin: Authorization: Bearer <token>.
+- IDs vs slugs
+  - Checks can be addressed by numeric ID in APIs, and by slug or UUID in ping URLs.
+- Rate control
+  - Notification senders are throttled with AIMD/backoff; 429s are handled internally. Rate snapshots expose state you can surface to users.
+- ETags and caching
+  - Many list endpoints provide weak ETags with short max-age to balance freshness and load.
+- Error handling
+  - Validation errors return 400 with a detail message; missing resources return 404; unauthorized returns 401.
