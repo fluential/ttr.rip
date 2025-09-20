@@ -147,19 +147,19 @@ services:
       db:
         condition: service_healthy
 
-  tg_login_bot:
-    build:
-      context: .
-      dockerfile: Dockerfile.telegram_bot
-    container_name: ttl_rip_tg_login_bot
-    environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_BOT_NAME=${TELEGRAM_BOT_NAME}
-      - SITE_BASE_URL=${SITE_BASE_URL:-http://localhost:8080}
-    depends_on:
-      web:
-        condition: service_healthy
-    restart: unless-stopped
+    #tg_login_bot:
+    #  build:
+    #    context: .
+    #    dockerfile: Dockerfile.telegram_bot
+    #  container_name: ttl_rip_tg_login_bot
+    #  environment:
+    #    - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    #    - TELEGRAM_BOT_NAME=${TELEGRAM_BOT_NAME}
+    #    - SITE_BASE_URL=${SITE_BASE_URL:-http://localhost:8080}
+    #  depends_on:
+    #    web:
+    #      condition: service_healthy
+    #  restart: unless-stopped
 
 volumes:
   postgres_data:
